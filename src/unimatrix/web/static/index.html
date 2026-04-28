@@ -1,0 +1,1152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Unimatrix — control</title>
+<style>
+  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+         background: #0d1117; color: #e6edf3; margin: 0; padding: 0; }
+  header { background: #161b22; padding: 12px 20px; border-bottom: 1px solid #30363d; }
+  h1 { margin: 0; font-size: 1.2rem; font-weight: 600; }
+  main { padding: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  section { background: #161b22; border: 1px solid #30363d; border-radius: 6px;
+            padding: 14px; }
+  section.capped { max-height: 50vh; display: flex; flex-direction: column;
+                   overflow: hidden; }
+  section.capped > h2 { flex-shrink: 0; }
+  section.capped > .capped-body { flex: 1; min-height: 0; overflow: auto; }
+  section h2 { margin-top: 0; font-size: 1rem; color: #58a6ff; }
+  .row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; flex-wrap: wrap; }
+  button { background: #238636; color: white; border: 0; padding: 6px 12px;
+           border-radius: 4px; cursor: pointer; font-size: 0.9rem; }
+  button.danger { background: #da3633; }
+  button.muted { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  textarea { width: 100%; box-sizing: border-box; background: #0d1117;
+             color: #e6edf3; border: 1px solid #30363d; border-radius: 4px;
+             padding: 8px; font-family: inherit; min-height: 60px; }
+  pre { background: #0d1117; border: 1px solid #30363d; border-radius: 4px;
+        padding: 8px; max-height: 220px; overflow: auto; font-size: 0.78rem; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid #30363d; }
+  .graphs { grid-column: 1 / -1; }
+  .graphs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+                 gap: 14px; }
+  .graph { background: #0d1117; border: 1px solid #30363d; border-radius: 4px;
+           padding: 8px; }
+  .graph img { max-width: 100%; height: auto; display: block; }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 12px;
+          background: #21262d; font-size: 0.75rem; margin-right: 4px; }
+  .ok { color: #3fb950; }
+  .bad { color: #f85149; }
+  .muted-text { color: #8b949e; }
+  .explorer { grid-column: 1 / -1; display: none; }
+  .explorer.open { display: block; }
+  /* Fixed height + min-height:0 on children is the trick that lets the inner
+     panes actually scroll inside a CSS Grid container. */
+  .explorer-grid { display: grid; grid-template-columns: 380px 1fr; gap: 14px;
+                   height: 70vh; min-height: 420px; }
+  .conv-list, .conv-detail {
+    min-height: 0;            /* required for overflow inside grid */
+    height: 100%;
+    overflow-y: auto;
+    border: 1px solid #30363d;
+    border-radius: 4px;
+    background: #0d1117;
+  }
+  .conv-detail { padding: 14px; }
+  .conv-list-header { position: sticky; top: 0; background: #0d1117;
+                      padding: 6px 8px; border-bottom: 1px solid #30363d;
+                      font-size: 0.72rem; color: #8b949e;
+                      display: flex; justify-content: space-between; }
+  .conv-row { padding: 10px 12px; border-bottom: 1px solid #21262d;
+              cursor: pointer; font-size: 0.84rem; transition: background 0.08s; }
+  .conv-row:hover { background: #161b22; }
+  .conv-row.selected { background: #1f2a3a; border-left: 3px solid #58a6ff;
+                       padding-left: 9px; }
+  .conv-row .meta { color: #8b949e; font-size: 0.72rem; margin-top: 4px;
+                    line-height: 1.4; }
+  /* Custom scrollbar so the panes look less raw on Windows */
+  .conv-list::-webkit-scrollbar, .conv-detail::-webkit-scrollbar { width: 10px; }
+  .conv-list::-webkit-scrollbar-track,
+  .conv-detail::-webkit-scrollbar-track { background: #0d1117; }
+  .conv-list::-webkit-scrollbar-thumb,
+  .conv-detail::-webkit-scrollbar-thumb {
+    background: #30363d; border-radius: 4px; border: 2px solid #0d1117;
+  }
+  .conv-list::-webkit-scrollbar-thumb:hover,
+  .conv-detail::-webkit-scrollbar-thumb:hover { background: #484f58; }
+  /* Agent explorer (always-on, full-width) */
+  .agent-explorer { grid-column: 1 / -1; }
+  .agent-explorer-grid { display: grid; grid-template-columns: 320px 1fr;
+                         gap: 14px; height: 60vh; min-height: 360px; }
+  .agent-list, .agent-detail {
+    min-height: 0; height: 100%; overflow-y: auto;
+    border: 1px solid #30363d; border-radius: 4px; background: #0d1117;
+  }
+  .agent-detail { padding: 14px; }
+  .agent-list-header { position: sticky; top: 0; background: #0d1117;
+                       padding: 6px 8px; border-bottom: 1px solid #30363d;
+                       font-size: 0.72rem; color: #8b949e; }
+  .agent-row { padding: 8px 12px; border-bottom: 1px solid #21262d;
+               cursor: pointer; font-size: 0.84rem; transition: background 0.08s; }
+  .agent-row:hover { background: #161b22; }
+  .agent-row.selected { background: #1f2a3a; border-left: 3px solid #58a6ff;
+                        padding-left: 9px; }
+  .agent-row .meta { color: #8b949e; font-size: 0.72rem; margin-top: 3px; }
+  .agent-list::-webkit-scrollbar, .agent-detail::-webkit-scrollbar { width: 10px; }
+  .agent-list::-webkit-scrollbar-track,
+  .agent-detail::-webkit-scrollbar-track { background: #0d1117; }
+  .agent-list::-webkit-scrollbar-thumb,
+  .agent-detail::-webkit-scrollbar-thumb {
+    background: #30363d; border-radius: 4px; border: 2px solid #0d1117;
+  }
+  .agent-detail h3 { margin: 14px 0 6px 0; font-size: 0.92rem; color: #58a6ff; }
+  .agent-detail h3:first-child { margin-top: 0; }
+  .agent-detail .kv { font-size: 0.84rem; line-height: 1.5; }
+  .agent-detail .kv b { color: #c9d1d9; }
+  .agent-detail .backstory { font-size: 0.84rem; line-height: 1.4;
+                              white-space: pre-wrap; color: #c9d1d9; }
+  .agent-detail .summary-item, .agent-detail .impression-item,
+  .agent-detail .decision-item {
+    padding: 6px 0; border-bottom: 1px solid #21262d; font-size: 0.84rem;
+    line-height: 1.4;
+  }
+  .agent-detail .summary-item:last-child,
+  .agent-detail .impression-item:last-child,
+  .agent-detail .decision-item:last-child { border-bottom: 0; }
+  .agent-detail .ts { color: #6e7681; font-size: 0.72rem; }
+  .agent-detail .kind-badge { display: inline-block; padding: 1px 6px;
+    border-radius: 10px; background: #21262d; font-size: 0.72rem;
+    margin-right: 4px; }
+  .agent-detail .vote-yes { background: #1b3d2a; color: #3fb950; }
+  .agent-detail .vote-no { background: #3d1410; color: #f85149; }
+  .agent-detail .vote-malformed { background: #2a2a2a; color: #8b949e; }
+  .agent-detail .vote-unknown { background: #2a2a2a; color: #8b949e; }
+  .msg { padding: 6px 0; border-bottom: 1px solid #21262d; }
+  .msg:last-child { border-bottom: 0; }
+  .msg .sender { color: #58a6ff; font-weight: 600; font-size: 0.85rem; }
+  .msg .ts { color: #6e7681; font-size: 0.7rem; margin-left: 6px; }
+  .msg .body { margin-top: 4px; white-space: pre-wrap; font-size: 0.88rem;
+               line-height: 1.4; }
+  .summary-box { background: #1f2a3a; border-left: 3px solid #58a6ff;
+                 padding: 8px 10px; margin-bottom: 10px; font-size: 0.85rem; }
+  .conv-filter { width: 100%; box-sizing: border-box; padding: 6px 8px;
+                 background: #0d1117; color: #e6edf3; border: 1px solid #30363d;
+                 border-radius: 4px; margin-bottom: 6px; }
+  button.muted.active { background: #1f6feb; color: white; border-color: #1f6feb; }
+  /* Explorer tab strip */
+  .explorer-tabs { display: flex; gap: 4px; margin: 6px 0 10px 0; }
+  .explorer-tab { background: #21262d; color: #c9d1d9; border: 1px solid #30363d;
+                  padding: 6px 14px; border-radius: 4px 4px 0 0; cursor: pointer;
+                  font-size: 0.86rem; font-family: inherit; }
+  .explorer-tab.active { background: #1f6feb; color: white; border-color: #1f6feb; }
+  .explorer-pane { display: none; }
+  .explorer-pane.active { display: block; }
+  /* Vote-specific badges (reuse the agent-detail palette) */
+  .v-yes { background: #1b3d2a; color: #3fb950; }
+  .v-no  { background: #3d1410; color: #f85149; }
+  .v-malformed { background: #2a2a2a; color: #8b949e; }
+  .v-unknown { background: #2a2a2a; color: #8b949e; }
+  .v-pending { background: #2a2a2a; color: #d29922; }
+  .conv-detail .vote-row { padding: 6px 0; border-bottom: 1px solid #21262d;
+                            font-size: 0.84rem; line-height: 1.4; }
+  .conv-detail .vote-row:last-child { border-bottom: 0; }
+  .conv-detail .speech-row { padding: 6px 0; border-bottom: 1px solid #21262d;
+                              font-size: 0.85rem; line-height: 1.4; }
+  .conv-detail .speech-row:last-child { border-bottom: 0; }
+  .conv-detail .speech-row .speaker { color: #58a6ff; font-weight: 600; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Unimatrix — control panel</h1>
+</header>
+<main>
+  <section class="capped">
+    <h2>Current state</h2>
+    <div class="capped-body">
+      <div id="state-summary">loading…</div>
+      <div id="error-banner" style="display:none; margin-top:10px; padding:8px 10px;
+           background:#3d1410; border:1px solid #f85149; border-radius:4px;
+           color:#ffa198; font-size:0.85rem; white-space:pre-wrap;"></div>
+      <div id="metrics-summary" style="margin-top:10px; font-size:0.82rem;
+           color:#8b949e;"></div>
+      <div class="row" style="margin-top: 10px;">
+        <button id="btn-pause">Pause</button>
+        <button id="btn-resume" class="muted">Resume</button>
+        <button id="btn-checkpoint" class="muted">Force checkpoint</button>
+        <button id="btn-show-diag" class="muted">Show last LLM raw output</button>
+      </div>
+      <pre id="diag-pane" style="display:none; margin-top:8px; max-height:260px;
+           overflow:auto; font-size:0.78rem;"></pre>
+    </div>
+  </section>
+
+  <section class="capped">
+    <h2>Recent events</h2>
+    <div class="capped-body">
+      <pre id="events" style="max-height: none;">…</pre>
+    </div>
+  </section>
+
+  <section>
+    <h2>Broadcast (voice from the sky)</h2>
+    <textarea id="msg" placeholder="Speak to all agents…"></textarea>
+    <div class="row" style="margin-top: 8px;">
+      <button id="btn-send">Send</button>
+      <span id="bc-status" class="muted-text"></span>
+    </div>
+  </section>
+
+  <section>
+    <h2>Run manager</h2>
+    <table id="runs-table">
+      <thead><tr><th>id</th><th>name</th><th>status</th><th>started</th><th></th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section class="agent-explorer">
+    <h2>
+      Agent explorer
+      <span id="agent-count" class="muted-text" style="font-weight:normal; font-size:0.85rem;"></span>
+    </h2>
+    <div class="agent-explorer-grid">
+      <div class="agent-list" id="agent-list">loading…</div>
+      <div class="agent-detail" id="agent-detail">
+        <span class="muted-text">Select an agent on the left.</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="explorer" id="explorer">
+    <h2>
+      Run explorer
+      <span id="explorer-title" class="muted-text" style="font-weight:normal; font-size:0.85rem;"></span>
+      <button id="btn-close-explorer" class="muted" style="float: right;">Close</button>
+    </h2>
+    <div class="explorer-tabs">
+      <button class="explorer-tab active" data-tab="conversations">Conversations</button>
+      <button class="explorer-tab" data-tab="votes">Votes</button>
+      <button class="explorer-tab" data-tab="broadcasts">Broadcasts</button>
+    </div>
+
+    <div class="explorer-pane active" id="pane-conversations">
+      <div class="row">
+        <input id="conv-filter" class="conv-filter" placeholder="Filter by participant, type, or text in summary..." />
+      </div>
+      <div class="explorer-grid">
+        <div class="conv-list" id="conv-list">loading…</div>
+        <div class="conv-detail" id="conv-detail">
+          <span class="muted-text">Select a conversation on the left.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="explorer-pane" id="pane-votes">
+      <div class="row">
+        <input id="vote-filter" class="conv-filter" placeholder="Filter by proposer, target, change, or outcome..." />
+      </div>
+      <div class="explorer-grid">
+        <div class="conv-list" id="vote-list">loading…</div>
+        <div class="conv-detail" id="vote-detail">
+          <span class="muted-text">Select a vote on the left.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="explorer-pane" id="pane-broadcasts">
+      <div class="row">
+        <input id="bcast-filter" class="conv-filter" placeholder="Filter by sender or text..." />
+      </div>
+      <div class="explorer-grid">
+        <div class="conv-list" id="bcast-list">loading…</div>
+        <div class="conv-detail" id="bcast-detail">
+          <span class="muted-text">Select a broadcast on the left.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="graphs">
+    <h2>Graphs
+      <button id="btn-refresh-all" style="float: right;">Refresh all</button>
+    </h2>
+    <div class="graphs-grid" id="graphs"></div>
+  </section>
+</main>
+
+<script>
+const GRAPHS = [
+  "class_distribution", "role_distribution", "social_network",
+  "voting_timeline", "mobility_heatmap", "isolation", "message_volume",
+];
+
+function buildGraphs() {
+  const root = document.getElementById("graphs");
+  root.innerHTML = "";
+  for (const g of GRAPHS) {
+    const div = document.createElement("div");
+    div.className = "graph";
+    div.innerHTML = `
+      <div class="row" style="justify-content: space-between;">
+        <strong>${g}</strong>
+        <button class="muted" data-graph="${g}">Refresh</button>
+      </div>
+      <img id="img-${g}" src="/graphs/${g}.png?ts=${Date.now()}" alt="${g}" />
+    `;
+    root.appendChild(div);
+  }
+  root.querySelectorAll("button[data-graph]").forEach(b =>
+    b.addEventListener("click", e => refreshGraph(e.target.dataset.graph)));
+}
+
+function refreshGraph(name) {
+  const img = document.getElementById("img-" + name);
+  img.src = `/graphs/${name}.png?ts=${Date.now()}`;
+}
+
+async function refreshAll() {
+  await fetch("/graphs/refresh", { method: "POST" });
+  GRAPHS.forEach(refreshGraph);
+}
+
+async function loadState() {
+  let s;
+  try { s = await (await fetch("/state")).json(); }
+  catch { return; }
+  liveRunId = s.run_id;
+  const sum = document.getElementById("state-summary");
+  const perClass = Object.entries(s.agents_per_class || {})
+    .map(([k, v]) => `<span class="pill">${k}: ${v}</span>`).join("");
+  const perState = Object.entries(s.agents_per_state || {})
+    .map(([k, v]) => `<span class="pill">${k}: ${v}</span>`).join("");
+  const conv = (s.active_conversations || []).map(c =>
+    `<span class="pill">${c.type} #${c.id} (${c.participants.length})</span>`).join("") || "<span class='muted-text'>none</span>";
+  const vote = s.active_vote
+    ? `<span class="pill">${s.active_vote.change_type} → ${s.active_vote.to_value} (target ${s.active_vote.target_id})</span>`
+    : "<span class='muted-text'>none</span>";
+  sum.innerHTML = `
+    <div><strong>tick:</strong> ${s.tick_no}
+      &nbsp;<span class="muted-text">last tick ${s.seconds_since_last_tick ?? "?"}s ago</span>
+      &nbsp; <strong>paused:</strong> <span class="${s.paused ? 'bad' : 'ok'}">${s.paused}</span>
+    </div>
+    <div style="margin-top:6px"><strong>by class:</strong> ${perClass}</div>
+    <div style="margin-top:6px"><strong>by state:</strong> ${perState}</div>
+    <div style="margin-top:6px"><strong>active conversations:</strong> ${conv}</div>
+    <div style="margin-top:6px"><strong>active vote:</strong> ${vote}</div>
+    <div style="margin-top:6px"><strong>broadcast queue:</strong> ${s.broadcast_queue_length}</div>
+  `;
+  renderMetrics(s.metrics || {});
+  const ev = s.recent_events || [];
+  document.getElementById("events").textContent =
+    ev.length ? JSON.stringify(ev, null, 2) : "(no events recorded yet)";
+}
+
+function renderMetrics(m) {
+  const banner = document.getElementById("error-banner");
+  let bannerLines = [];
+
+  // Inference error within last 60s → red banner
+  if (m.last_error && m.last_error_ts) {
+    const ageMs = Date.now() - new Date(m.last_error_ts).getTime();
+    if (ageMs < 60_000) {
+      bannerLines.push(`⚠ Inference error ${Math.round(ageMs/1000)}s ago:\n${m.last_error}`);
+    }
+  }
+
+  const total = m.decisions_attempted || 0;
+  const unparsed = m.decisions_unparsed || 0;
+  const skipped = m.decisions_skipped || 0;
+  const opened = m.conversations_opened || 0;
+  const votes = m.votes_proposed || 0;
+  const votesDone = m.votes_completed || 0;
+  const votesYes = m.votes_approved || 0;
+  const votesNo = m.votes_rejected || 0;
+  const broadcasts = m.broadcasts_sent || 0;
+  const lastSkip = m.last_skip_reason;
+
+  // High-level diagnostic banners
+  if (total === 0) {
+    bannerLines.push(
+      "No decisions attempted yet. The orchestrator hasn't produced an LLM\n" +
+      "request, OR each request is taking longer than one tick. Check the\n" +
+      "orchestrator terminal for activity."
+    );
+  } else if (unparsed > 0 && unparsed / total > 0.3) {
+    bannerLines.push(
+      `⚠ ${unparsed}/${total} LLM responses are unparseable. The model likely\n` +
+      "uses a different chat template (try --chat-format harmony for gpt-oss)\n" +
+      "or is ignoring the JSON schema. Click 'Show last LLM raw output'."
+    );
+  } else if (total > 5 && opened === 0 && votes === 0 && broadcasts === 0) {
+    bannerLines.push(
+      `${total} decisions made but 0 conversations / 0 votes / 0 broadcasts.\n` +
+      `Either every decision is do_nothing, or every action is being skipped.\n` +
+      (lastSkip ? `Last skip reason: ${lastSkip}` : "")
+    );
+  }
+
+  if (bannerLines.length) {
+    banner.style.display = "block";
+    banner.textContent = bannerLines.join("\n\n");
+  } else {
+    banner.style.display = "none";
+  }
+
+  // Metrics line
+  const byAct = m.decisions_by_action || {};
+  const applied = m.actions_applied || {};
+  const actStr = Object.entries(byAct)
+    .sort((a,b) => b[1]-a[1])
+    .map(([k,v]) => `${k}=${v}/${applied[k] || 0}`)
+    .join(" · ") || "(no decisions yet)";
+  const root = document.getElementById("metrics-summary");
+  const errClass = (unparsed && total && unparsed/total > 0.3) ? "bad" : "muted-text";
+  root.innerHTML = `
+    decisions: ${total} attempted ·
+    <span class="${errClass}">${unparsed} unparseable</span> ·
+    ${skipped} skipped ·
+    inference errors: ${m.inference_errors || 0}<br/>
+    outcomes: ${opened} conversations opened · ${votes} votes proposed (${votesDone} closed: ${votesYes} approved / ${votesNo} rejected) · ${broadcasts} broadcasts sent<br/>
+    by action (picked/applied): <span class="muted-text">${actStr}</span>
+    ${lastSkip ? `<br/>last skip: <span class="muted-text">${escapeHtml(lastSkip)}</span>` : ""}
+  `;
+}
+
+document.getElementById("btn-show-diag").addEventListener("click", async () => {
+  const pane = document.getElementById("diag-pane");
+  if (pane.style.display === "none" || !pane.textContent) {
+    try {
+      const r = await fetch("/diag");
+      pane.textContent = JSON.stringify(await r.json(), null, 2);
+    } catch (e) {
+      pane.textContent = String(e);
+    }
+    pane.style.display = "block";
+  } else {
+    pane.style.display = "none";
+  }
+});
+
+let liveRunId = null;
+
+// ---- agent explorer ----
+let agentListCache = [];
+let selectedAgentId = null;
+
+async function loadAgentList() {
+  let agents;
+  try {
+    const r = await fetch("/agents");
+    if (!r.ok) return;
+    agents = await r.json();
+  } catch { return; }
+  agentListCache = agents;
+  renderAgentList();
+}
+
+function renderAgentList() {
+  const root = document.getElementById("agent-list");
+  document.getElementById("agent-count").textContent =
+    agentListCache.length ? ` — ${agentListCache.length} total` : "";
+  if (!agentListCache.length) {
+    root.innerHTML = `<div style="padding:12px" class="muted-text">no agents</div>`;
+    return;
+  }
+  const header = `<div class="agent-list-header">click a name to inspect</div>`;
+  root.innerHTML = header + agentListCache.map(a => `
+    <div class="agent-row ${selectedAgentId === a.id ? "selected" : ""}"
+         data-agent-id="${a.id}">
+      <div><strong>${escapeHtml(a.name)}</strong>
+        <span class="muted-text" style="font-size:0.72rem">[${a.id}]</span>
+      </div>
+      <div class="meta">
+        ${escapeHtml(a.role || "?")} · ${escapeHtml(a["class"] || "?")} · ${escapeHtml(a.state || "?")}
+      </div>
+    </div>
+  `).join("");
+  root.querySelectorAll(".agent-row").forEach(el =>
+    el.addEventListener("click", () => loadAgentDetail(el.dataset.agentId)));
+}
+
+async function loadAgentDetail(agentId) {
+  selectedAgentId = agentId;
+  renderAgentList();
+  const root = document.getElementById("agent-detail");
+  root.innerHTML = "loading…";
+  try {
+    const r = await fetch(`/agents/${encodeURIComponent(agentId)}`);
+    if (!r.ok) throw new Error(await r.text());
+    renderAgentDetail(await r.json());
+  } catch (e) {
+    root.innerHTML = `<div style="color:#f85149">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function fmtTraitsObj(p) {
+  if (!p || typeof p !== "object") return "—";
+  const order = ["openness","conscientiousness","extraversion","agreeableness","neuroticism"];
+  const keys = order.filter(k => k in p).concat(Object.keys(p).filter(k => !order.includes(k)));
+  return keys.map(k => `${escapeHtml(k)}=${escapeHtml(String(p[k]))}`).join(" · ");
+}
+
+function fmtValuesObj(v) {
+  if (!v || typeof v !== "object") return "—";
+  const entries = Object.entries(v).sort((a,b) => (b[1]||0) - (a[1]||0));
+  if (!entries.length) return "(none stated)";
+  return entries.map(([k, val]) => `${escapeHtml(k)}=${escapeHtml(String(val))}`).join(" · ");
+}
+
+function fmtOpinionsObj(o) {
+  if (!o || typeof o !== "object") return "";
+  const entries = Object.entries(o);
+  if (!entries.length) return "";
+  return entries.map(([k, v]) =>
+    `<div>· on <b>${escapeHtml(k)}</b>: ${escapeHtml(String(v))}</div>`
+  ).join("");
+}
+
+function fmtDecision(d) {
+  if (d.kind === "started_conversation") {
+    const partners = (d.participant_names || d.participants || [])
+      .filter(n => n !== d.id).join(", ") || "—";
+    return `
+      <span class="kind-badge">${d.conv_type || "conv"}</span>
+      started conversation #${d.conv_id} with <b>${escapeHtml(partners)}</b>
+      ${d.summary ? `<div class="muted-text" style="margin-top:4px">${escapeHtml(d.summary)}</div>` : ""}
+    `;
+  }
+  if (d.kind === "broadcast") {
+    return `
+      <span class="kind-badge">broadcast</span>
+      <span>${escapeHtml(d.message || "")}</span>
+    `;
+  }
+  if (d.kind === "vote_proposed") {
+    const target = d.target_name || d.target_id || "?";
+    return `
+      <span class="kind-badge">vote</span>
+      proposed <b>${escapeHtml(d.change_type || "")}</b> change for
+      <b>${escapeHtml(target)}</b>
+      ${d.from_value ? `from <i>${escapeHtml(d.from_value)}</i> ` : ""}
+      → <i>${escapeHtml(d.to_value || "?")}</i>
+    `;
+  }
+  return `<span class="muted-text">${escapeHtml(JSON.stringify(d))}</span>`;
+}
+
+function renderAgentDetail(a) {
+  const root = document.getElementById("agent-detail");
+  const summaries = (a.memory && a.memory.summaries) || [];
+  const impressions = (a.memory && a.memory.impressions) || [];
+  const decisions = a.recent_decisions || [];
+  const votes = a.recent_votes || [];
+  const opinions = fmtOpinionsObj(a.initial_opinions);
+  root.innerHTML = `
+    <h3>Anagrafica</h3>
+    <div class="kv">
+      <div><b>${escapeHtml(a.name)}</b>
+        <span class="muted-text">[${escapeHtml(a.id)}${a.gender ? ", " + escapeHtml(a.gender) : ""}]</span>
+      </div>
+      <div><b>Role:</b> ${escapeHtml(a.role_label || a.role || "?")}
+        <span class="muted-text">(id: ${escapeHtml(a.role || "?")}${a.role_prestige != null ? `, prestige ${a.role_prestige}/100` : ""})</span>
+      </div>
+      <div><b>Class:</b> ${escapeHtml(a["class"] || "?")}</div>
+      <div><b>State:</b> ${escapeHtml(a.state || "?")}${a.current_conversation_id != null ? ` (in conv #${a.current_conversation_id})` : ""}</div>
+      <div><b>Social need:</b> ${a.social_need != null ? a.social_need.toFixed(0) : "?"}/100</div>
+      <div style="margin-top:6px"><b>Personality:</b> <span class="muted-text">${fmtTraitsObj(a.personality)}</span></div>
+      <div><b>Values:</b> <span class="muted-text">${fmtValuesObj(a.values)}</span></div>
+      ${opinions ? `<div style="margin-top:6px"><b>Initial opinions:</b><div class="muted-text" style="margin-left:8px">${opinions}</div></div>` : ""}
+    </div>
+    <h3>Backstory</h3>
+    <div class="backstory">${escapeHtml(a.backstory || "(none)")}</div>
+
+    <h3>Memory — recent conversation summaries (${summaries.length})</h3>
+    ${summaries.length
+      ? summaries.slice().reverse().map(s => `
+          <div class="summary-item">
+            <span class="ts">${escapeHtml(s.ts || "")}${s.conversation_id ? ` · conv #${s.conversation_id}` : ""}</span>
+            <div>${escapeHtml(s.summary || "")}</div>
+          </div>`).join("")
+      : `<span class="muted-text">no summaries yet</span>`}
+
+    <h3>Memory — impressions of others (${impressions.length})</h3>
+    ${impressions.length
+      ? impressions.map(i => `
+          <div class="impression-item">
+            <b>${escapeHtml(i.subject_name || i.subject_id)}</b>
+            <span class="muted-text" style="font-size:0.72rem">[${escapeHtml(i.subject_id)}]</span>
+            <span class="ts"> · ${escapeHtml(i.last_updated || "")}</span>
+            <div>${escapeHtml(i.impression || "")}</div>
+          </div>`).join("")
+      : `<span class="muted-text">no impressions recorded</span>`}
+
+    <h3>Recent decisions (${decisions.length})</h3>
+    ${decisions.length
+      ? decisions.map(d => `
+          <div class="decision-item">
+            <span class="ts">${escapeHtml(d.at || "")}</span>
+            <div>${fmtDecision(d)}</div>
+          </div>`).join("")
+      : `<span class="muted-text">no decisions yet (do_nothing and join_group are not tracked)</span>`}
+
+    <h3>Recent votes (${votes.length})</h3>
+    ${votes.length
+      ? votes.map(v => `
+          <div class="decision-item">
+            <span class="kind-badge vote-${escapeHtml(v.status)}">${escapeHtml(v.status)}</span>
+            on <b>${escapeHtml(v.target_name || "?")}</b>
+            ${escapeHtml(v.change_type || "?")}
+            ${v.from_value ? `<i>${escapeHtml(v.from_value)}</i> → ` : ""}
+            <i>${escapeHtml(v.to_value || "?")}</i>
+            <div class="ts">
+              ${escapeHtml(v.voted_at || "")}
+              · proposal #${v.proposal_id}
+              ${v.outcome ? ` · ${escapeHtml(v.outcome)}` : ""}
+            </div>
+          </div>`).join("")
+      : `<span class="muted-text">no votes cast yet</span>`}
+  `;
+}
+
+async function loadRuns() {
+  const r = await fetch("/runs");
+  const runs = await r.json();
+  const body = document.querySelector("#runs-table tbody");
+  body.innerHTML = "";
+  for (const run of runs) {
+    const tr = document.createElement("tr");
+    const isOpen = String(currentExplorerRun) === String(run.id);
+    tr.innerHTML = `
+      <td>${run.id}</td>
+      <td>${run.name}</td>
+      <td>${run.status}</td>
+      <td class="muted-text">${run.started_at}</td>
+      <td>
+        <button class="muted ${isOpen ? "active" : ""}" data-explore="${run.id}" data-name="${run.name}">Explore</button>
+        <button class="muted" data-export="${run.id}">Export</button>
+        <button class="danger" data-delete="${run.id}">Delete</button>
+      </td>`;
+    body.appendChild(tr);
+  }
+  body.querySelectorAll("button[data-explore]").forEach(b =>
+    b.addEventListener("click", e => {
+      const id = e.target.dataset.explore;
+      const name = e.target.dataset.name;
+      openExplorer(id, name);
+    }));
+  body.querySelectorAll("button[data-export]").forEach(b =>
+    b.addEventListener("click", e => {
+      window.location.href = `/runs/${e.target.dataset.export}/export`;
+    }));
+  body.querySelectorAll("button[data-delete]").forEach(b =>
+    b.addEventListener("click", async e => {
+      const id = e.target.dataset.delete;
+      if (!confirm(`Delete run ${id}? This cannot be undone.`)) return;
+      if (!confirm(`Really delete run ${id}? Final confirmation.`)) return;
+      const r = await fetch(`/runs/${id}`, { method: "DELETE" });
+      if (!r.ok) { alert(await r.text()); return; }
+      if (String(currentExplorerRun) === String(id)) closeExplorer();
+      loadRuns();
+    }));
+}
+
+// ---- run explorer (tabs: conversations / votes / broadcasts) ----
+let currentExplorerRun = null;
+let currentExplorerData = null;       // { conversations: [...], agents: {...} }
+let currentSelectedConv = null;
+let currentExplorerTab = "conversations";  // 'conversations' | 'votes' | 'broadcasts'
+let currentVotesData = null;          // { proposals: [...], agents: {...} }
+let currentSelectedVote = null;       // proposal_id
+let currentBroadcastsData = null;     // { broadcasts: [...], agents: {...} }
+let currentSelectedBroadcast = null;  // event id
+
+function fmtParticipants(c, agents) {
+  const names = (c.participant_names && c.participant_names.length)
+    ? c.participant_names
+    : (c.participants || []).map(p => (agents[p] || { name: p }).name);
+  if (names.length <= 3) return names.join(", ");
+  return names.slice(0, 3).join(", ") + ` +${names.length - 3}`;
+}
+
+function fmtTs(ts) {
+  if (!ts) return "—";
+  try { return new Date(ts).toLocaleString(); } catch { return ts; }
+}
+
+async function openExplorer(runId, runName) {
+  currentExplorerRun = runId;
+  document.getElementById("explorer").classList.add("open");
+  document.getElementById("explorer-title").textContent =
+    ` — run #${runId} (${runName || ""})`;
+  // Reset all three panes' selection / data
+  currentExplorerData = null;
+  currentVotesData = null;
+  currentBroadcastsData = null;
+  currentSelectedConv = null;
+  currentSelectedVote = null;
+  currentSelectedBroadcast = null;
+  document.getElementById("conv-detail").innerHTML =
+    `<span class="muted-text">Select a conversation on the left.</span>`;
+  document.getElementById("vote-detail").innerHTML =
+    `<span class="muted-text">Select a vote on the left.</span>`;
+  document.getElementById("bcast-detail").innerHTML =
+    `<span class="muted-text">Select a broadcast on the left.</span>`;
+  // Load whichever tab is currently active.
+  setExplorerTab(currentExplorerTab || "conversations");
+  loadRuns();   // refresh button highlight
+  document.getElementById("explorer").scrollIntoView({ behavior: "smooth" });
+}
+
+function setExplorerTab(name) {
+  currentExplorerTab = name;
+  document.querySelectorAll(".explorer-tab").forEach(b =>
+    b.classList.toggle("active", b.dataset.tab === name));
+  document.querySelectorAll(".explorer-pane").forEach(p =>
+    p.classList.toggle("active", p.id === "pane-" + name));
+  if (currentExplorerRun == null) return;
+  if (name === "conversations") loadConversationsList();
+  else if (name === "votes") loadVotesList();
+  else if (name === "broadcasts") loadBroadcastsList();
+}
+
+function closeExplorer() {
+  currentExplorerRun = null;
+  currentExplorerData = null;
+  currentSelectedConv = null;
+  currentVotesData = null;
+  currentSelectedVote = null;
+  currentBroadcastsData = null;
+  currentSelectedBroadcast = null;
+  document.getElementById("explorer").classList.remove("open");
+  loadRuns();
+}
+
+async function loadConversationsList() {
+  const root = document.getElementById("conv-list");
+  if (!currentExplorerData) root.innerHTML = "loading…";
+  try {
+    const r = await fetch(`/runs/${currentExplorerRun}/conversations?limit=500`);
+    if (!r.ok) throw new Error(await r.text());
+    currentExplorerData = await r.json();
+  } catch (e) {
+    root.innerHTML = `<div style="padding:10px; color:#f85149">${escapeHtml(e.message)}</div>`;
+    return;
+  }
+  renderConvList();
+}
+
+function renderConvList() {
+  const root = document.getElementById("conv-list");
+  if (!currentExplorerData) { root.innerHTML = ""; return; }
+  const filter = document.getElementById("conv-filter").value.trim().toLowerCase();
+  const { conversations, agents } = currentExplorerData;
+  const filtered = conversations.filter(c => {
+    if (!filter) return true;
+    const hay = [
+      c.type || "",
+      String(c.id),
+      (c.summary || "").toLowerCase(),
+      fmtParticipants(c, agents).toLowerCase(),
+    ].join(" ");
+    return hay.includes(filter);
+  });
+  const header = `
+    <div class="conv-list-header">
+      <span>${conversations.length} total · showing ${filtered.length}</span>
+      <span>newest first</span>
+    </div>`;
+  if (!filtered.length) {
+    root.innerHTML = header +
+      `<div style="padding:14px" class="muted-text">No conversations match the filter.</div>`;
+    return;
+  }
+  root.innerHTML = header + filtered.map(c => `
+    <div class="conv-row ${currentSelectedConv === c.id ? "selected" : ""}"
+         data-conv-id="${c.id}">
+      <div>
+        <span class="pill">#${c.id}</span>
+        <span class="pill">${c.type}</span>
+        <span class="pill">${c.message_count} msg</span>
+        ${c.end_reason ? `<span class="pill">${c.end_reason}</span>` : ""}
+      </div>
+      <div class="meta">
+        ${fmtParticipants(c, agents)}<br/>
+        started ${fmtTs(c.started_at)}${c.ended_at ? ` · ended ${fmtTs(c.ended_at)}` : " · open"}
+      </div>
+    </div>
+  `).join("");
+  root.querySelectorAll(".conv-row").forEach(el =>
+    el.addEventListener("click", () => loadConvDetail(parseInt(el.dataset.convId, 10))));
+}
+
+async function loadConvDetail(convId) {
+  currentSelectedConv = convId;
+  renderConvList();
+  const root = document.getElementById("conv-detail");
+  root.innerHTML = "loading…";
+  try {
+    const r = await fetch(`/runs/${currentExplorerRun}/conversations/${convId}`);
+    if (!r.ok) throw new Error(await r.text());
+    renderConvDetail(await r.json());
+  } catch (e) {
+    root.innerHTML = `<div style="color:#f85149">${e.message}</div>`;
+  }
+}
+
+function renderConvDetail(data) {
+  const root = document.getElementById("conv-detail");
+  const c = data.conversation;
+  const messages = data.messages;
+  const summaryHtml = c.summary
+    ? `<div class="summary-box"><strong>Summary:</strong> ${escapeHtml(c.summary)}</div>`
+    : "";
+  const headerHtml = `
+    <div style="margin-bottom:10px">
+      <div><strong>Conversation #${c.id}</strong>
+           <span class="pill">${c.type}</span>
+           ${c.end_reason ? `<span class="pill">${c.end_reason}</span>` : ""}
+      </div>
+      <div class="muted-text" style="font-size:0.8rem; margin-top:2px">
+        Participants: ${(c.participant_names || c.participants).join(", ")}<br/>
+        ${fmtTs(c.started_at)} → ${c.ended_at ? fmtTs(c.ended_at) : "open"}
+      </div>
+    </div>${summaryHtml}`;
+  const msgsHtml = messages.length
+    ? messages.map(m => `
+        <div class="msg">
+          <span class="sender">${escapeHtml(m.sender_name)}</span>
+          <span class="ts">turn ${m.turn_index} · ${fmtTs(m.ts)}</span>
+          <div class="body">${escapeHtml(m.content)}</div>
+        </div>
+      `).join("")
+    : `<span class="muted-text">No messages yet.</span>`;
+  // Preserve scroll position to avoid jumpiness while auto-refreshing.
+  const prevScroll = root.scrollTop;
+  const wasNearBottom = root.scrollHeight - prevScroll - root.clientHeight < 60;
+  root.innerHTML = headerHtml + msgsHtml;
+  root.scrollTop = wasNearBottom ? root.scrollHeight : prevScroll;
+}
+
+// ---- votes tab ----
+async function loadVotesList() {
+  const root = document.getElementById("vote-list");
+  if (!currentVotesData) root.innerHTML = "loading…";
+  try {
+    const r = await fetch(`/runs/${currentExplorerRun}/votes`);
+    if (!r.ok) throw new Error(await r.text());
+    currentVotesData = await r.json();
+  } catch (e) {
+    root.innerHTML = `<div style="padding:10px; color:#f85149">${escapeHtml(e.message)}</div>`;
+    return;
+  }
+  renderVotesList();
+}
+
+function renderVotesList() {
+  const root = document.getElementById("vote-list");
+  if (!currentVotesData) { root.innerHTML = ""; return; }
+  const filter = (document.getElementById("vote-filter").value || "").trim().toLowerCase();
+  const { proposals } = currentVotesData;
+  const filtered = proposals.filter(p => {
+    if (!filter) return true;
+    const hay = [
+      String(p.id),
+      p.proposer_name || "", p.target_name || "",
+      p.change_type || "", p.from_value || "", p.to_value || "",
+      p.outcome || "",
+    ].join(" ").toLowerCase();
+    return hay.includes(filter);
+  });
+  const header = `
+    <div class="conv-list-header">
+      <span>${proposals.length} total · showing ${filtered.length}</span>
+      <span>newest first</span>
+    </div>`;
+  if (!filtered.length) {
+    root.innerHTML = header +
+      `<div style="padding:14px" class="muted-text">No votes match the filter.</div>`;
+    return;
+  }
+  root.innerHTML = header + filtered.map(p => {
+    const outcome = p.outcome || "open";
+    const outcomeClass = outcome === "approved" ? "v-yes"
+                       : outcome === "rejected" ? "v-no"
+                       : "v-pending";
+    return `
+      <div class="conv-row ${currentSelectedVote === p.id ? "selected" : ""}"
+           data-vote-id="${p.id}">
+        <div>
+          <span class="pill">#${p.id}</span>
+          <span class="pill">${escapeHtml(p.change_type || "?")}</span>
+          <span class="pill kind-badge ${outcomeClass}">${escapeHtml(outcome)}</span>
+          ${p.outcome ? `<span class="pill">${p.yes_count || 0}/${p.no_count || 0}</span>` : ""}
+        </div>
+        <div class="meta">
+          <b>${escapeHtml(p.proposer_name || "?")}</b> →
+          target <b>${escapeHtml(p.target_name || "?")}</b><br/>
+          <i>${escapeHtml(p.from_value || "?")}</i> → <i>${escapeHtml(p.to_value || "?")}</i><br/>
+          ${fmtTs(p.proposed_at)}${p.closed_at ? ` · closed ${fmtTs(p.closed_at)}` : ""}
+        </div>
+      </div>`;
+  }).join("");
+  root.querySelectorAll(".conv-row").forEach(el =>
+    el.addEventListener("click", () => loadVoteDetail(parseInt(el.dataset.voteId, 10))));
+}
+
+async function loadVoteDetail(propId) {
+  currentSelectedVote = propId;
+  renderVotesList();
+  const root = document.getElementById("vote-detail");
+  root.innerHTML = "loading…";
+  try {
+    const r = await fetch(`/runs/${currentExplorerRun}/votes/${propId}`);
+    if (!r.ok) throw new Error(await r.text());
+    renderVoteDetail(await r.json());
+  } catch (e) {
+    root.innerHTML = `<div style="color:#f85149">${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function renderVoteDetail(data) {
+  const root = document.getElementById("vote-detail");
+  const p = data.proposal;
+  const debate = data.debate || [];
+  const votes = data.votes || [];
+  const yes = votes.filter(v => v.status === "yes").length;
+  const no = votes.filter(v => v.status === "no").length;
+  const malformed = votes.filter(v => v.status === "malformed").length;
+  const outcome = p.outcome || "open";
+  const outcomeClass = outcome === "approved" ? "v-yes"
+                     : outcome === "rejected" ? "v-no"
+                     : "v-pending";
+  const headerHtml = `
+    <div style="margin-bottom:12px">
+      <div>
+        <strong>Vote #${p.id}</strong>
+        <span class="pill">${escapeHtml(p.change_type || "?")}</span>
+        <span class="pill kind-badge ${outcomeClass}">${escapeHtml(outcome)}</span>
+      </div>
+      <div style="margin-top:6px; font-size:0.86rem; line-height:1.5">
+        Proposed by <b>${escapeHtml(p.proposer_name || "?")}</b>
+        on <b>${escapeHtml(p.target_name || "?")}</b><br/>
+        Change <b>${escapeHtml(p.change_type || "?")}</b>:
+        <i>${escapeHtml(p.from_value || "?")}</i> →
+        <i>${escapeHtml(p.to_value || "?")}</i>
+      </div>
+      <div class="muted-text" style="font-size:0.78rem; margin-top:4px">
+        ${fmtTs(p.proposed_at)}${p.closed_at ? ` → ${fmtTs(p.closed_at)}` : " · still open"}
+      </div>
+      <div style="margin-top:8px; font-size:0.86rem">
+        Tally:
+        <span class="pill kind-badge v-yes">yes ${yes}</span>
+        <span class="pill kind-badge v-no">no ${no}</span>
+        ${malformed ? `<span class="pill kind-badge v-malformed">malformed ${malformed}</span>` : ""}
+        ${p.yes_count != null ? `<span class="muted-text" style="margin-left:6px">(stored: ${p.yes_count}/${p.no_count})</span>` : ""}
+      </div>
+    </div>`;
+  const debateHtml = debate.length
+    ? `<h3 style="margin:14px 0 6px 0; font-size:0.92rem; color:#58a6ff">
+         Pre-vote debate (${debate.length} speeches)
+       </h3>` +
+      debate.map(s => `
+        <div class="speech-row">
+          <span class="speaker">${escapeHtml(s.speaker_name || s.speaker_id || "?")}</span>
+          <span class="ts" style="color:#6e7681; font-size:0.72rem; margin-left:6px">
+            round ${s.round != null ? s.round + 1 : "?"} · ${escapeHtml(s.ts || "")}
+          </span>
+          <div style="margin-top:3px">${escapeHtml(s.text || "")}</div>
+        </div>`).join("")
+    : `<h3 style="margin:14px 0 6px 0; font-size:0.92rem; color:#58a6ff">
+         Pre-vote debate
+       </h3>
+       <span class="muted-text">no debate transcript</span>`;
+  const votesHtml = votes.length
+    ? `<h3 style="margin:14px 0 6px 0; font-size:0.92rem; color:#58a6ff">
+         Individual votes (${votes.length})
+       </h3>` +
+      votes.map(v => `
+        <div class="vote-row">
+          <span class="kind-badge v-${escapeHtml(v.status)}">${escapeHtml(v.status)}</span>
+          <b>${escapeHtml(v.voter_name || v.voter_id || "?")}</b>
+          ${v.reasoning ? `<span class="muted-text"> — ${escapeHtml(v.reasoning)}</span>` : ""}
+          <span class="ts" style="color:#6e7681; font-size:0.72rem; margin-left:6px">
+            ${escapeHtml(v.voted_at || "")}
+          </span>
+        </div>`).join("")
+    : `<span class="muted-text">no individual votes recorded</span>`;
+  // Preserve scroll on auto-refresh.
+  const prevScroll = root.scrollTop;
+  root.innerHTML = headerHtml + debateHtml + votesHtml;
+  root.scrollTop = prevScroll;
+}
+
+// ---- broadcasts tab ----
+async function loadBroadcastsList() {
+  const root = document.getElementById("bcast-list");
+  if (!currentBroadcastsData) root.innerHTML = "loading…";
+  try {
+    const r = await fetch(`/runs/${currentExplorerRun}/broadcasts?limit=500`);
+    if (!r.ok) throw new Error(await r.text());
+    currentBroadcastsData = await r.json();
+  } catch (e) {
+    root.innerHTML = `<div style="padding:10px; color:#f85149">${escapeHtml(e.message)}</div>`;
+    return;
+  }
+  renderBroadcastsList();
+}
+
+function renderBroadcastsList() {
+  const root = document.getElementById("bcast-list");
+  if (!currentBroadcastsData) { root.innerHTML = ""; return; }
+  const filter = (document.getElementById("bcast-filter").value || "").trim().toLowerCase();
+  const { broadcasts } = currentBroadcastsData;
+  const filtered = broadcasts.filter(b => {
+    if (!filter) return true;
+    const hay = [
+      b.sender_name || "", b.sender_id || "", b.message || "",
+    ].join(" ").toLowerCase();
+    return hay.includes(filter);
+  });
+  const header = `
+    <div class="conv-list-header">
+      <span>${broadcasts.length} total · showing ${filtered.length}</span>
+      <span>newest first</span>
+    </div>`;
+  if (!filtered.length) {
+    root.innerHTML = header +
+      `<div style="padding:14px" class="muted-text">No broadcasts match the filter.</div>`;
+    return;
+  }
+  root.innerHTML = header + filtered.map(b => {
+    const isHuman = b.event_type === "broadcast_human";
+    return `
+      <div class="conv-row ${currentSelectedBroadcast === b.id ? "selected" : ""}"
+           data-bcast-id="${b.id}">
+        <div>
+          <span class="pill">#${b.id}</span>
+          ${isHuman ? `<span class="pill kind-badge v-pending">human</span>` : ""}
+        </div>
+        <div class="meta">
+          <b>${escapeHtml(b.sender_name || "?")}</b><br/>
+          ${escapeHtml((b.message || "").slice(0, 80))}${(b.message || "").length > 80 ? "…" : ""}<br/>
+          ${fmtTs(b.ts)}
+        </div>
+      </div>`;
+  }).join("");
+  root.querySelectorAll(".conv-row").forEach(el =>
+    el.addEventListener("click", () => {
+      const id = parseInt(el.dataset.bcastId, 10);
+      const b = currentBroadcastsData.broadcasts.find(x => x.id === id);
+      if (b) renderBroadcastDetail(b);
+    }));
+}
+
+function renderBroadcastDetail(b) {
+  currentSelectedBroadcast = b.id;
+  renderBroadcastsList();
+  const root = document.getElementById("bcast-detail");
+  const isHuman = b.event_type === "broadcast_human";
+  root.innerHTML = `
+    <div style="margin-bottom:12px">
+      <div>
+        <strong>Broadcast #${b.id}</strong>
+        ${isHuman ? `<span class="pill kind-badge v-pending">human</span>` : ""}
+      </div>
+      <div class="muted-text" style="font-size:0.8rem; margin-top:2px">
+        From <b>${escapeHtml(b.sender_name || "?")}</b>
+        ${b.sender_id && b.sender_id !== "HUMAN" ? `<span class="muted-text"> [${escapeHtml(b.sender_id)}]</span>` : ""}
+        · ${fmtTs(b.ts)}
+      </div>
+    </div>
+    <div class="msg">
+      <div class="body">${escapeHtml(b.message || "")}</div>
+    </div>`;
+}
+
+function escapeHtml(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+document.getElementById("btn-close-explorer").addEventListener("click", closeExplorer);
+document.getElementById("conv-filter").addEventListener("input", renderConvList);
+document.getElementById("vote-filter").addEventListener("input", renderVotesList);
+document.getElementById("bcast-filter").addEventListener("input", renderBroadcastsList);
+document.querySelectorAll(".explorer-tab").forEach(b =>
+  b.addEventListener("click", () => setExplorerTab(b.dataset.tab)));
+
+// Auto-refresh: only refresh whichever tab is visible.
+setInterval(() => {
+  if (currentExplorerRun == null) return;
+  if (currentExplorerTab === "conversations") {
+    fetch(`/runs/${currentExplorerRun}/conversations?limit=500`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) { currentExplorerData = d; renderConvList(); } })
+      .catch(() => {});
+    if (currentSelectedConv != null) {
+      fetch(`/runs/${currentExplorerRun}/conversations/${currentSelectedConv}`)
+        .then(r => r.ok ? r.json() : null)
+        .then(d => { if (d) renderConvDetail(d); })
+        .catch(() => {});
+    }
+  } else if (currentExplorerTab === "votes") {
+    fetch(`/runs/${currentExplorerRun}/votes`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) { currentVotesData = d; renderVotesList(); } })
+      .catch(() => {});
+    if (currentSelectedVote != null) {
+      fetch(`/runs/${currentExplorerRun}/votes/${currentSelectedVote}`)
+        .then(r => r.ok ? r.json() : null)
+        .then(d => { if (d) renderVoteDetail(d); })
+        .catch(() => {});
+    }
+  } else if (currentExplorerTab === "broadcasts") {
+    fetch(`/runs/${currentExplorerRun}/broadcasts?limit=500`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) { currentBroadcastsData = d; renderBroadcastsList(); } })
+      .catch(() => {});
+  }
+}, 2000);
+
+document.getElementById("btn-pause").addEventListener("click", async () => {
+  await fetch("/pause", { method: "POST" });
+  loadState();
+});
+document.getElementById("btn-resume").addEventListener("click", async () => {
+  await fetch("/resume", { method: "POST" });
+  loadState();
+});
+document.getElementById("btn-checkpoint").addEventListener("click", async () => {
+  await fetch("/checkpoint", { method: "POST" });
+});
+document.getElementById("btn-send").addEventListener("click", async () => {
+  const txt = document.getElementById("msg").value.trim();
+  if (!txt) return;
+  const r = await fetch("/broadcast", {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ message: txt }),
+  });
+  const data = await r.json();
+  document.getElementById("bc-status").textContent =
+    `${data.status} (queue: ${data.queue_length})`;
+  document.getElementById("msg").value = "";
+});
+document.getElementById("btn-refresh-all").addEventListener("click", refreshAll);
+
+buildGraphs();
+loadState();
+loadRuns();
+loadAgentList();
+setInterval(loadState, 1500);
+setInterval(loadRuns, 15000);
+setInterval(() => {
+  loadAgentList();
+  if (selectedAgentId) loadAgentDetail(selectedAgentId);
+}, 4000);
+</script>
+</body>
+</html>

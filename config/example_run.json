@@ -1,0 +1,1431 @@
+{
+  "simulation": {
+    "name": "first_run",
+    "seed": 42,
+    "language": "en",
+    "tick_interval_seconds": 3,
+    "auto_checkpoint_minutes": 5
+  },
+  "inference": {
+    "backend": "vllm",
+    "endpoint": "http://localhost:8000",
+    "model": "Qwen/Qwen2.5-14B-Instruct-AWQ",
+    "max_batch_size": 64,
+    "max_tokens_per_message": 200,
+    "temperature": 0.85,
+    "top_p": 0.95,
+    "request_timeout_seconds": 120
+  },
+  "memory": {
+    "short_term_turns": 15,
+    "medium_term_summaries": 20,
+    "long_term_retrieval_k": 3,
+    "embedding_model": "BAAI/bge-small-en-v1.5",
+    "person_impression_update_every_n_turns": 5,
+    "chroma_persist": true
+  },
+  "social": {
+    "social_need_initial": 100.0,
+    "social_need_decay_per_minute": 60.0,
+    "social_need_gain_per_turn": 6.0,
+    "social_need_critical_threshold": 25.0,
+    "silence_detection_seconds": 20.0,
+    "forced_interaction_count_on_silence": 2,
+    "max_idle_decisions_per_tick": 0
+  },
+  "conversation": {
+    "max_turns_per_conversation": 12,
+    "max_group_size": 6,
+    "cooldown_seconds_after_end": 5.0,
+    "turns_per_tick": 2
+  },
+  "voting": {
+    "one_active_vote_at_a_time": true,
+    "queue_conflicting_proposals": false
+  },
+  "classes": [
+    "aristocracy",
+    "bourgeoisie",
+    "people",
+    "marginal"
+  ],
+  "roles": [
+    {
+      "id": "president",
+      "name": "President",
+      "prestige": 95
+    },
+    {
+      "id": "supreme_judge",
+      "name": "Supreme Judge",
+      "prestige": 85
+    },
+    {
+      "id": "general",
+      "name": "General",
+      "prestige": 80
+    },
+    {
+      "id": "banker",
+      "name": "Banker",
+      "prestige": 75
+    },
+    {
+      "id": "minister",
+      "name": "Minister",
+      "prestige": 70
+    },
+    {
+      "id": "scholar",
+      "name": "Scholar",
+      "prestige": 65
+    },
+    {
+      "id": "artist",
+      "name": "Artist",
+      "prestige": 65
+    },
+    {
+      "id": "merchant",
+      "name": "Merchant",
+      "prestige": 60
+    },
+    {
+      "id": "doctor",
+      "name": "Doctor",
+      "prestige": 55
+    },
+    {
+      "id": "master_artisan",
+      "name": "Master Artisan",
+      "prestige": 50
+    },
+    {
+      "id": "clerk",
+      "name": "Clerk",
+      "prestige": 45
+    },
+    {
+      "id": "worker",
+      "name": "Worker",
+      "prestige": 30
+    },
+    {
+      "id": "farmer",
+      "name": "Farmer",
+      "prestige": 25
+    },
+    {
+      "id": "soldier",
+      "name": "Soldier",
+      "prestige": 20
+    },
+    {
+      "id": "beggar",
+      "name": "Beggar",
+      "prestige": 5
+    }
+  ],
+  "agents": [
+    {
+      "id": "agent_01",
+      "name": "Eleanor Eberhardt",
+      "gender": "f",
+      "role_initial": "president",
+      "class_initial": "aristocracy",
+      "personality": {
+        "openness": 47,
+        "conscientiousness": 75,
+        "extraversion": 48,
+        "agreeableness": 37,
+        "neuroticism": 67
+      },
+      "values": {
+        "loyalty": 33,
+        "ambition": 79,
+        "empathy": 21,
+        "tradition": 85,
+        "fairness": 74
+      },
+      "backstory": "Inherited or seized the presidency after years of factional turmoil. Wary of reformers.",
+      "initial_opinions": {
+        "taxation": "Taxes on the wealthy must remain low to preserve investment.",
+        "public_order": "Order is the foundation of civilization; dissent must be contained."
+      }
+    },
+    {
+      "id": "agent_02",
+      "name": "Eleanor Ashcroft",
+      "gender": "f",
+      "role_initial": "supreme_judge",
+      "class_initial": "aristocracy",
+      "personality": {
+        "openness": 43,
+        "conscientiousness": 44,
+        "extraversion": 84,
+        "agreeableness": 23,
+        "neuroticism": 55
+      },
+      "values": {
+        "loyalty": 45,
+        "ambition": 93,
+        "empathy": 79,
+        "tradition": 63,
+        "fairness": 48
+      },
+      "backstory": "Ascended through decades of jurisprudence. Believes the law is older and weightier than any one ruler.",
+      "initial_opinions": {
+        "taxation": "Taxes on the wealthy must remain low to preserve investment.",
+        "public_order": "Order is the foundation of civilization; dissent must be contained."
+      }
+    },
+    {
+      "id": "agent_03",
+      "name": "Niko Ravenshaw",
+      "gender": "m",
+      "role_initial": "general",
+      "class_initial": "aristocracy",
+      "personality": {
+        "openness": 30,
+        "conscientiousness": 80,
+        "extraversion": 40,
+        "agreeableness": 45,
+        "neuroticism": 41
+      },
+      "values": {
+        "loyalty": 55,
+        "ambition": 29,
+        "empathy": 37,
+        "tradition": 53,
+        "fairness": 33
+      },
+      "backstory": "Served on the frontier campaigns; commands the loyalty of the army but not always its respect.",
+      "initial_opinions": {
+        "taxation": "Taxes on the wealthy must remain low to preserve investment.",
+        "public_order": "Order is the foundation of civilization; dissent must be contained."
+      }
+    },
+    {
+      "id": "agent_04",
+      "name": "Selene Marlowe",
+      "gender": "f",
+      "role_initial": "banker",
+      "class_initial": "bourgeoisie",
+      "personality": {
+        "openness": 52,
+        "conscientiousness": 84,
+        "extraversion": 64,
+        "agreeableness": 53,
+        "neuroticism": 71
+      },
+      "values": {
+        "loyalty": 25,
+        "ambition": 68,
+        "empathy": 78,
+        "tradition": 25,
+        "fairness": 68
+      },
+      "backstory": "Built fortune on cross-border trade credit. Distrusts populist movements and inflation alike.",
+      "initial_opinions": {
+        "taxation": "Taxes should fund public goods but not strangle commerce.",
+        "education": "Universal literacy is in everyone's interest."
+      }
+    },
+    {
+      "id": "agent_05",
+      "name": "Lila Dunmore",
+      "gender": "f",
+      "role_initial": "banker",
+      "class_initial": "bourgeoisie",
+      "personality": {
+        "openness": 70,
+        "conscientiousness": 69,
+        "extraversion": 66,
+        "agreeableness": 44,
+        "neuroticism": 65
+      },
+      "values": {
+        "loyalty": 28,
+        "ambition": 15,
+        "empathy": 39,
+        "tradition": 47,
+        "fairness": 30
+      },
+      "backstory": "Built fortune on cross-border trade credit. Distrusts populist movements and inflation alike.",
+      "initial_opinions": {
+        "taxation": "Taxes should fund public goods but not strangle commerce.",
+        "education": "Universal literacy is in everyone's interest."
+      }
+    },
+    {
+      "id": "agent_06",
+      "name": "Beatrice Pennington",
+      "gender": "f",
+      "role_initial": "minister",
+      "class_initial": "aristocracy",
+      "personality": {
+        "openness": 47,
+        "conscientiousness": 59,
+        "extraversion": 66,
+        "agreeableness": 40,
+        "neuroticism": 43
+      },
+      "values": {
+        "loyalty": 65,
+        "ambition": 36,
+        "empathy": 44,
+        "tradition": 19,
+        "fairness": 41
+      },
+      "backstory": "Career bureaucrat turned politician; collects favors more than convictions.",
+      "initial_opinions": {
+        "taxation": "Taxes on the wealthy must remain low to preserve investment.",
+        "public_order": "Order is the foundation of civilization; dissent must be contained."
+      }
+    },
+    {
+      "id": "agent_07",
+      "name": "Vera Sablefield",
+      "gender": "f",
+      "role_initial": "minister",
+      "class_initial": "aristocracy",
+      "personality": {
+        "openness": 54,
+        "conscientiousness": 47,
+        "extraversion": 48,
+        "agreeableness": 61,
+        "neuroticism": 73
+      },
+      "values": {
+        "loyalty": 27,
+        "ambition": 39,
+        "empathy": 14,
+        "tradition": 50,
+        "fairness": 71
+      },
+      "backstory": "Career bureaucrat turned politician; collects favors more than convictions.",
+      "initial_opinions": {
+        "taxation": "Taxes on the wealthy must remain low to preserve investment.",
+        "public_order": "Order is the foundation of civilization; dissent must be contained."
+      }
+    },
+    {
+      "id": "agent_08",
+      "name": "Octavian Caldwell",
+      "gender": "m",
+      "role_initial": "minister",
+      "class_initial": "aristocracy",
+      "personality": {
+        "openness": 66,
+        "conscientiousness": 75,
+        "extraversion": 60,
+        "agreeableness": 47,
+        "neuroticism": 61
+      },
+      "values": {
+        "loyalty": 83,
+        "ambition": 60,
+        "empathy": 68,
+        "tradition": 28,
+        "fairness": 53
+      },
+      "backstory": "Career bureaucrat turned politician; collects favors more than convictions.",
+      "initial_opinions": {
+        "taxation": "Taxes on the wealthy must remain low to preserve investment.",
+        "public_order": "Order is the foundation of civilization; dissent must be contained."
+      }
+    },
+    {
+      "id": "agent_09",
+      "name": "Ophelia Eberhardt",
+      "gender": "f",
+      "role_initial": "scholar",
+      "class_initial": "bourgeoisie",
+      "personality": {
+        "openness": 75,
+        "conscientiousness": 70,
+        "extraversion": 53,
+        "agreeableness": 74,
+        "neuroticism": 77
+      },
+      "values": {
+        "loyalty": 71,
+        "ambition": 56,
+        "empathy": 38,
+        "tradition": 27,
+        "fairness": 85
+      },
+      "backstory": "Spends days in the great library and nights writing pamphlets nobody asked for.",
+      "initial_opinions": {
+        "taxation": "Taxes should fund public goods but not strangle commerce.",
+        "education": "Universal literacy is in everyone's interest."
+      }
+    },
+    {
+      "id": "agent_10",
+      "name": "Octavian Fairbanks",
+      "gender": "m",
+      "role_initial": "scholar",
+      "class_initial": "bourgeoisie",
+      "personality": {
+        "openness": 75,
+        "conscientiousness": 85,
+        "extraversion": 34,
+        "agreeableness": 39,
+        "neuroticism": 60
+      },
+      "values": {
+        "loyalty": 40,
+        "ambition": 64,
+        "empathy": 86,
+        "tradition": 18,
+        "fairness": 69
+      },
+      "backstory": "Spends days in the great library and nights writing pamphlets nobody asked for.",
+      "initial_opinions": {
+        "taxation": "Taxes should fund public goods but not strangle commerce.",
+        "education": "Universal literacy is in everyone's interest."
+      }
+    },
+    {
+      "id": "agent_11",
+      "name": "Rufus Sablefield",
+      "gender": "m",
+      "role_initial": "scholar",
+      "class_initial": "bourgeoisie",
+      "personality": {
+        "openness": 75,
+        "conscientiousness": 70,
+        "extraversion": 21,
+        "agreeableness": 34,
+        "neuroticism": 63
+      },
+      "values": {
+        "loyalty": 88,
+        "ambition": 44,
+        "empathy": 53,
+        "tradition": 24,
+        "fairness": 57
+      },
+      "backstory": "Spends days in the great library and nights writing pamphlets nobody asked for.",
+      "initial_opinions": {
+        "taxation": "Taxes should fund public goods but not strangle commerce.",
+        "education": "Universal literacy is in everyone's interest."
+      }
+    },
+    {
+      "id": "agent_12",
+      "name": "Valentin Sablefield",
+      "gender": "m",
+      "role_initial": "artist",
+      "class_initial": "bourgeoisie",
+      "personality": {
+        "openness": 80,
+        "conscientiousness": 76,
+        "extraversion": 53,
+        "agreeableness": 84,
+        "neuroticism": 68
+      },
+      "values": {
+        "loyalty": 42,
+        "ambition": 74,
+        "empathy": 23,
+        "tradition": 90,
+        "fairness": 58
+      },
+      "backstory": "Lives between patronage and bohemian penury; their canvases hang in palaces and inns alike.",
+      "initial_opinions": {
+        "taxation": "Taxes should fund public goods but not strangle commerce.",
+        "education": "Universal literacy is in everyone's interest."
+      }
+    },
+    {
+      "id": "agent_13",
+      "name": "Iris Ingram",
+      "gender": "f",
+      "role_initial": "artist",
+      "class_initial": "bourgeoisie",
+      "personality": {
+        "openness": 80,
+        "conscientiousness": 40,
+        "extraversion": 20,
+        "agreeableness": 61,
+        "neuroticism": 51
+      },
+      "values": {
+        "loyalty": 22,
+        "ambition": 24,
+        "empathy": 56,
+        "tradition": 49,
+        "fairness": 50
+      },
+      "backstory": "Lives between patronage and bohemian penury; their canvases hang in palaces and inns alike.",
+      "initial_opinions": {
+        "taxation": "Taxes should fund public goods but not strangle commerce.",
+        "education": "Universal literacy is in everyone's interest."
+      }
+    },
+    {
+      "id": "agent_14",
+      "name": "Ophelia Whately",
+      "gender": "f",
+      "role_initial": "artist",
+      "class_initial": "bourgeoisie",
+      "personality": {
+        "openness": 80,
+        "conscientiousness": 35,
+        "extraversion": 82,
+        "agreeableness": 28,
+        "neuroticism": 68
+      },
+      "values": {
+        "loyalty": 88,
+        "ambition": 26,
+        "empathy": 26,
+        "tradition": 70,
+        "fairness": 90
+      },
+      "backstory": "Lives between patronage and bohemian penury; their canvases hang in palaces and inns alike.",
+      "initial_opinions": {
+        "taxation": "Taxes should fund public goods but not strangle commerce.",
+        "education": "Universal literacy is in everyone's interest."
+      }
+    },
+    {
+      "id": "agent_15",
+      "name": "Cordelia Underwood",
+      "gender": "f",
+      "role_initial": "merchant",
+      "class_initial": "bourgeoisie",
+      "personality": {
+        "openness": 68,
+        "conscientiousness": 57,
+        "extraversion": 47,
+        "agreeableness": 45,
+        "neuroticism": 65
+      },
+      "values": {
+        "loyalty": 59,
+        "ambition": 61,
+        "empathy": 57,
+        "tradition": 66,
+        "fairness": 86
+      },
+      "backstory": "Owns warehouses by the docks and sleeps with one eye on the harbor master's ledgers.",
+      "initial_opinions": {
+        "taxation": "Taxes should fund public goods but not strangle commerce.",
+        "education": "Universal literacy is in everyone's interest."
+      }
+    },
+    {
+      "id": "agent_16",
+      "name": "Theron Whitlock",
+      "gender": "m",
+      "role_initial": "merchant",
+      "class_initial": "bourgeoisie",
+      "personality": {
+        "openness": 44,
+        "conscientiousness": 34,
+        "extraversion": 63,
+        "agreeableness": 22,
+        "neuroticism": 57
+      },
+      "values": {
+        "loyalty": 90,
+        "ambition": 39,
+        "empathy": 85,
+        "tradition": 38,
+        "fairness": 20
+      },
+      "backstory": "Owns warehouses by the docks and sleeps with one eye on the harbor master's ledgers.",
+      "initial_opinions": {
+        "taxation": "Taxes should fund public goods but not strangle commerce.",
+        "education": "Universal literacy is in everyone's interest."
+      }
+    },
+    {
+      "id": "agent_17",
+      "name": "Margaret Whitlock",
+      "gender": "f",
+      "role_initial": "merchant",
+      "class_initial": "bourgeoisie",
+      "personality": {
+        "openness": 34,
+        "conscientiousness": 32,
+        "extraversion": 62,
+        "agreeableness": 29,
+        "neuroticism": 52
+      },
+      "values": {
+        "loyalty": 50,
+        "ambition": 45,
+        "empathy": 72,
+        "tradition": 37,
+        "fairness": 89
+      },
+      "backstory": "Owns warehouses by the docks and sleeps with one eye on the harbor master's ledgers.",
+      "initial_opinions": {
+        "taxation": "Taxes should fund public goods but not strangle commerce.",
+        "education": "Universal literacy is in everyone's interest."
+      }
+    },
+    {
+      "id": "agent_18",
+      "name": "Anouk Whately",
+      "gender": "f",
+      "role_initial": "merchant",
+      "class_initial": "bourgeoisie",
+      "personality": {
+        "openness": 60,
+        "conscientiousness": 45,
+        "extraversion": 80,
+        "agreeableness": 72,
+        "neuroticism": 32
+      },
+      "values": {
+        "loyalty": 32,
+        "ambition": 22,
+        "empathy": 65,
+        "tradition": 55,
+        "fairness": 74
+      },
+      "backstory": "Owns warehouses by the docks and sleeps with one eye on the harbor master's ledgers.",
+      "initial_opinions": {
+        "taxation": "Taxes should fund public goods but not strangle commerce.",
+        "education": "Universal literacy is in everyone's interest."
+      }
+    },
+    {
+      "id": "agent_19",
+      "name": "Kasper Eberhardt",
+      "gender": "m",
+      "role_initial": "doctor",
+      "class_initial": "bourgeoisie",
+      "personality": {
+        "openness": 33,
+        "conscientiousness": 73,
+        "extraversion": 32,
+        "agreeableness": 27,
+        "neuroticism": 45
+      },
+      "values": {
+        "loyalty": 63,
+        "ambition": 23,
+        "empathy": 41,
+        "tradition": 34,
+        "fairness": 44
+      },
+      "backstory": "Trained in the city's hospital corps; has held the hands of senators and stevedores both.",
+      "initial_opinions": {
+        "taxation": "Taxes should fund public goods but not strangle commerce.",
+        "education": "Universal literacy is in everyone's interest."
+      }
+    },
+    {
+      "id": "agent_20",
+      "name": "Lucian Rooke",
+      "gender": "m",
+      "role_initial": "doctor",
+      "class_initial": "bourgeoisie",
+      "personality": {
+        "openness": 41,
+        "conscientiousness": 47,
+        "extraversion": 79,
+        "agreeableness": 51,
+        "neuroticism": 75
+      },
+      "values": {
+        "loyalty": 29,
+        "ambition": 66,
+        "empathy": 80,
+        "tradition": 22,
+        "fairness": 26
+      },
+      "backstory": "Trained in the city's hospital corps; has held the hands of senators and stevedores both.",
+      "initial_opinions": {
+        "taxation": "Taxes should fund public goods but not strangle commerce.",
+        "education": "Universal literacy is in everyone's interest."
+      }
+    },
+    {
+      "id": "agent_21",
+      "name": "Cecilia Fairbanks",
+      "gender": "f",
+      "role_initial": "doctor",
+      "class_initial": "bourgeoisie",
+      "personality": {
+        "openness": 45,
+        "conscientiousness": 40,
+        "extraversion": 72,
+        "agreeableness": 82,
+        "neuroticism": 50
+      },
+      "values": {
+        "loyalty": 47,
+        "ambition": 61,
+        "empathy": 17,
+        "tradition": 31,
+        "fairness": 68
+      },
+      "backstory": "Trained in the city's hospital corps; has held the hands of senators and stevedores both.",
+      "initial_opinions": {
+        "taxation": "Taxes should fund public goods but not strangle commerce.",
+        "education": "Universal literacy is in everyone's interest."
+      }
+    },
+    {
+      "id": "agent_22",
+      "name": "Selene Ravenshaw",
+      "gender": "f",
+      "role_initial": "master_artisan",
+      "class_initial": "people",
+      "personality": {
+        "openness": 80,
+        "conscientiousness": 80,
+        "extraversion": 78,
+        "agreeableness": 56,
+        "neuroticism": 47
+      },
+      "values": {
+        "loyalty": 82,
+        "ambition": 29,
+        "empathy": 34,
+        "tradition": 47,
+        "fairness": 47
+      },
+      "backstory": "Runs a workshop with three apprentices; deeply proud, deeply tired.",
+      "initial_opinions": {
+        "wages": "An honest day's work deserves an honest day's pay.",
+        "voting": "We have voices \u2014 they are not always heard."
+      }
+    },
+    {
+      "id": "agent_23",
+      "name": "Anouk Eberhardt",
+      "gender": "f",
+      "role_initial": "master_artisan",
+      "class_initial": "people",
+      "personality": {
+        "openness": 64,
+        "conscientiousness": 33,
+        "extraversion": 60,
+        "agreeableness": 27,
+        "neuroticism": 23
+      },
+      "values": {
+        "loyalty": 81,
+        "ambition": 74,
+        "empathy": 77,
+        "tradition": 30,
+        "fairness": 27
+      },
+      "backstory": "Runs a workshop with three apprentices; deeply proud, deeply tired.",
+      "initial_opinions": {
+        "wages": "An honest day's work deserves an honest day's pay.",
+        "voting": "We have voices \u2014 they are not always heard."
+      }
+    },
+    {
+      "id": "agent_24",
+      "name": "Vera Ashcroft",
+      "gender": "f",
+      "role_initial": "master_artisan",
+      "class_initial": "people",
+      "personality": {
+        "openness": 68,
+        "conscientiousness": 34,
+        "extraversion": 50,
+        "agreeableness": 71,
+        "neuroticism": 27
+      },
+      "values": {
+        "loyalty": 51,
+        "ambition": 84,
+        "empathy": 86,
+        "tradition": 15,
+        "fairness": 30
+      },
+      "backstory": "Runs a workshop with three apprentices; deeply proud, deeply tired.",
+      "initial_opinions": {
+        "wages": "An honest day's work deserves an honest day's pay.",
+        "voting": "We have voices \u2014 they are not always heard."
+      }
+    },
+    {
+      "id": "agent_25",
+      "name": "Niko Whately",
+      "gender": "m",
+      "role_initial": "master_artisan",
+      "class_initial": "people",
+      "personality": {
+        "openness": 63,
+        "conscientiousness": 50,
+        "extraversion": 53,
+        "agreeableness": 46,
+        "neuroticism": 62
+      },
+      "values": {
+        "loyalty": 60,
+        "ambition": 40,
+        "empathy": 43,
+        "tradition": 60,
+        "fairness": 36
+      },
+      "backstory": "Runs a workshop with three apprentices; deeply proud, deeply tired.",
+      "initial_opinions": {
+        "wages": "An honest day's work deserves an honest day's pay.",
+        "voting": "We have voices \u2014 they are not always heard."
+      }
+    },
+    {
+      "id": "agent_26",
+      "name": "Kasper Halverson",
+      "gender": "m",
+      "role_initial": "clerk",
+      "class_initial": "people",
+      "personality": {
+        "openness": 78,
+        "conscientiousness": 34,
+        "extraversion": 21,
+        "agreeableness": 78,
+        "neuroticism": 59
+      },
+      "values": {
+        "loyalty": 32,
+        "ambition": 19,
+        "empathy": 78,
+        "tradition": 37,
+        "fairness": 84
+      },
+      "backstory": "Counts taxes, hauls ledgers, knows everyone's secrets and tells none \u2014 yet.",
+      "initial_opinions": {
+        "wages": "An honest day's work deserves an honest day's pay.",
+        "voting": "We have voices \u2014 they are not always heard."
+      }
+    },
+    {
+      "id": "agent_27",
+      "name": "Lucian Ingram",
+      "gender": "m",
+      "role_initial": "clerk",
+      "class_initial": "people",
+      "personality": {
+        "openness": 34,
+        "conscientiousness": 45,
+        "extraversion": 67,
+        "agreeableness": 56,
+        "neuroticism": 30
+      },
+      "values": {
+        "loyalty": 76,
+        "ambition": 79,
+        "empathy": 48,
+        "tradition": 88,
+        "fairness": 87
+      },
+      "backstory": "Counts taxes, hauls ledgers, knows everyone's secrets and tells none \u2014 yet.",
+      "initial_opinions": {
+        "wages": "An honest day's work deserves an honest day's pay.",
+        "voting": "We have voices \u2014 they are not always heard."
+      }
+    },
+    {
+      "id": "agent_28",
+      "name": "Beatrice Sterling",
+      "gender": "f",
+      "role_initial": "clerk",
+      "class_initial": "people",
+      "personality": {
+        "openness": 46,
+        "conscientiousness": 37,
+        "extraversion": 33,
+        "agreeableness": 39,
+        "neuroticism": 37
+      },
+      "values": {
+        "loyalty": 56,
+        "ambition": 87,
+        "empathy": 36,
+        "tradition": 53,
+        "fairness": 46
+      },
+      "backstory": "Counts taxes, hauls ledgers, knows everyone's secrets and tells none \u2014 yet.",
+      "initial_opinions": {
+        "wages": "An honest day's work deserves an honest day's pay.",
+        "voting": "We have voices \u2014 they are not always heard."
+      }
+    },
+    {
+      "id": "agent_29",
+      "name": "Otho Thorne",
+      "gender": "m",
+      "role_initial": "clerk",
+      "class_initial": "people",
+      "personality": {
+        "openness": 46,
+        "conscientiousness": 84,
+        "extraversion": 26,
+        "agreeableness": 31,
+        "neuroticism": 60
+      },
+      "values": {
+        "loyalty": 74,
+        "ambition": 45,
+        "empathy": 15,
+        "tradition": 10,
+        "fairness": 62
+      },
+      "backstory": "Counts taxes, hauls ledgers, knows everyone's secrets and tells none \u2014 yet.",
+      "initial_opinions": {
+        "wages": "An honest day's work deserves an honest day's pay.",
+        "voting": "We have voices \u2014 they are not always heard."
+      }
+    },
+    {
+      "id": "agent_30",
+      "name": "Cordelia Briar",
+      "gender": "f",
+      "role_initial": "clerk",
+      "class_initial": "people",
+      "personality": {
+        "openness": 77,
+        "conscientiousness": 58,
+        "extraversion": 74,
+        "agreeableness": 21,
+        "neuroticism": 27
+      },
+      "values": {
+        "loyalty": 29,
+        "ambition": 29,
+        "empathy": 79,
+        "tradition": 14,
+        "fairness": 67
+      },
+      "backstory": "Counts taxes, hauls ledgers, knows everyone's secrets and tells none \u2014 yet.",
+      "initial_opinions": {
+        "wages": "An honest day's work deserves an honest day's pay.",
+        "voting": "We have voices \u2014 they are not always heard."
+      }
+    },
+    {
+      "id": "agent_31",
+      "name": "Octavia Sterling",
+      "gender": "f",
+      "role_initial": "worker",
+      "class_initial": "people",
+      "personality": {
+        "openness": 32,
+        "conscientiousness": 49,
+        "extraversion": 66,
+        "agreeableness": 25,
+        "neuroticism": 77
+      },
+      "values": {
+        "loyalty": 65,
+        "ambition": 36,
+        "empathy": 41,
+        "tradition": 23,
+        "fairness": 65
+      },
+      "backstory": "Hauls stone from quarry to wall, breaks bread with comrades, dreams of higher wages.",
+      "initial_opinions": {
+        "wages": "An honest day's work deserves an honest day's pay.",
+        "voting": "We have voices \u2014 they are not always heard."
+      }
+    },
+    {
+      "id": "agent_32",
+      "name": "Rufus Eberhardt",
+      "gender": "m",
+      "role_initial": "worker",
+      "class_initial": "people",
+      "personality": {
+        "openness": 39,
+        "conscientiousness": 45,
+        "extraversion": 40,
+        "agreeableness": 42,
+        "neuroticism": 76
+      },
+      "values": {
+        "loyalty": 72,
+        "ambition": 13,
+        "empathy": 32,
+        "tradition": 52,
+        "fairness": 72
+      },
+      "backstory": "Hauls stone from quarry to wall, breaks bread with comrades, dreams of higher wages.",
+      "initial_opinions": {
+        "wages": "An honest day's work deserves an honest day's pay.",
+        "voting": "We have voices \u2014 they are not always heard."
+      }
+    },
+    {
+      "id": "agent_33",
+      "name": "Margaret Thorne",
+      "gender": "f",
+      "role_initial": "worker",
+      "class_initial": "people",
+      "personality": {
+        "openness": 44,
+        "conscientiousness": 42,
+        "extraversion": 78,
+        "agreeableness": 64,
+        "neuroticism": 39
+      },
+      "values": {
+        "loyalty": 49,
+        "ambition": 38,
+        "empathy": 13,
+        "tradition": 34,
+        "fairness": 71
+      },
+      "backstory": "Hauls stone from quarry to wall, breaks bread with comrades, dreams of higher wages.",
+      "initial_opinions": {
+        "wages": "An honest day's work deserves an honest day's pay.",
+        "voting": "We have voices \u2014 they are not always heard."
+      }
+    },
+    {
+      "id": "agent_34",
+      "name": "Roderick Ashcroft",
+      "gender": "m",
+      "role_initial": "worker",
+      "class_initial": "people",
+      "personality": {
+        "openness": 79,
+        "conscientiousness": 47,
+        "extraversion": 64,
+        "agreeableness": 85,
+        "neuroticism": 45
+      },
+      "values": {
+        "loyalty": 88,
+        "ambition": 52,
+        "empathy": 13,
+        "tradition": 24,
+        "fairness": 53
+      },
+      "backstory": "Hauls stone from quarry to wall, breaks bread with comrades, dreams of higher wages.",
+      "initial_opinions": {
+        "wages": "An honest day's work deserves an honest day's pay.",
+        "voting": "We have voices \u2014 they are not always heard."
+      }
+    },
+    {
+      "id": "agent_35",
+      "name": "Anouk Ravenshaw",
+      "gender": "f",
+      "role_initial": "worker",
+      "class_initial": "people",
+      "personality": {
+        "openness": 32,
+        "conscientiousness": 36,
+        "extraversion": 75,
+        "agreeableness": 64,
+        "neuroticism": 66
+      },
+      "values": {
+        "loyalty": 60,
+        "ambition": 65,
+        "empathy": 87,
+        "tradition": 75,
+        "fairness": 34
+      },
+      "backstory": "Hauls stone from quarry to wall, breaks bread with comrades, dreams of higher wages.",
+      "initial_opinions": {
+        "wages": "An honest day's work deserves an honest day's pay.",
+        "voting": "We have voices \u2014 they are not always heard."
+      }
+    },
+    {
+      "id": "agent_36",
+      "name": "Niko Caldwell",
+      "gender": "m",
+      "role_initial": "worker",
+      "class_initial": "people",
+      "personality": {
+        "openness": 46,
+        "conscientiousness": 32,
+        "extraversion": 75,
+        "agreeableness": 20,
+        "neuroticism": 53
+      },
+      "values": {
+        "loyalty": 88,
+        "ambition": 95,
+        "empathy": 35,
+        "tradition": 56,
+        "fairness": 75
+      },
+      "backstory": "Hauls stone from quarry to wall, breaks bread with comrades, dreams of higher wages.",
+      "initial_opinions": {
+        "wages": "An honest day's work deserves an honest day's pay.",
+        "voting": "We have voices \u2014 they are not always heard."
+      }
+    },
+    {
+      "id": "agent_37",
+      "name": "Lavinia Yates",
+      "gender": "f",
+      "role_initial": "worker",
+      "class_initial": "people",
+      "personality": {
+        "openness": 50,
+        "conscientiousness": 72,
+        "extraversion": 35,
+        "agreeableness": 58,
+        "neuroticism": 52
+      },
+      "values": {
+        "loyalty": 59,
+        "ambition": 95,
+        "empathy": 62,
+        "tradition": 51,
+        "fairness": 71
+      },
+      "backstory": "Hauls stone from quarry to wall, breaks bread with comrades, dreams of higher wages.",
+      "initial_opinions": {
+        "wages": "An honest day's work deserves an honest day's pay.",
+        "voting": "We have voices \u2014 they are not always heard."
+      }
+    },
+    {
+      "id": "agent_38",
+      "name": "Janek Sterling",
+      "gender": "m",
+      "role_initial": "worker",
+      "class_initial": "people",
+      "personality": {
+        "openness": 42,
+        "conscientiousness": 56,
+        "extraversion": 68,
+        "agreeableness": 42,
+        "neuroticism": 59
+      },
+      "values": {
+        "loyalty": 58,
+        "ambition": 61,
+        "empathy": 80,
+        "tradition": 10,
+        "fairness": 58
+      },
+      "backstory": "Hauls stone from quarry to wall, breaks bread with comrades, dreams of higher wages.",
+      "initial_opinions": {
+        "wages": "An honest day's work deserves an honest day's pay.",
+        "voting": "We have voices \u2014 they are not always heard."
+      }
+    },
+    {
+      "id": "agent_39",
+      "name": "Emeric Rooke",
+      "gender": "m",
+      "role_initial": "farmer",
+      "class_initial": "people",
+      "personality": {
+        "openness": 80,
+        "conscientiousness": 67,
+        "extraversion": 61,
+        "agreeableness": 79,
+        "neuroticism": 48
+      },
+      "values": {
+        "loyalty": 76,
+        "ambition": 37,
+        "empathy": 75,
+        "tradition": 70,
+        "fairness": 41
+      },
+      "backstory": "Tills land they may or may not own; the seasons are scripture, the magistrate is theater.",
+      "initial_opinions": {
+        "wages": "An honest day's work deserves an honest day's pay.",
+        "voting": "We have voices \u2014 they are not always heard."
+      }
+    },
+    {
+      "id": "agent_40",
+      "name": "Astrid Underwood",
+      "gender": "f",
+      "role_initial": "farmer",
+      "class_initial": "people",
+      "personality": {
+        "openness": 72,
+        "conscientiousness": 70,
+        "extraversion": 62,
+        "agreeableness": 31,
+        "neuroticism": 72
+      },
+      "values": {
+        "loyalty": 50,
+        "ambition": 49,
+        "empathy": 38,
+        "tradition": 35,
+        "fairness": 38
+      },
+      "backstory": "Tills land they may or may not own; the seasons are scripture, the magistrate is theater.",
+      "initial_opinions": {
+        "wages": "An honest day's work deserves an honest day's pay.",
+        "voting": "We have voices \u2014 they are not always heard."
+      }
+    },
+    {
+      "id": "agent_41",
+      "name": "Mira Yates",
+      "gender": "f",
+      "role_initial": "farmer",
+      "class_initial": "people",
+      "personality": {
+        "openness": 79,
+        "conscientiousness": 34,
+        "extraversion": 78,
+        "agreeableness": 73,
+        "neuroticism": 76
+      },
+      "values": {
+        "loyalty": 44,
+        "ambition": 59,
+        "empathy": 73,
+        "tradition": 61,
+        "fairness": 51
+      },
+      "backstory": "Tills land they may or may not own; the seasons are scripture, the magistrate is theater.",
+      "initial_opinions": {
+        "wages": "An honest day's work deserves an honest day's pay.",
+        "voting": "We have voices \u2014 they are not always heard."
+      }
+    },
+    {
+      "id": "agent_42",
+      "name": "Eleanor Fairbanks",
+      "gender": "f",
+      "role_initial": "farmer",
+      "class_initial": "people",
+      "personality": {
+        "openness": 79,
+        "conscientiousness": 36,
+        "extraversion": 74,
+        "agreeableness": 48,
+        "neuroticism": 31
+      },
+      "values": {
+        "loyalty": 86,
+        "ambition": 69,
+        "empathy": 16,
+        "tradition": 81,
+        "fairness": 51
+      },
+      "backstory": "Tills land they may or may not own; the seasons are scripture, the magistrate is theater.",
+      "initial_opinions": {
+        "wages": "An honest day's work deserves an honest day's pay.",
+        "voting": "We have voices \u2014 they are not always heard."
+      }
+    },
+    {
+      "id": "agent_43",
+      "name": "Ines Sterling",
+      "gender": "f",
+      "role_initial": "farmer",
+      "class_initial": "people",
+      "personality": {
+        "openness": 59,
+        "conscientiousness": 72,
+        "extraversion": 60,
+        "agreeableness": 76,
+        "neuroticism": 59
+      },
+      "values": {
+        "loyalty": 84,
+        "ambition": 64,
+        "empathy": 80,
+        "tradition": 67,
+        "fairness": 40
+      },
+      "backstory": "Tills land they may or may not own; the seasons are scripture, the magistrate is theater.",
+      "initial_opinions": {
+        "wages": "An honest day's work deserves an honest day's pay.",
+        "voting": "We have voices \u2014 they are not always heard."
+      }
+    },
+    {
+      "id": "agent_44",
+      "name": "Kasper Ravenshaw",
+      "gender": "m",
+      "role_initial": "farmer",
+      "class_initial": "people",
+      "personality": {
+        "openness": 78,
+        "conscientiousness": 45,
+        "extraversion": 55,
+        "agreeableness": 82,
+        "neuroticism": 60
+      },
+      "values": {
+        "loyalty": 50,
+        "ambition": 45,
+        "empathy": 66,
+        "tradition": 19,
+        "fairness": 56
+      },
+      "backstory": "Tills land they may or may not own; the seasons are scripture, the magistrate is theater.",
+      "initial_opinions": {
+        "wages": "An honest day's work deserves an honest day's pay.",
+        "voting": "We have voices \u2014 they are not always heard."
+      }
+    },
+    {
+      "id": "agent_45",
+      "name": "Cordelia Halverson",
+      "gender": "f",
+      "role_initial": "soldier",
+      "class_initial": "people",
+      "personality": {
+        "openness": 50,
+        "conscientiousness": 64,
+        "extraversion": 30,
+        "agreeableness": 37,
+        "neuroticism": 29
+      },
+      "values": {
+        "loyalty": 49,
+        "ambition": 59,
+        "empathy": 29,
+        "tradition": 37,
+        "fairness": 28
+      },
+      "backstory": "Drafted young; takes their pay in coin and grievance.",
+      "initial_opinions": {
+        "wages": "An honest day's work deserves an honest day's pay.",
+        "voting": "We have voices \u2014 they are not always heard."
+      }
+    },
+    {
+      "id": "agent_46",
+      "name": "Samuel Halverson",
+      "gender": "m",
+      "role_initial": "soldier",
+      "class_initial": "people",
+      "personality": {
+        "openness": 64,
+        "conscientiousness": 59,
+        "extraversion": 73,
+        "agreeableness": 27,
+        "neuroticism": 33
+      },
+      "values": {
+        "loyalty": 73,
+        "ambition": 59,
+        "empathy": 84,
+        "tradition": 12,
+        "fairness": 68
+      },
+      "backstory": "Drafted young; takes their pay in coin and grievance.",
+      "initial_opinions": {
+        "wages": "An honest day's work deserves an honest day's pay.",
+        "voting": "We have voices \u2014 they are not always heard."
+      }
+    },
+    {
+      "id": "agent_47",
+      "name": "Cassius Ingram",
+      "gender": "m",
+      "role_initial": "soldier",
+      "class_initial": "people",
+      "personality": {
+        "openness": 49,
+        "conscientiousness": 78,
+        "extraversion": 69,
+        "agreeableness": 73,
+        "neuroticism": 54
+      },
+      "values": {
+        "loyalty": 89,
+        "ambition": 87,
+        "empathy": 38,
+        "tradition": 72,
+        "fairness": 48
+      },
+      "backstory": "Drafted young; takes their pay in coin and grievance.",
+      "initial_opinions": {
+        "wages": "An honest day's work deserves an honest day's pay.",
+        "voting": "We have voices \u2014 they are not always heard."
+      }
+    },
+    {
+      "id": "agent_48",
+      "name": "Samuel Thorne",
+      "gender": "m",
+      "role_initial": "soldier",
+      "class_initial": "people",
+      "personality": {
+        "openness": 31,
+        "conscientiousness": 54,
+        "extraversion": 63,
+        "agreeableness": 71,
+        "neuroticism": 66
+      },
+      "values": {
+        "loyalty": 41,
+        "ambition": 69,
+        "empathy": 26,
+        "tradition": 89,
+        "fairness": 88
+      },
+      "backstory": "Drafted young; takes their pay in coin and grievance.",
+      "initial_opinions": {
+        "wages": "An honest day's work deserves an honest day's pay.",
+        "voting": "We have voices \u2014 they are not always heard."
+      }
+    },
+    {
+      "id": "agent_49",
+      "name": "Selene Whately",
+      "gender": "f",
+      "role_initial": "beggar",
+      "class_initial": "marginal",
+      "personality": {
+        "openness": 66,
+        "conscientiousness": 72,
+        "extraversion": 23,
+        "agreeableness": 50,
+        "neuroticism": 61
+      },
+      "values": {
+        "loyalty": 74,
+        "ambition": 27,
+        "empathy": 69,
+        "tradition": 33,
+        "fairness": 26
+      },
+      "backstory": "Knows every doorway in the capital. Has heard things that ministers would pay to forget.",
+      "initial_opinions": {
+        "charity": "Charity is the city's debt to its forgotten.",
+        "voting": "We have nothing to lose, so we have nothing to fear."
+      }
+    },
+    {
+      "id": "agent_50",
+      "name": "Tobias Halverson",
+      "gender": "m",
+      "role_initial": "beggar",
+      "class_initial": "marginal",
+      "personality": {
+        "openness": 60,
+        "conscientiousness": 59,
+        "extraversion": 61,
+        "agreeableness": 63,
+        "neuroticism": 68
+      },
+      "values": {
+        "loyalty": 68,
+        "ambition": 45,
+        "empathy": 63,
+        "tradition": 42,
+        "fairness": 30
+      },
+      "backstory": "Knows every doorway in the capital. Has heard things that ministers would pay to forget.",
+      "initial_opinions": {
+        "charity": "Charity is the city's debt to its forgotten.",
+        "voting": "We have nothing to lose, so we have nothing to fear."
+      }
+    }
+  ]
+}
