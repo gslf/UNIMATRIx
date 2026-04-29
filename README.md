@@ -1,4 +1,4 @@
-# UNIMATRIx
+# ::] UNIMATRIx
 
 A simulated society of ~50 LLM-driven agents. Each agent has a personality,
 a role (president, banker, scholar, worker, beggar...), and a social class.
@@ -8,6 +8,8 @@ emerges — coalitions, mobility, polarization — without scripting it.
 
 A web UI shows the conversations, votes, and social graphs in real time as
 the simulation ticks forward.
+
+![Unimatrix web UI](res/img/ss.png)
 
 ## What you need
 
@@ -24,8 +26,7 @@ py -3 -m venv .venv
 .venv/Scripts/activate           # Windows
 # source .venv/bin/activate      # Linux/macOS
 
-pip install -r requirements.txt
-pip install -e . --no-deps
+pip install -e .
 
 python -m unimatrix.main --config config/example_run.json --backend stub
 ```
@@ -47,7 +48,7 @@ this one.
 #    full instructions in inference_server/README.md
 cd inference_server
 py -3.12 -m venv .venv && .venv/Scripts/activate
-pip install -r requirements.txt
+pip install .
 python download.py qwen2.5-3b           # ~2 GB, runs on CPU
 python serve.py qwen2.5-3b              # serves on http://localhost:8000
 ```
@@ -84,10 +85,10 @@ Useful CLI overrides:
 
 ```bash
 # real embeddings (Chroma + sentence-transformers) instead of the stub embedder
-pip install -r requirements-embed.txt
+pip install -e ".[embed]"
 
 # dev tools (pytest)
-pip install -r requirements-dev.txt
+pip install -e ".[dev]"
 pytest
 ```
 

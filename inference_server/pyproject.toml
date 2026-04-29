@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "unimatrix-inference-server"
+version = "1.0.0"
+description = "Local llama.cpp host for Unimatrix (OpenAI-compatible HTTP)."
+readme = "README.md"
+requires-python = ">=3.10,<3.13"
+# llama-cpp-python is intentionally NOT listed below. Install the wheel
+# matching your GPU/CUDA setup separately (see README), then `pip install .`.
+# The server-extras deps below are listed explicitly because installing the
+# llama-cpp-python wheel directly via URL bypasses pip's `[server]` extras
+# resolution.
+dependencies = [
+  "fastapi>=0.110",
+  "uvicorn[standard]>=0.27",
+  "sse-starlette>=1.6",
+  "pydantic-settings>=2.0",
+  "starlette>=0.40",
+  "huggingface_hub>=0.24",
+  "rich>=13.7",
+]
+
+[tool.setuptools]
+py-modules = ["serve", "download", "_catalog"]

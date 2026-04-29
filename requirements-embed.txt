@@ -1,2 +1,0 @@
-chromadb>=0.4
-sentence-transformers>=2.5

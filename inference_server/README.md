@@ -1,4 +1,5 @@
-# inference_server
+# ::] UNIMATRIx
+### Inference Server
 
 A small, self-contained local LLM host for Unimatrix. It downloads GGUF
 model files from HuggingFace and serves them on an OpenAI-compatible HTTP
@@ -15,7 +16,7 @@ py -3.12 -m venv .venv
 .venv/Scripts/activate           # Windows
 # source .venv/bin/activate      # Linux/macOS
 
-pip install -r requirements.txt  # CPU build (works everywhere)
+pip install .                    # CPU build (works everywhere)
 python download.py qwen2.5-3b    # ~2 GB
 python serve.py qwen2.5-3b       # blocks; serves on http://localhost:8000
 ```
@@ -64,7 +65,7 @@ curl http://localhost:8000/v1/chat/completions \
 
 ## GPU install (NVIDIA / CUDA)
 
-Plain `pip install -r requirements.txt` gives you the **CPU wheel**. PyPI
+Plain `pip install .` gives you the **CPU wheel**. PyPI
 does not host CUDA wheels. To run on GPU, install `llama-cpp-python` from
 the matching prebuilt wheel index *before* installing the requirements:
 
@@ -72,7 +73,7 @@ the matching prebuilt wheel index *before* installing the requirements:
 ```bash
 $env:CMAKE_ARGS = "-DGGML_CUDA=on -DGGML_CUDA_FORCE_CUBLAS=1 -DGGML_CUDA_NO_PINNED=1 -DCMAKE_CUDA_ARCHITECTURES=120"
 pip install --no-binary llama-cpp-python --upgrade --force-reinstall "llama-cpp-python[server]"
-pip install -r requirements.txt
+pip install .
 ```
 
 

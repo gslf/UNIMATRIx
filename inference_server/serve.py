@@ -299,7 +299,7 @@ def main() -> int:
                 "are missing.[/]\n"
                 "This happens when the wheel was installed directly via URL "
                 "— pip skips extras in that case.\n"
-                f"Fix: [bold]\"{sys.executable}\" -m pip install -r requirements.txt[/]"
+                f"Fix: [bold]\"{sys.executable}\" -m pip install .[/]"
             )
         # 3) the package itself isn't importable
         else:
