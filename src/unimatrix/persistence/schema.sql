@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS vote_proposals (
     change_type   TEXT,
     from_value    TEXT,
     to_value      TEXT,
+    motivation    TEXT,
     proposed_at   TEXT,
     closed_at     TEXT,
     outcome       TEXT,
@@ -53,7 +54,8 @@ CREATE TABLE IF NOT EXISTS votes (
     proposal_id   INTEGER,
     voter_id      TEXT,
     vote          TEXT,
-    reasoning     TEXT,
+    motivation    TEXT,
+    raw_response  TEXT,
     voted_at      TEXT,
     PRIMARY KEY (proposal_id, voter_id),
     FOREIGN KEY (proposal_id) REFERENCES vote_proposals(id)

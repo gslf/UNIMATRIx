@@ -23,13 +23,11 @@ from rich.console import Console
 from ..agents import Agent, AgentState, PromptBuilder
 from ..config import Config
 from ..inference import GenerationRequest, InferenceClient
-from ..inference.client import parse_json_lenient
 from ..memory import MemoryManager
 from ..persistence import RunStore
 
 
 _LEAVE_RE = re.compile(r"\[LEAVE\]\s*$", re.IGNORECASE)
-_PASS_RE = re.compile(r"\[PASS:([^\]]+)\]\s*$", re.IGNORECASE)
 
 
 @dataclass
@@ -181,6 +179,11 @@ class ConversationEngine:
         if agent.id in conv.participant_ids:
             return False
         conv.participant_ids.append(agent.id)
+        await asyncio.to_thread(
+            self.store.update_conversation_participants,
+            conv.id,
+            conv.participant_ids,
+        )
         agent.state = AgentState.IN_GROUP
         agent.current_conversation_id = conv_id
         await asyncio.to_thread(
@@ -244,9 +247,7 @@ class ConversationEngine:
         text = (text or "").strip()
         # Strip control tags for storage but record the side-effects.
         wants_leave = bool(_LEAVE_RE.search(text))
-        pass_match = _PASS_RE.search(text)
-        passed_to_name = pass_match.group(1).strip() if pass_match else None
-        clean = _LEAVE_RE.sub("", _PASS_RE.sub("", text)).strip()
+        clean = _LEAVE_RE.sub("", text).strip()
         if not clean:
             clean = "..."
         conv.turn_index += 1
@@ -286,19 +287,10 @@ class ConversationEngine:
                 return False
 
         # Choose next speaker
-        conv.next_speaker_id = self._pick_next_speaker(conv, speaker, passed_to_name)
+        conv.next_speaker_id = self._pick_next_speaker(conv, speaker)
         return True
 
-    def _pick_next_speaker(
-        self, conv: Conversation, current: Agent, passed_to_name: str | None
-    ) -> str:
-        # Pass tag wins if it resolves to a present agent.
-        if passed_to_name:
-            for pid in conv.participant_ids:
-                a = self.agents.get(pid)
-                if a and a.name.lower() == passed_to_name.lower():
-                    if pid not in conv.leave_requests and pid != current.id:
-                        return pid
+    def _pick_next_speaker(self, conv: Conversation, current: Agent) -> str:
         # Round-robin among non-leavers, skipping current.
         order = [p for p in conv.participant_ids if p not in conv.leave_requests]
         if len(order) <= 1:

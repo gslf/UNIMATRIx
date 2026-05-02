@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import asyncio
-import json
-
 import pytest
 
 from unimatrix.config import InferenceConfig
@@ -46,10 +43,9 @@ async def test_stub_decision_returns_json(stub_client: InferenceClient) -> None:
 @pytest.mark.asyncio
 async def test_stub_vote_returns_yes_or_no(stub_client: InferenceClient) -> None:
     raw = await stub_client.generate(GenerationRequest(
-        messages=[ChatMessage("user", "vote")], stub_kind="vote", json_mode=True,
+        messages=[ChatMessage("user", "vote")], stub_kind="vote",
     ))
-    parsed = parse_json_lenient(raw)
-    assert parsed["vote"] in ("yes", "no")
+    assert raw.strip() in ("yes", "no")
 
 
 def test_parse_json_lenient_handles_noise() -> None:

@@ -17,7 +17,8 @@ def decay(agents: Iterable[Agent], elapsed_seconds: float, decay_per_minute: flo
         return
     delta = decay_per_minute * (elapsed_seconds / 60.0)
     for a in agents:
-        # Only decay when the agent isn't actively engaged; decay also applies
-        # to broadcast-listeners and voters since they're not having a real
-        # conversation, but the gain inside engaged conversations dominates.
+        # Broadcast listeners and voters still decay; active conversation
+        # participants recharge from turns instead of losing need while engaged.
+        if a.is_busy():
+            continue
         a.social_need = max(0.0, a.social_need - delta)

@@ -152,6 +152,15 @@
   .conv-detail .vote-row { padding: 6px 0; border-bottom: 1px solid #21262d;
                             font-size: 0.84rem; line-height: 1.4; }
   .conv-detail .vote-row:last-child { border-bottom: 0; }
+  .conv-detail .raw-response { margin: 4px 0 2px 0; padding: 6px 8px;
+                                background: #0d1117; border: 1px solid #30363d;
+                                border-radius: 4px; font-family: ui-monospace,
+                                Consolas, monospace; font-size: 0.78rem;
+                                color: #c9d1d9; white-space: pre-wrap;
+                                word-break: break-word; max-height: 220px;
+                                overflow: auto; }
+  .conv-detail .raw-response-label { color: #8b949e; font-size: 0.74rem;
+                                      margin-top: 4px; }
   .conv-detail .speech-row { padding: 6px 0; border-bottom: 1px solid #21262d;
                               font-size: 0.85rem; line-height: 1.4; }
   .conv-detail .speech-row:last-child { border-bottom: 0; }
@@ -936,6 +945,10 @@ function renderVoteDetail(data) {
         <i>${escapeHtml(p.from_value || "?")}</i> →
         <i>${escapeHtml(p.to_value || "?")}</i>
       </div>
+      ${p.motivation ? `
+      <div style="margin-top:6px; font-size:0.86rem; line-height:1.5; font-style:italic; color:#b1b5be">
+        Motivation: ${escapeHtml(p.motivation)}
+      </div>` : ""}
       <div class="muted-text" style="font-size:0.78rem; margin-top:4px">
         ${fmtTs(p.proposed_at)}${p.closed_at ? ` → ${fmtTs(p.closed_at)}` : " · still open"}
       </div>
@@ -967,15 +980,22 @@ function renderVoteDetail(data) {
     ? `<h3 style="margin:14px 0 6px 0; font-size:0.92rem; color:#58a6ff">
          Individual votes (${votes.length})
        </h3>` +
-      votes.map(v => `
+      votes.map(v => {
+        const showRaw = v.status === "malformed" && v.raw_response;
+        return `
         <div class="vote-row">
           <span class="kind-badge v-${escapeHtml(v.status)}">${escapeHtml(v.status)}</span>
           <b>${escapeHtml(v.voter_name || v.voter_id || "?")}</b>
-          ${v.reasoning ? `<span class="muted-text"> — ${escapeHtml(v.reasoning)}</span>` : ""}
+          ${v.motivation ? `<span class="muted-text"> — ${escapeHtml(v.motivation)}</span>` : ""}
           <span class="ts" style="color:#6e7681; font-size:0.72rem; margin-left:6px">
             ${escapeHtml(v.voted_at || "")}
           </span>
-        </div>`).join("")
+          ${showRaw ? `
+            <div class="raw-response-label">LLM response (last attempt):</div>
+            <pre class="raw-response">${escapeHtml(v.raw_response)}</pre>
+          ` : ""}
+        </div>`;
+      }).join("")
     : `<span class="muted-text">no individual votes recorded</span>`;
   // Preserve scroll on auto-refresh.
   const prevScroll = root.scrollTop;

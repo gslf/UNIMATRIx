@@ -44,6 +44,16 @@ class RunStore:
         self._conn.execute("PRAGMA journal_mode = WAL")
         self._conn.execute("PRAGMA synchronous = NORMAL")
         self._conn.executescript(_load_schema())
+        self._migrate()
+
+    def _migrate(self) -> None:
+        """Idempotent in-place migrations for older run databases."""
+        cols = {
+            r["name"]
+            for r in self._conn.execute("PRAGMA table_info(votes)").fetchall()
+        }
+        if "raw_response" not in cols:
+            self._conn.execute("ALTER TABLE votes ADD COLUMN raw_response TEXT")
 
     def close(self) -> None:
         with self._lock:
@@ -169,6 +179,15 @@ class RunStore:
                 (utc_now_iso(), end_reason, summary, conv_id),
             )
 
+    def update_conversation_participants(
+        self, conv_id: int, participants: Iterable[str]
+    ) -> None:
+        with self._tx() as c:
+            c.execute(
+                "UPDATE conversations SET participants = ? WHERE id = ?",
+                (json.dumps(list(participants)), conv_id),
+            )
+
     def append_message(
         self, conv_id: int, turn_index: int, sender_id: str, content: str
     ) -> int:
@@ -227,32 +246,46 @@ class RunStore:
         change_type: str,
         from_value: str,
         to_value: str,
+        motivation: str = "",
     ) -> int:
         with self._tx() as c:
             cur = c.execute(
                 "INSERT INTO vote_proposals "
                 "(proposer_id, target_id, change_type, from_value, to_value, "
-                " proposed_at) VALUES (?, ?, ?, ?, ?, ?)",
+                " motivation, proposed_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (
                     proposer_id,
                     target_id,
                     change_type,
                     from_value,
                     to_value,
+                    motivation,
                     utc_now_iso(),
                 ),
             )
             return int(cur.lastrowid or 0)
 
     def record_vote(
-        self, proposal_id: int, voter_id: str, vote: str, reasoning: str
+        self,
+        proposal_id: int,
+        voter_id: str,
+        vote: str,
+        motivation: str,
+        raw_response: str | None = None,
     ) -> None:
         with self._tx() as c:
             c.execute(
                 "INSERT OR REPLACE INTO votes "
-                "(proposal_id, voter_id, vote, reasoning, voted_at) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (proposal_id, voter_id, vote, reasoning, utc_now_iso()),
+                "(proposal_id, voter_id, vote, motivation, raw_response, voted_at) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    proposal_id,
+                    voter_id,
+                    vote,
+                    motivation,
+                    raw_response,
+                    utc_now_iso(),
+                ),
             )
 
     def close_proposal(
@@ -274,8 +307,8 @@ class RunStore:
         the corresponding proposal so the UI gets target/change/outcome."""
         with self._lock:
             rows = self._conn.execute(
-                "SELECT v.proposal_id, v.vote, v.reasoning, v.voted_at, "
-                "       p.target_id, p.change_type, p.from_value, "
+                "SELECT v.proposal_id, v.vote, v.motivation, v.raw_response, "
+                "       v.voted_at, p.target_id, p.change_type, p.from_value, "
                 "       p.to_value, p.outcome "
                 "FROM votes v JOIN vote_proposals p "
                 "  ON v.proposal_id = p.id "
@@ -537,20 +570,6 @@ class RunStore:
                 (utc_now_iso(), json.dumps(state)),
             )
             return int(cur.lastrowid or 0)
-
-    def latest_checkpoint(self) -> dict | None:
-        with self._lock:
-            row = self._conn.execute(
-                "SELECT * FROM checkpoints ORDER BY id DESC LIMIT 1"
-            ).fetchone()
-            if not row:
-                return None
-            d = dict(row)
-            try:
-                d["state"] = json.loads(d["state"])
-            except (TypeError, json.JSONDecodeError):
-                pass
-            return d
 
     # ----- analytics helpers (used by the graph renderer) -----
 

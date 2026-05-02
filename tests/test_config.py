@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from unimatrix.config import Config, load_config
+from unimatrix.config import load_config
 
 
 def test_loads_example(example_config_path: Path) -> None:

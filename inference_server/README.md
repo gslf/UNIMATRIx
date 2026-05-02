@@ -61,6 +61,25 @@ curl http://localhost:8000/v1/chat/completions \
   -d '{"model":"qwen2.5-3b","messages":[{"role":"user","content":"Say hi."}]}'
 ```
 
+### Browser monitor
+
+Every running server exposes a live, in-memory chat inspector:
+
+```
+http://localhost:8000/monitor
+```
+
+It lists every `POST /v1/chat/completions` the server has seen since it
+started, with the full message thread, request params, assembled response
+(streaming or oneshot), reasoning trace, finish reason, and latency.
+Selected chats stream in live as the model emits chunks.
+
+Nothing is persisted — the list resets when you restart `serve.py`. The
+monitor adds no extra processes; it's an ASGI middleware in the same
+uvicorn worker, so it sees what clients actually sent (before any
+server-side rewrite by `--reasoning`). JSON is also available at
+`/monitor/api/chats` and `/monitor/api/chats/{id}`.
+
 ---
 
 ## GPU install (NVIDIA / CUDA)

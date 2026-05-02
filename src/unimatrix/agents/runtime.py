@@ -7,7 +7,7 @@ field mutation.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 
 from ..config import AgentSpec, PersonalitySpec
@@ -35,7 +35,6 @@ class Agent:
     social_need: float = 100.0
     state: AgentState = AgentState.IDLE
     current_conversation_id: int | None = None
-    last_action_ts: float = 0.0  # monotonic; used by cooldown checks
 
     @classmethod
     def from_spec(cls, spec: AgentSpec, social_need_initial: float) -> "Agent":

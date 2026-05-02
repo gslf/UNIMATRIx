@@ -34,7 +34,7 @@ class InferenceConfig(BaseModel):
     # decoding slot — keep this low (4–8) or requests just queue up server-side.
     max_batch_size: int = Field(8, ge=1)
     max_tokens_per_message: int = Field(200, ge=1)
-    temperature: float = Field(0.85, ge=0.0, le=2.0)
+    temperature: float = Field(0.95, ge=0.0, le=2.0)
     top_p: float = Field(0.95, ge=0.0, le=1.0)
     # Per-request HTTP timeout. Big models (gpt-oss-120b on partial offload)
     # easily exceed 60s per generation, and queued requests behind them wait
@@ -87,18 +87,24 @@ class ConversationConfig(BaseModel):
 class VotingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    one_active_vote_at_a_time: bool = True
-    queue_conflicting_proposals: bool = False
     # If no vote has been proposed for this many ticks, the orchestrator picks
     # one idle agent and forces them to propose a vote on the next tick. The
     # social order doesn't change without proposals, so silence here is itself
     # a problem — keep this bound tight (≤ 10 ticks) for lively dynamics.
     max_ticks_without_vote: int = Field(10, ge=1)
+    # Startup grace: for the first N ticks no vote (forced or spontaneous) may
+    # happen. Lets society warm up — characters meet, opinions surface, and
+    # the first vote actually comes out of something. Set 0 to disable.
+    warmup_ticks: int = Field(4, ge=0)
     # Number of debate rounds run between voting.open() and collect_and_close.
     # Each round = one short speech per agent (parallel batch). 0 disables the
     # debate entirely (legacy fast-path, vote-only).
     debate_rounds: int = Field(1, ge=0)
     max_tokens_per_debate_speech: int = Field(120, ge=10)
+    # Maximum attempts (including the first) to get a well-formed vote from a
+    # given agent. Anything malformed after the last attempt is recorded as a
+    # 'null' vote that counts neither yes nor no.
+    max_vote_attempts: int = Field(3, ge=1)
 
 
 class RoleSpec(BaseModel):
@@ -189,13 +195,6 @@ class Config(BaseModel):
                     f"agent {a.id}: class_initial '{a.class_initial}' not in classes list"
                 )
         return self
-
-    def role_by_id(self, role_id: str) -> RoleSpec:
-        for r in self.roles:
-            if r.id == role_id:
-                return r
-        raise KeyError(role_id)
-
 
 def load_config(path: str | Path) -> Config:
     """Read a JSON config file from disk and validate it."""

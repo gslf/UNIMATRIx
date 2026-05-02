@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from unimatrix.persistence import Registry, RunStore
@@ -21,6 +22,9 @@ def test_run_store_roundtrip(tmp_path: Path) -> None:
     assert got["state"] == "idle"
 
     cid = store.open_conversation("1to1", "a1", ["a1", "a2"])
+    store.update_conversation_participants(cid, ["a1", "a2", "a3"])
+    conv = store.get_conversation(cid)
+    assert json.loads(conv["participants"]) == ["a1", "a2", "a3"]
     store.append_message(cid, 1, "a1", "hello")
     store.append_message(cid, 2, "a2", "hi back")
     msgs = store.get_messages(cid)

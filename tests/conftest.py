@@ -6,8 +6,6 @@ from pathlib import Path
 
 import pytest
 
-from unimatrix.config import load_config
-
 
 @pytest.fixture
 def example_config_path() -> Path:

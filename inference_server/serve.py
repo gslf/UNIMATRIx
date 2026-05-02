@@ -28,7 +28,7 @@ from pathlib import Path
 
 from rich.console import Console
 
-from _catalog import get, load_catalog
+from _catalog import get
 
 
 _CUDA_DLL_PREFIXES = ("cudart64_", "cublas64_", "cublasLt64_")
@@ -241,6 +241,18 @@ def main() -> int:
     )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument(
+        "--reasoning", default=None, choices=("low", "medium", "high"),
+        help="set reasoning effort for the served model. The middleware "
+             "translates this to the model family's native dialect (harmony "
+             "system marker, Qwen3 /no_think, ...). See --reasoning-style.",
+    )
+    parser.add_argument(
+        "--reasoning-style", default=None,
+        choices=("harmony", "qwen3", "deepseek-r1", "generic"),
+        help="override the reasoning dialect (default: auto-detect from model "
+             "name). 'generic' is a no-op and just warns at startup.",
+    )
+    parser.add_argument(
         "--verbose", action="store_true",
         help="forward llama.cpp's verbose logs to stdout",
     )
@@ -252,6 +264,15 @@ def main() -> int:
     if args.alias:
         alias = args.alias
 
+    style = args.reasoning_style or _detect_reasoning_style(alias, path)
+    if args.reasoning and style == "generic":
+        console.print(
+            "[yellow]warning[/]: --reasoning was set but the model didn't "
+            "match any known reasoning dialect (gpt-oss/harmony, qwen3, "
+            "deepseek-r1). The flag will be a no-op. Override with "
+            "--reasoning-style if auto-detection got it wrong."
+        )
+
     console.print(
         f"[bold]starting llama.cpp server[/]\n"
         f"  model      : {path}\n"
@@ -259,6 +280,8 @@ def main() -> int:
         f"  chat fmt   : {chat_format}\n"
         f"  n_ctx      : {n_ctx}\n"
         f"  gpu layers : {args.n_gpu_layers}  (-1 = all)\n"
+        f"  reasoning  : {args.reasoning or '(not injected)'} "
+        f"(style: {style})\n"
         f"  endpoint   : http://{args.host}:{args.port}/v1/chat/completions"
     )
 
@@ -395,9 +418,131 @@ def main() -> int:
     model_settings = [ModelSettings(**model_kwargs)]
     app = create_app(server_settings=server_settings, model_settings=model_settings)
 
+    if args.reasoning and style != "generic":
+        app = _ReasoningInjector(app, args.reasoning, style)
+        console.print(
+            f"[green]reasoning injection active[/]: dialect={style}, "
+            f"level={args.reasoning}."
+        )
+
+    # Wrap outermost so the monitor records what clients actually sent
+    # (before any server-side rewrite by the reasoning injector).
+    from monitor import ChatMonitor
+    app = ChatMonitor(app)
+    console.print(
+        f"[green]chat monitor[/]: http://{args.host}:{args.port}/monitor"
+    )
+
     import uvicorn
     uvicorn.run(app, host=args.host, port=args.port, log_level="info")
     return 0
+
+
+def _detect_reasoning_style(alias: str, path: Path) -> str:
+    """Guess the reasoning dialect from the model alias or filename.
+
+    Returns 'harmony', 'qwen3', 'deepseek-r1', or 'generic'."""
+    s = f"{alias} {path.name}".lower()
+    if "gpt-oss" in s or "harmony" in s:
+        return "harmony"
+    if "qwen3" in s:
+        return "qwen3"
+    if "deepseek" in s and "r1" in s:
+        return "deepseek-r1"
+    return "generic"
+
+
+class _ReasoningInjector:
+    """ASGI middleware that rewrites POST /v1/chat/completions bodies to apply a
+    reasoning-effort hint in the model family's native dialect.
+
+      harmony / gpt-oss : prepend 'Reasoning: <level>' to the system message.
+      qwen3             : append '/no_think' to the last user message when
+                          level == 'low'; medium/high leaves the default
+                          (thinking on) since Qwen3 is binary, not tiered.
+      deepseek-r1       : R1 doesn't expose effort levels — no-op + a no-op
+                          dialect is logged at startup. Kept here for symmetry.
+      generic           : not registered (caller skips construction).
+    """
+
+    def __init__(self, app, level: str, style: str) -> None:
+        self.app = app
+        self.level = level
+        self.style = style
+
+    async def __call__(self, scope, receive, send):
+        if (
+            scope.get("type") != "http"
+            or scope.get("method") != "POST"
+            or not scope.get("path", "").endswith("/chat/completions")
+        ):
+            await self.app(scope, receive, send)
+            return
+
+        body = b""
+        more = True
+        while more:
+            msg = await receive()
+            body += msg.get("body", b"")
+            more = msg.get("more_body", False)
+
+        try:
+            import json as _json
+            data = _json.loads(body or b"{}")
+        except (ValueError, TypeError):
+            data = None
+
+        if isinstance(data, dict) and isinstance(data.get("messages"), list):
+            if self.style == "harmony":
+                self._apply_harmony(data["messages"])
+            elif self.style == "qwen3":
+                self._apply_qwen3(data["messages"])
+            # deepseek-r1: no-op (effort not tunable)
+            body = _json.dumps(data).encode("utf-8")
+
+        new_headers = [
+            (k, v) for k, v in scope.get("headers", [])
+            if k.lower() != b"content-length"
+        ]
+        new_headers.append((b"content-length", str(len(body)).encode()))
+        scope = dict(scope)
+        scope["headers"] = new_headers
+
+        delivered = False
+
+        async def replay():
+            nonlocal delivered
+            if not delivered:
+                delivered = True
+                return {"type": "http.request", "body": body, "more_body": False}
+            # After our buffered body is consumed, defer to the real receive
+            # so the downstream handler can still observe genuine disconnects
+            # instead of getting a spurious one from us (which llama-cpp-python
+            # logs as "Disconnected from client ... before llm invoked" → 400).
+            return await receive()
+
+        await self.app(scope, replay, send)
+
+    def _apply_harmony(self, msgs: list) -> None:
+        marker = f"Reasoning: {self.level}"
+        if msgs and isinstance(msgs[0], dict) and msgs[0].get("role") == "system":
+            content = msgs[0].get("content") or ""
+            if isinstance(content, str) and marker not in content:
+                msgs[0]["content"] = (marker + "\n" + content).strip()
+        else:
+            msgs.insert(0, {"role": "system", "content": marker})
+
+    def _apply_qwen3(self, msgs: list) -> None:
+        # Qwen3 thinking is binary. Map low→/no_think; medium/high leaves the
+        # default behavior (thinking on) untouched.
+        if self.level != "low":
+            return
+        for m in reversed(msgs):
+            if isinstance(m, dict) and m.get("role") == "user":
+                content = m.get("content")
+                if isinstance(content, str) and "/no_think" not in content:
+                    m["content"] = content.rstrip() + " /no_think"
+                return
 
 
 if __name__ == "__main__":

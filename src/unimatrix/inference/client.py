@@ -17,7 +17,7 @@ import json
 import random
 import re
 from dataclasses import dataclass, field
-from typing import Iterable, Sequence
+from typing import Sequence
 
 import httpx
 
@@ -65,7 +65,7 @@ class InferenceClient:
     async def generate(self, req: GenerationRequest) -> str:
         async with self._semaphore:
             if self.cfg.backend == "stub":
-                return _stub_generate(req, self.cfg)
+                return _stub_generate(req)
             return await self._http_generate(req)
 
     async def generate_batch(
@@ -86,7 +86,7 @@ class InferenceClient:
             "top_p": req.top_p if req.top_p is not None else self.cfg.top_p,
         }
         if req.json_mode:
-            # vLLM accepts response_format={'type': 'json_object'} for guided JSON.
+            # Both backends accept response_format={'type': 'json_object'}.
             payload["response_format"] = {"type": "json_object"}
         try:
             r = await self._client.post("/v1/chat/completions", json=payload)
@@ -114,7 +114,8 @@ class InferenceClient:
             )
         try:
             data = r.json()
-            return data["choices"][0]["message"]["content"] or ""
+            content = data["choices"][0]["message"]["content"] or ""
+            return strip_harmony_channels(content)
         except (KeyError, IndexError, TypeError, ValueError) as exc:
             raise RuntimeError(
                 f"unexpected response shape from {self.cfg.endpoint}: "
@@ -152,7 +153,7 @@ def _seeded(req: GenerationRequest) -> random.Random:
     return random.Random(int.from_bytes(h.digest()[:8], "big"))
 
 
-def _stub_generate(req: GenerationRequest, cfg: InferenceConfig) -> str:
+def _stub_generate(req: GenerationRequest) -> str:
     rng = _seeded(req)
     kind = req.stub_kind or _infer_stub_kind(req)
     if kind == "decision":
@@ -163,8 +164,6 @@ def _stub_generate(req: GenerationRequest, cfg: InferenceConfig) -> str:
         return _stub_summary(req, rng)
     if kind == "person_impression":
         return _stub_person_impression(req, rng)
-    if kind == "next_speaker":
-        return _stub_next_speaker(req, rng)
     if kind == "debate":
         return _stub_debate(req, rng)
     return _stub_chat(req, rng)
@@ -219,12 +218,14 @@ def _stub_decision(req: GenerationRequest, rng: random.Random) -> str:
                 "target": target,
                 "change_type": "role",
                 "to_value": rng.choice(roles),
+                "motivation": "The order would be more just under this change.",
             }
         elif classes:
             out["proposal"] = {
                 "target": target,
                 "change_type": "class",
                 "to_value": rng.choice(classes),
+                "motivation": "The order would be more just under this change.",
             }
         else:
             out["action"] = "do_nothing"
@@ -238,13 +239,7 @@ def _stub_decision(req: GenerationRequest, rng: random.Random) -> str:
 
 
 def _stub_vote(req: GenerationRequest, rng: random.Random) -> str:
-    yes = rng.random() < 0.55
-    return json.dumps({
-        "vote": "yes" if yes else "no",
-        "reasoning": (
-            "It serves the common good." if yes else "I see no benefit in this change."
-        ),
-    })
+    return "yes" if rng.random() < 0.55 else "no"
 
 
 def _stub_summary(req: GenerationRequest, rng: random.Random) -> str:
@@ -261,13 +256,6 @@ def _stub_person_impression(req: GenerationRequest, rng: random.Random) -> str:
         "Sincere and thoughtful — a possible ally.",
         "Distant and unreadable; intentions unclear.",
     ])
-
-
-def _stub_next_speaker(req: GenerationRequest, rng: random.Random) -> str:
-    candidates = req.stub_context.get("candidates") or []
-    if not candidates:
-        return json.dumps({"next": None})
-    return json.dumps({"next": rng.choice(candidates)})
 
 
 def _stub_chat(req: GenerationRequest, rng: random.Random) -> str:
@@ -290,6 +278,36 @@ _HARMONY_FINAL_RE = re.compile(
     r"<\|channel\|>final<\|message\|>(.+?)(?:<\|end\||<\|return\||$)",
     re.DOTALL,
 )
+# Any harmony channel/message marker. Used to detect responses where only the
+# analysis channel was emitted (no final) — those are model "thinking" leakage,
+# not a real reply.
+_HARMONY_ANY_MARKER_RE = re.compile(r"<\|(?:channel|message|start|end|return)\|>")
+
+
+def strip_harmony_channels(raw: str) -> str:
+    """Return the harmony 'final' channel body, or the input unchanged.
+
+    Behavior:
+      - If a 'final' channel marker is present, return its body (drops any
+        preceding analysis/commentary channels).
+      - If harmony markers are present but no 'final' channel exists, return
+        an empty string — the model emitted only analysis/commentary, which
+        is chain-of-thought, not a reply.
+      - Otherwise return the input unchanged.
+
+    Note: only helps when the inference backend lets the harmony special
+    tokens reach the client. Builds that strip them server-side leak the
+    raw analysis content with no markers to anchor on; this function cannot
+    recover the final channel in that case.
+    """
+    if not raw:
+        return raw
+    m = _HARMONY_FINAL_RE.search(raw)
+    if m:
+        return m.group(1).strip()
+    if _HARMONY_ANY_MARKER_RE.search(raw):
+        return ""
+    return raw
 # Generic markdown code fence (```json ... ```), tolerant of language tag.
 _FENCE_RE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL | re.IGNORECASE)
 

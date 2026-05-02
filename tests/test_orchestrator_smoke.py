@@ -6,7 +6,6 @@ recharges in conversations, and a human broadcast is delivered.
 from __future__ import annotations
 
 import asyncio
-import json
 from pathlib import Path
 
 import pytest

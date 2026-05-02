@@ -40,8 +40,11 @@
     "turns_per_tick": 2
   },
   "voting": {
-    "one_active_vote_at_a_time": true,
-    "queue_conflicting_proposals": false
+    "max_ticks_without_vote": 10,
+    "warmup_ticks": 4,
+    "debate_rounds": 1,
+    "max_tokens_per_debate_speech": 120,
+    "max_vote_attempts": 3
   },
   "classes": [
     "aristocracy",

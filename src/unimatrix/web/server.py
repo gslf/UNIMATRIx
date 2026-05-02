@@ -198,9 +198,10 @@ def build_app(
             votes_raw = orch.store.get_votes_by_voter(agent_id, limit=10)
             recent_votes: list[dict] = []
             for v in votes_raw:
+                motivation = v.get("motivation") or ""
                 status = (
                     "malformed"
-                    if v.get("reasoning") == "malformed response"
+                    if motivation.startswith("malformed response")
                     else (v.get("vote") or "unknown")
                 )
                 tgt_id = v.get("target_id")
@@ -208,7 +209,8 @@ def build_app(
                     "proposal_id": v["proposal_id"],
                     "status": status,
                     "vote": v.get("vote"),
-                    "reasoning": v.get("reasoning"),
+                    "motivation": motivation,
+                    "raw_response": v.get("raw_response"),
                     "voted_at": v.get("voted_at"),
                     "target_id": tgt_id,
                     "target_name": agents_map.get(
@@ -346,9 +348,10 @@ def build_app(
                     v["voter_name"] = agents.get(
                         v.get("voter_id"), {"name": v.get("voter_id")}
                     )["name"]
+                    motivation = v.get("motivation") or ""
                     v["status"] = (
                         "malformed"
-                        if v.get("reasoning") == "malformed response"
+                        if motivation.startswith("malformed response")
                         else (v.get("vote") or "unknown")
                     )
                 votes.sort(key=lambda v: (

@@ -95,6 +95,7 @@ class Orchestrator:
             "votes_completed": 0,
             "votes_approved": 0,
             "votes_rejected": 0,
+            "votes_null_total": 0,        # cumulative malformed-after-retries votes
             "forced_vote_failures": 0,     # forced propose_vote that didn't apply
             "broadcasts_sent": 0,
             "inference_errors": 0,
@@ -118,38 +119,6 @@ class Orchestrator:
             await asyncio.to_thread(
                 self.store.record_status_change, ag.id, "initial", None, ag.klass
             )
-
-    async def restore_from_checkpoint(self) -> bool:
-        cp = await asyncio.to_thread(self.store.latest_checkpoint)
-        if not cp or not isinstance(cp.get("state"), dict):
-            return False
-        state = cp["state"]
-        # Re-load agents from db (canonical source for role/class)
-        for row in await asyncio.to_thread(self.store.list_agents):
-            spec = next((a for a in self.cfg.agents if a.id == row["agent_id"]), None)
-            if spec is None:
-                continue
-            ag = Agent.from_spec(spec, self.cfg.social.social_need_initial)
-            ag.role = row["role"] or ag.role
-            ag.klass = row["class"] or ag.klass
-            ag.social_need = float(row["social_need"] or self.cfg.social.social_need_initial)
-            ag.state = AgentState(row["state"] or "idle")
-            # Clear any stale conversation reference; conversations don't
-            # auto-resume after pause (per spec).
-            ag.state = AgentState.IDLE
-            ag.current_conversation_id = None
-            self.agents[ag.id] = ag
-            await asyncio.to_thread(
-                self.store.update_agent_state,
-                ag.id,
-                state=ag.state.value,
-                current_conversation_id=None,
-            )
-        self._broadcast_queue = [
-            BroadcastItem(b["sender_id"], b["message"])
-            for b in state.get("broadcast_queue", [])
-        ]
-        return True
 
     # ----- public controls -----
 
@@ -228,25 +197,10 @@ class Orchestrator:
             self.agents.values(), elapsed, self.cfg.social.social_need_decay_per_minute
         )
 
-        # 2) vote takes priority — suspended convs resume after the tally.
+        # 2) recovery path: a vote left active from a prior tick (e.g. crash
+        # mid-vote) — resolve it before doing anything else.
         if self.voting.is_active():
-            try:
-                # Pre-vote debate (idempotent — guarded by proposal.debated).
-                # With voting.debate_rounds=0 this is a no-op.
-                await self.voting.run_debate()
-                result = await self.voting.collect_and_close()
-                self.metrics["votes_completed"] += 1
-                if result.get("outcome") == "approved":
-                    self.metrics["votes_approved"] += 1
-                else:
-                    self.metrics["votes_rejected"] += 1
-            except Exception as exc:
-                self.console.log(f"[red]vote round failed[/]: {exc}")
-                # Don't get stuck on a vote we can't run — clear it so the
-                # simulation moves on instead of looping the same failure.
-                self.voting.active = None
-            await self.conv.resume_all()
-            self._last_activity_ts = time.monotonic()
+            await self._resolve_active_vote()
             return
 
         # 3) drain broadcast queue (one per tick) — non-interruptive: active
@@ -261,8 +215,17 @@ class Orchestrator:
             self._last_activity_ts = time.monotonic()
             # fall through: still let conversations advance this tick
 
-        # 4) idle agents decide
+        # 4) idle agents decide. If any agent's decision opens a vote, the
+        # society pauses immediately: _apply_decision() suspends conversations
+        # and the vote runs in-tick right after the decision batch settles.
         await self._run_idle_decisions()
+        if self.voting.is_active():
+            # Decisions are batched upfront, so all in-flight generation from
+            # this tick's decision pass has already settled. Conversations
+            # were suspended before they could advance this tick. Run the
+            # vote now and resume.
+            await self._resolve_active_vote()
+            return
 
         # 5) advance active conversations — multiple turns per tick so dialogue
         # actually flows instead of crawling at one message every several seconds.
@@ -280,6 +243,32 @@ class Orchestrator:
 
         # 6) anti-silence
         await self._maybe_break_silence()
+
+    async def _resolve_active_vote(self) -> None:
+        """Run debate + tally for the currently-open proposal, then resume.
+
+        Called both as a recovery path at tick start (if a vote was left open
+        across ticks) and inline at the end of the decisions phase when a
+        proposal is opened in the current tick.
+        """
+        try:
+            # Pre-vote debate (idempotent — guarded by proposal.debated).
+            # With voting.debate_rounds=0 this is a no-op.
+            await self.voting.run_debate()
+            result = await self.voting.collect_and_close()
+            self.metrics["votes_completed"] += 1
+            self.metrics["votes_null_total"] += int(result.get("null", 0))
+            if result.get("outcome") == "approved":
+                self.metrics["votes_approved"] += 1
+            else:
+                self.metrics["votes_rejected"] += 1
+        except Exception as exc:
+            self.console.log(f"[red]vote round failed[/]: {exc}")
+            # Don't get stuck on a vote we can't run — clear it so the
+            # simulation moves on instead of looping the same failure.
+            await self.voting.abort_active()
+        await self.conv.resume_all()
+        self._last_activity_ts = time.monotonic()
 
     # ----- idle decisions -----
 
@@ -310,13 +299,18 @@ class Orchestrator:
             c.id for c in self.conv.active.values() if c.type == "group"
         ]
 
+        # Startup grace: for the first `warmup_ticks` ticks no vote (forced or
+        # spontaneous) may happen — society warms up first.
+        in_warmup = self._tick_no <= self.cfg.voting.warmup_ticks
+
         # Periodic vote forcing: if N ticks have passed without any vote, pick
         # one idle agent at random and force their next decision to be
         # propose_vote. The agent still picks the target / change_type / value
         # via LLM, so the proposal stays motivated.
         ticks_since_vote = self._tick_no - self._last_vote_tick
         must_force_vote = (
-            not self.voting.is_active()
+            not in_warmup
+            and not self.voting.is_active()
             and ticks_since_vote >= self.cfg.voting.max_ticks_without_vote
             and bool(idle_agents)
         )
@@ -342,6 +336,7 @@ class Orchestrator:
                 a, peers, medium, long_term, recent_events, forced, open_groups,
                 force_vote=force_vote_for_this,
                 ticks_since_vote=ticks_since_vote,
+                voting_disabled=in_warmup,
             )
             prompts_payload.append(
                 (
@@ -581,6 +576,13 @@ class Orchestrator:
                 self._skip("join_group", f"{ag.id}: cannot join conv {cid_i}")
             return
         if action == "propose_vote":
+            if self._tick_no <= self.cfg.voting.warmup_ticks:
+                self._skip(
+                    "propose_vote",
+                    f"{ag.id}: blocked during startup warmup "
+                    f"(tick {self._tick_no} ≤ warmup {self.cfg.voting.warmup_ticks})",
+                )
+                return
             p = dec.get("proposal") or {}
             tgt = self._resolve_agent_ref(p.get("target"))
             if not tgt:
@@ -595,11 +597,13 @@ class Orchestrator:
             if change_type is None:
                 self._skip("propose_vote", f"{ag.id}: {repair_note}")
                 return
+            motivation = str(p.get("motivation") or "").strip()
             proposal = await self.voting.open(
                 proposer_id=ag.id,
                 target_id=tgt.id,
                 change_type=change_type,
                 to_value=to_value,
+                motivation=motivation,
             )
             if proposal is None:
                 self._skip("propose_vote", f"{ag.id}: proposal rejected (invalid or vote in progress)")
@@ -630,9 +634,11 @@ class Orchestrator:
             return f"#{dec.get('conversation_id')}"
         if action == "propose_vote":
             p = dec.get("proposal") or {}
+            motiv = str(p.get("motivation") or "").strip()
+            tail = f" ({motiv[:60]!r})" if motiv else ""
             return (
                 f"{p.get('change_type')} {p.get('target')!r} → "
-                f"{p.get('to_value')!r}"
+                f"{p.get('to_value')!r}{tail}"
             )
         return ""
 
@@ -797,6 +803,7 @@ class Orchestrator:
                 "votes_completed": self.metrics["votes_completed"],
                 "votes_approved": self.metrics["votes_approved"],
                 "votes_rejected": self.metrics["votes_rejected"],
+                "votes_null_total": self.metrics["votes_null_total"],
                 "broadcasts_sent": self.metrics["broadcasts_sent"],
                 "inference_errors": self.metrics["inference_errors"],
                 "last_error": self.metrics["last_error"],

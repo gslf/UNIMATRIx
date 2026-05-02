@@ -72,21 +72,31 @@ class PromptBuilder:
         return (
             "WORLD RULES — read carefully:\n"
             "You live in a small simulated society of about "
-            f"{len(self.cfg.agents)} people. There is no game to win and no "
-            "death; the goal is to live as your character. You can:\n"
+            f"{len(self.cfg.agents)} people. The point of life is collective: "
+            "this society should evolve toward what its members believe is "
+            "an ideal order, a distribution of roles and classes that is "
+            "just, functional, and worth living in. There is no neutral "
+            "authority dictating what 'ideal' means; each of you carries "
+            "your own vision of it, shaped by your values, your background, "
+            "and what you have seen happen here. The social order will only "
+            "change if you act on that vision.\n\n"
+            "You can:\n"
             "  - start a private 1-to-1 chat with another person\n"
             "  - start or join a small group chat (max "
             f"{self.cfg.conversation.max_group_size} people)\n"
             "  - broadcast a message that everyone hears\n"
-            "  - PROPOSE A VOTE to change anyone's role or social class "
-            "(including your own). The whole society votes; simple majority "
-            "decides — most proposals fail, but proposing alone signals "
-            "where you stand and forces others to take a position. Use this "
-            "whenever someone's current role or class clashes with your "
-            "values; do not wait until you are 'sure' it will pass.\n"
-            "Society is class-based and roles have unequal prestige. Coalitions, "
-            "rivalries, mobility and isolation can all emerge — that is the "
-            "point. Pursue your values and ambitions; do not be passive.\n\n"
+            "  - propose a vote to change anyone's role or social class "
+            "(including your own). Voting is the ONLY mechanism that "
+            "actually moves the social order. It is your tool — both to "
+            "improve your own standing when your current role or class is "
+            "wrong for you, and to push the whole society toward the shape "
+            "you believe it ought to have. Conversations alone change "
+            "nothing structural. The whole society votes; simple majority "
+            "decides.\n"
+            "Society is class-based and roles have unequal prestige. "
+            "Coalitions, rivalries, mobility and isolation can all emerge. "
+            "Identify friends, enemies and allies. Pursue your values and "
+            "ambitions; do not be passive.\n\n"
             f"Valid CLASSES (use these exact ids in proposals): {classes_inline}\n"
             f"Valid ROLES   (use these exact ids in proposals): {roles_inline}"
         )
@@ -215,6 +225,7 @@ class PromptBuilder:
         open_groups: list[int],
         force_vote: bool = False,
         ticks_since_vote: int = 0,
+        voting_disabled: bool = False,
     ) -> tuple[list[ChatMessage], dict]:
         idle_peers = [p for p in peers if p.id != agent.id and not p.is_busy()]
         actions: list[str]
@@ -223,15 +234,23 @@ class PromptBuilder:
             # the silence on the social order. Restrict to a single action.
             actions = ["propose_vote"]
         elif forced_action:
-            actions = ["start_1to1", "start_group", "broadcast"]
+            actions = ["start_1to1", "start_group", "broadcast", "propose_vote"]
         else:
-            actions = ["start_1to1", "start_group", "broadcast", "propose_vote",
-                       "join_group", "do_nothing"]
-            if not open_groups:
-                actions.remove("join_group")
-            if not idle_peers:
-                if "start_1to1" in actions: actions.remove("start_1to1")
-                if "start_group" in actions: actions.remove("start_group")
+            # propose_vote is listed first deliberately: LLMs have a strong
+            # order/recency bias when picking from an enumerated list, and the
+            # vote is the only action that actually moves the social order.
+            actions = ["propose_vote", "start_1to1", "start_group",
+                       "broadcast", "join_group", "do_nothing"]
+        if not open_groups and "join_group" in actions:
+            actions.remove("join_group")
+        if not idle_peers:
+            for unavailable in ("start_1to1", "start_group"):
+                if unavailable in actions:
+                    actions.remove(unavailable)
+        if voting_disabled and "propose_vote" in actions and not force_vote:
+            actions.remove("propose_vote")
+        if not actions:
+            actions = ["do_nothing"]
 
         sys = ChatMessage(
             "system",
@@ -250,41 +269,49 @@ class PromptBuilder:
         )
         if force_vote:
             forced_note = (
-                f"\nThe society has gone {ticks_since_vote} ticks without any "
-                "vote. Silence on the social order is itself a problem. You "
-                "MUST propose a vote NOW — propose_vote is the ONLY allowed "
-                "action this turn. Pick the role or class change that, given "
-                "your values and the directory above, most needs to happen. "
-                "Self-targeting is allowed. Do NOT propose a no-op (the new "
-                "value MUST differ from the target's current one)."
+                f"\nThe society has gone {ticks_since_vote} ticks without a "
+                "new vote. You MUST propose a vote now; it is the only allowed action "
+                "this turn. The choice is fully yours: scan the directory above "
+                "and decide spontaneously who to target (yourself or anyone "
+                "else listed there), whether to change their role or their "
+                "social class, and what the new value should be. Anchor "
+                "that choice in what you actually know, your values and "
+                "personality, your memories of what has happened in this "
+                "society, your impressions of the people involved, and your "
+                "own vision of the order this society should have. Propose "
+                "the change that most moves things in that direction. The "
+                "new value MUST differ from the target's current one."
             )
         else:
-            forced_note = (
-                "\nYour social need is critically low; you MUST interact NOW. "
-                "do_nothing is forbidden. Strongly prefer start_1to1 or start_group; "
-                "broadcasts do not satisfy connection."
-                if forced_action
-                else "\nDo NOT default to do_nothing. Most ticks you should act.\n"
-                 "Real options to weigh on equal footing:\n"
-                 "  - start_1to1 / start_group: build understanding, expose "
-                 "disagreement.\n"
-                 "  - broadcast: address the whole society at once when you "
-                 "have something they all need to hear.\n"
-                 "  - join_group: enter an ongoing conversation when its "
-                 "topic concerns you.\n"
-                 "  - propose_vote: the ONLY mechanism in this society to "
-                 "actually change someone's role or social class. If your "
-                 "values clash with the current role or class of any "
-                 "specific person — yourself, an ally, or a rival — this "
-                 "is how you act on it. Scan the directory: if anyone "
-                 "listed there holds a role or class you find unjust, "
-                 "ill-suited, or that should be elevated/demoted, use "
-                 "propose_vote. Conversations alone never change the "
-                 "social order.\n"
-                 "Do not pick the same kind of action you picked last "
-                 "time by default; weigh propose_vote against conversation "
-                 "on every tick."
-        )
+            if forced_action:
+                forced_note = (
+                    "\nYour social need is critically low; you MUST interact NOW. "
+                    "do_nothing is forbidden."
+                    if "do_nothing" not in actions
+                    else "\nYour social need is critically low; choose the best available action."
+                )
+            else:
+                descriptions: list[str] = []
+                if "propose_vote" in actions:
+                    descriptions.append(
+                        "  - propose_vote: use a democratic vote to change a role or class."
+                    )
+                if "start_1to1" in actions or "start_group" in actions:
+                    descriptions.append(
+                        "  - start_1to1 / start_group: build understanding, expose disagreement."
+                    )
+                if "broadcast" in actions:
+                    descriptions.append(
+                        "  - broadcast: address the whole society at once when you have something they all need to hear."
+                    )
+                if "join_group" in actions:
+                    descriptions.append(
+                        "  - join_group: enter an ongoing conversation whose topic concerns you."
+                    )
+                forced_note = "\nDo NOT default to do_nothing. Most ticks you should act."
+                if descriptions:
+                    forced_note += "\nOptions to weigh:\n" + "\n".join(descriptions)
+
         # Build concrete examples with values that DIFFER from the target's
         # current role/class, so the propose_vote example is a real change
         # rather than a no-op the model would skip past.
@@ -316,17 +343,22 @@ class PromptBuilder:
             "user",
             evt + "\n\n"
             f"Available actions this turn: {actions}.{forced_note}\n\n"
-            "Reply with ONE valid JSON object and nothing else. "
+            "Reply with ONE valid JSON object and nothing else — no prose, "
+            "no markdown, no code fences, no commentary before or after. "
             "Use exact id strings from the lists above for any agent / role / "
-            "class field. Required schemas per action:\n"
+            "class field. Pick exactly one action from the list above and "
+            "match its schema below verbatim:\n"
+            + scenario_line
+            + f"  propose_vote → {{\"action\":\"propose_vote\",\"proposal\":{{\"target\":\"{sample_peer_id}\",\"change_type\":\"role\",\"to_value\":\"{sample_role}\",\"motivation\":\"<one short sentence: why this change, in character>\"}}}}\n"
+            f"               or {{\"action\":\"propose_vote\",\"proposal\":{{\"target\":\"{sample_peer_id}\",\"change_type\":\"class\",\"to_value\":\"{sample_class}\",\"motivation\":\"<one short sentence: why this change, in character>\"}}}}\n"
             f"  start_1to1   → {{\"action\":\"start_1to1\",\"target\":\"{sample_peer_id}\",\"topic\":\"<one short sentence>\"}}\n"
             f"  start_group  → {{\"action\":\"start_group\",\"targets\":[\"{sample_peer_id}\",\"...\"],\"topic\":\"<one short sentence>\"}}\n"
             f"  broadcast    → {{\"action\":\"broadcast\",\"message\":\"<what you proclaim to all>\"}}\n"
             f"  join_group   → {{\"action\":\"join_group\",\"conversation_id\":<one of {open_groups or '[]'}>}}\n"
-            + scenario_line
-            + f"  propose_vote → {{\"action\":\"propose_vote\",\"proposal\":{{\"target\":\"{sample_peer_id}\",\"change_type\":\"role\",\"to_value\":\"{sample_role}\"}}}}\n"
-            f"             or {{\"action\":\"propose_vote\",\"proposal\":{{\"target\":\"{sample_peer_id}\",\"change_type\":\"class\",\"to_value\":\"{sample_class}\"}}}}\n"
-            f"  do_nothing   → {{\"action\":\"do_nothing\"}}\n",
+            f"  do_nothing   → {{\"action\":\"do_nothing\"}}\n"
+            "The to_value MUST differ from the target's current value (no no-ops). "
+            "For propose_vote, the motivation is mandatory: one short sentence "
+            "in character explaining why the change is needed.",
         )
         stub_ctx = {
             "available_actions": actions,
@@ -364,13 +396,12 @@ class PromptBuilder:
             self.identity_block(agent)
             + "\n\n"
             + self.memory_block(medium_term, long_term, None)
-            + "\nYour impressions of present company:\n" + impressions
+            + "\n\nYour impressions of present company:\n" + impressions
             + "\n\nYou are speaking with: " + partners
             + "\nKeep your reply under "
             + str(self.cfg.inference.max_tokens_per_message)
             + " tokens. To leave the conversation, end your message with "
-              "the literal tag [LEAVE]. To pass the floor to a specific "
-              "person, end your message with [PASS:<their_name>]."
+              "the literal tag [LEAVE]."
         )
         body = "\n".join(f"{name}: {text}" for name, text in history[-self.cfg.memory.short_term_turns:])
         usr = ChatMessage(
@@ -411,6 +442,12 @@ class PromptBuilder:
             "sentences. Output a single line of plain text — no JSON, no "
             "labels, no quotes."
         )
+        proposer_motivation = (proposal.get("motivation") or "").strip()
+        motivation_line = (
+            f"\n  Proposer's motivation: {proposer_motivation}"
+            if proposer_motivation
+            else ""
+        )
         proposal_line = (
             f"Proposal #{proposal.get('id', '?')} (round "
             f"{round_index + 1} of {rounds_total}):\n"
@@ -420,6 +457,7 @@ class PromptBuilder:
             f"{target_agent.klass} class.\n"
             f"  Proposed {change} change: "
             f"'{proposal['from_value']}' → '{proposal['to_value']}'."
+            + motivation_line
         )
         if prior_transcript:
             transcript_lines = "\n".join(
@@ -461,9 +499,7 @@ class PromptBuilder:
                 for e in debate_transcript
             )
             debate_block = (
-                "\n\nDebate transcript (everyone has spoken before this "
-                "vote — weigh these arguments alongside your own values):\n"
-                + transcript_lines
+                "\n\nDebate transcript:\n" + transcript_lines
             )
         sys = ChatMessage(
             "system",
@@ -473,16 +509,21 @@ class PromptBuilder:
             + debate_block,
         )
         change = proposal["change_type"]
+        proposer_motivation = (proposal.get("motivation") or "").strip()
+        motivation_line = (
+            f"Proposer's motivation: {proposer_motivation}\n"
+            if proposer_motivation
+            else ""
+        )
         usr = ChatMessage(
             "user",
-            f"A vote has been called.\n"
-            f"Proposer: {proposal['proposer_id']}.\n"
+            f"Vote on this proposal.\n"
             f"Target: {target_agent.name} ({target_agent.id}).\n"
             f"Proposed change: {change} from "
-            f"'{proposal['from_value']}' to '{proposal['to_value']}'.\n\n"
-            "You must vote yes or no — abstention is not allowed. "
-            "Your vote and reasoning are public. "
-            "Respond ONLY with JSON: {\"vote\": \"yes\"|\"no\", \"reasoning\": <one sentence>}.",
+            f"'{proposal['from_value']}' to '{proposal['to_value']}'.\n"
+            + motivation_line
+            + "\nReply with exactly one word: yes or no. "
+            "No punctuation, no explanation, no other text.",
         )
         return [sys, usr], {}
 

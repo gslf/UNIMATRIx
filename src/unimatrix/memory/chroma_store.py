@@ -13,7 +13,7 @@ import hashlib
 import math
 import re
 from dataclasses import dataclass, field
-from typing import Iterable, Protocol
+from typing import Protocol
 
 
 _TOKEN_RE = re.compile(r"[A-Za-z']+")

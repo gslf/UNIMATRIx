@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 from ..config import MemoryConfig
 from ..persistence import RunStore
-from .chroma_store import VectorStore, make_vector_store
+from .chroma_store import make_vector_store
 
 
 @dataclass

@@ -6,7 +6,6 @@ the role is applied with a status_change recorded.
 """
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
@@ -76,6 +75,52 @@ async def test_vote_flow(stub_config: Path, tmp_path: Path) -> None:
 
     # All agents back to idle
     assert all(a.state.value == "idle" for a in agents.values())
+
+    await inference.aclose()
+    await memory.close()
+    store.close()
+
+
+@pytest.mark.asyncio
+async def test_abort_vote_restores_idle_state(stub_config: Path, tmp_path: Path) -> None:
+    cfg = load_config(stub_config)
+    registry = Registry(tmp_path / "runs")
+    store = RunStore(tmp_path / "test.db")
+    run_id = registry.register("t", str(tmp_path / "test.db"), {})
+    memory = MemoryManager(cfg.memory, store, run_id, str(tmp_path / "chroma"))
+    inference = InferenceClient(cfg.inference)
+
+    agents = {
+        spec.id: Agent.from_spec(spec, cfg.social.social_need_initial)
+        for spec in cfg.agents
+    }
+    for ag in agents.values():
+        ag.current_conversation_id = 99
+        store.upsert_agent(ag.to_db_row())
+
+    voting = VotingModule(cfg, store, memory, inference,
+                          PromptBuilder(cfg), agents, Console())
+
+    target_id = list(agents.keys())[1]
+    target = agents[target_id]
+    new_role = "scholar" if target.role != "scholar" else "doctor"
+
+    proposal = await voting.open(
+        proposer_id=list(agents.keys())[0],
+        target_id=target_id,
+        change_type="role",
+        to_value=new_role,
+    )
+    assert proposal is not None
+
+    await voting.abort_active()
+    assert voting.active is None
+    assert all(a.state.value == "idle" for a in agents.values())
+    assert all(a.current_conversation_id is None for a in agents.values())
+    assert all(
+        store.get_agent(a.id)["current_conversation_id"] is None
+        for a in agents.values()
+    )
 
     await inference.aclose()
     await memory.close()

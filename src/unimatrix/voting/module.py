@@ -3,9 +3,9 @@
 Behavior per spec section 10:
   - Only one active proposal at a time. Concurrent proposals are rejected.
   - Opening a vote interrupts every active conversation.
-  - Voting is mandatory. Malformed responses → one retry, else default to 'no'.
+  - Voting is mandatory. Malformed responses are retried, then recorded as null.
   - Inference is batched: all 50 votes go in a single asyncio.gather.
-  - Reasoning is public.
+  - Motivation is public.
   - Simple majority; ties → rejected.
   - On approval the role/class change is immediate; status_change is logged
     and broadcast as a public_event.
@@ -20,7 +20,6 @@ from rich.console import Console
 from ..agents import Agent, AgentState, PromptBuilder
 from ..config import Config
 from ..inference import GenerationRequest, InferenceClient
-from ..inference.client import parse_json_lenient
 from ..memory import MemoryManager
 from ..persistence import RunStore
 
@@ -33,6 +32,7 @@ class Proposal:
     change_type: str  # 'role' | 'class'
     from_value: str
     to_value: str
+    motivation: str = ""
     # Pre-vote debate transcript (in-memory only; speeches are also persisted
     # as 'vote_debate_speech' public_events). Each entry has keys:
     # speaker_id, speaker_name, round, text.
@@ -47,6 +47,7 @@ class Proposal:
             "change_type": self.change_type,
             "from_value": self.from_value,
             "to_value": self.to_value,
+            "motivation": self.motivation,
         }
 
 
@@ -97,7 +98,7 @@ class VotingModule:
             from_value = target.klass
         if from_value == to_value:
             return False, "no-op proposal"
-        if self.active is not None and self.cfg.voting.one_active_vote_at_a_time:
+        if self.active is not None:
             return False, "another vote is already in progress"
         return True, ""
 
@@ -107,6 +108,7 @@ class VotingModule:
         target_id: str,
         change_type: str,
         to_value: str,
+        motivation: str = "",
     ) -> Proposal | None:
         ok, reason = await self.propose(proposer_id, target_id, change_type, to_value)
         if not ok:
@@ -121,6 +123,7 @@ class VotingModule:
             change_type,
             from_value,
             to_value,
+            motivation,
         )
         proposal = Proposal(
             id=prop_id,
@@ -129,6 +132,7 @@ class VotingModule:
             change_type=change_type,
             from_value=from_value,
             to_value=to_value,
+            motivation=motivation,
         )
         self.active = proposal
         for a in self.agents.values():
@@ -144,6 +148,19 @@ class VotingModule:
             f"{target.name} → {to_value}"
         )
         return proposal
+
+    async def abort_active(self) -> None:
+        """Clear a failed active vote and restore non-conversation state."""
+        self.active = None
+        for a in self.agents.values():
+            a.state = AgentState.IDLE
+            a.current_conversation_id = None
+            await asyncio.to_thread(
+                self.store.update_agent_state,
+                a.id,
+                state=a.state.value,
+                current_conversation_id=None,
+            )
 
     async def run_debate(self) -> None:
         """Pre-vote debate: every agent speaks once per round, in parallel.
@@ -225,7 +242,13 @@ class VotingModule:
         )
 
     async def collect_and_close(self) -> dict:
-        """Run the batched vote round and apply the outcome."""
+        """Run the batched vote round and apply the outcome.
+
+        Up to `cfg.voting.max_vote_attempts` passes are made over agents whose
+        previous response was malformed. Anything still malformed after the
+        last attempt is recorded as a 'null' vote that counts toward neither
+        yes nor no. The majority is computed only over yes vs. no.
+        """
         assert self.active is not None
         proposal = self.active
         target = self.agents[proposal.target_id]
@@ -250,47 +273,73 @@ class VotingModule:
             reqs.append(
                 GenerationRequest(
                     messages=msgs,
-                    max_tokens=self.cfg.inference.max_tokens_per_decision,
-                    json_mode=True,
+                    max_tokens=4,
                     stub_kind="vote",
                 )
             )
 
-        raw_results = await self.inference.generate_batch(reqs)
+        max_attempts = max(1, self.cfg.voting.max_vote_attempts)
+        # Per-agent state: index → (final_vote_label, motivation) once decided.
+        decided: dict[int, tuple[str, str]] = {}
+        # Last raw LLM output we saw per still-pending index, so the UI can
+        # show *what* the model actually produced when its vote was malformed.
+        last_raw: dict[int, str] = {}
+        pending: list[int] = list(range(len(order)))
 
-        # Parse, retry malformed once individually, default to 'no' otherwise.
-        votes: list[tuple[str, str, str]] = []
-        retries: list[tuple[int, Agent]] = []
-        for i, (ag, raw) in enumerate(zip(order, raw_results)):
-            parsed = parse_json_lenient(raw, want_keys=("vote",))
-            if parsed and parsed.get("vote") in ("yes", "no"):
-                votes.append((ag.id, parsed["vote"], str(parsed.get("reasoning", ""))))
-            else:
-                retries.append((i, ag))
-
-        if retries:
-            retry_reqs = [reqs[i] for i, _ in retries]
-            retry_raw = await self.inference.generate_batch(retry_reqs)
-            for (i, ag), raw in zip(retries, retry_raw):
-                parsed = parse_json_lenient(raw, want_keys=("vote",))
-                if parsed and parsed.get("vote") in ("yes", "no"):
-                    votes.append(
-                        (ag.id, parsed["vote"], str(parsed.get("reasoning", "")))
-                    )
+        for attempt in range(1, max_attempts + 1):
+            if not pending:
+                break
+            retry_reqs = [reqs[i] for i in pending]
+            try:
+                raws = await self.inference.generate_batch(retry_reqs)
+            except Exception as exc:
+                self.console.log(
+                    f"[red]vote attempt {attempt} failed[/]: {exc}"
+                )
+                # Don't retry the whole batch on a backend hiccup; treat the
+                # remaining as null so the vote still closes.
+                break
+            still_pending: list[int] = []
+            for i, raw in zip(pending, raws):
+                last_raw[i] = raw or ""
+                tokens = (raw or "").strip().lower().split()
+                first = tokens[0].strip(".,!?\"'`*:;)(") if tokens else ""
+                if first in ("yes", "no"):
+                    decided[i] = (first, "")
                 else:
-                    votes.append((ag.id, "no", "malformed response"))
+                    still_pending.append(i)
+            if still_pending and attempt < max_attempts:
+                self.console.log(
+                    f"[yellow]vote attempt {attempt}[/]: "
+                    f"{len(still_pending)}/{len(pending)} malformed, retrying"
+                )
+            pending = still_pending
 
-        # Persist votes
-        yes = no = 0
-        for vid, v, reasoning in votes:
+        # Anything still pending after all attempts → null vote.
+        for i in pending:
+            decided[i] = ("null", "malformed response after all retries")
+
+        # Persist votes and tally.
+        yes = no = null = 0
+        for i, ag in enumerate(order):
+            v, motivation = decided.get(i, ("null", "no response"))
+            raw_for_storage = last_raw.get(i) if v == "null" else None
             await asyncio.to_thread(
-                self.store.record_vote, proposal.id, vid, v, reasoning
+                self.store.record_vote,
+                proposal.id,
+                ag.id,
+                v,
+                motivation,
+                raw_for_storage,
             )
             if v == "yes":
                 yes += 1
-            else:
+            elif v == "no":
                 no += 1
+            else:
+                null += 1
 
+        # Tally over valid votes only; ties → rejected (existing rule).
         outcome = "approved" if yes > no else "rejected"
         await asyncio.to_thread(
             self.store.close_proposal, proposal.id, outcome, yes, no
@@ -303,13 +352,15 @@ class VotingModule:
                 "outcome": outcome,
                 "yes": yes,
                 "no": no,
+                "null": null,
                 "target_id": proposal.target_id,
                 "change_type": proposal.change_type,
                 "to_value": proposal.to_value,
             },
         )
         self.console.log(
-            f"[bold]VOTE CLOSED[/] #{proposal.id}: yes={yes} no={no} → {outcome}"
+            f"[bold]VOTE CLOSED[/] #{proposal.id}: yes={yes} no={no} "
+            f"null={null} → {outcome}"
         )
 
         if outcome == "approved":
@@ -318,8 +369,12 @@ class VotingModule:
         # Reset everyone to idle
         for a in self.agents.values():
             a.state = AgentState.IDLE
+            a.current_conversation_id = None
             await asyncio.to_thread(
-                self.store.update_agent_state, a.id, state=a.state.value
+                self.store.update_agent_state,
+                a.id,
+                state=a.state.value,
+                current_conversation_id=None,
             )
 
         result = {
@@ -327,6 +382,7 @@ class VotingModule:
             "outcome": outcome,
             "yes": yes,
             "no": no,
+            "null": null,
         }
         self.active = None
         return result

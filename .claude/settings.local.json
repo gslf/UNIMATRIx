@@ -43,7 +43,18 @@
       "Bash(C:/Users/gioel/Desktop/unimatrix/inference_server/.venv/Scripts/python.exe *)",
       "Bash(nvidia-smi)",
       "Bash(.venv/Scripts/pytest.exe tests/ -x --tb=short)",
-      "Bash(.venv/Scripts/python.exe *)"
+      "Bash(.venv/Scripts/python.exe *)",
+      "Bash(python *)",
+      "Bash(dir C:UsersgioelDevEnvUNIMATRIx *)",
+      "Bash(C:/Users/gioel/DevEnv/UNIMATRIx/.venv/Scripts/python.exe *)",
+      "Bash(\"C:/Users/gioel/DevEnv/UNIMATRIx/.venv/Scripts/python.exe\" -m pip show llama-cpp-python)",
+      "Bash(.venv/Scripts/python -m pytest tests/test_voting.py tests/test_persistence.py -q)",
+      "Bash(sqlite3 runs/standard_20260502T082242Z.db \"SELECT vote, motivation, raw_response FROM votes ORDER BY voted_at DESC LIMIT 20\")",
+      "PowerShell($ErrorActionPreference = 'Stop'; python -c \"import sqlite3; c = sqlite3.connect\\('runs/standard_20260502T082242Z.db'\\); cur = c.cursor\\(\\); print\\('--- Latest votes ---'\\); [print\\(repr\\(row\\)\\) for row in cur.execute\\('SELECT proposal_id, voter_id, vote, substr\\(motivation,1,50\\), substr\\(raw_response,1,100\\) FROM votes ORDER BY voted_at DESC LIMIT 15'\\)]\")",
+      "PowerShell(tail *)",
+      "PowerShell(.venv\\\\Scripts\\\\python -m pytest tests/test_voting.py tests/test_orchestrator_smoke.py tests/test_inference_stub.py -x --tb=short)",
+      "Bash(git stash *)",
+      "Bash(PYTHONPATH=C:/Users/gioel/DevEnv/UNIMATRIx/src python -m pytest tests/test_voting.py tests/test_inference_stub.py -q)"
     ]
   }
 }
