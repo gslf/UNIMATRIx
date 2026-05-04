@@ -1,13 +1,15 @@
 # ::] UNIMATRIx
 
-A simulated society of ~50 LLM-driven agents. Each agent has a personality,
-a role (president, banker, scholar, worker, beggar...), and a social class.
+A simulated society of LLM-driven agents. Each agent has a personality, a
+role (president, banker, scholar, worker, beggar...), and a social class.
 They talk to each other, form opinions, change their minds, and vote on
 proposals that can move them between classes. The goal is to watch what
 emerges — coalitions, mobility, polarization — without scripting it.
 
-A web UI shows the conversations, votes, and social graphs in real time as
-the simulation ticks forward.
+A web control panel runs the show: you start the process, pick a config,
+hit **Start**, watch the conversations / votes / social graphs tick
+forward, and **Stop** when you've seen enough. Past runs stay browsable
+from the same UI.
 
 ![Unimatrix web UI](res/img/ss.png)
 
@@ -28,20 +30,27 @@ py -3 -m venv .venv
 
 pip install -e .
 
-python -m unimatrix.main --config config/example_run.json --backend stub
+python -m unimatrix.main --backend stub
 ```
 
-Open <http://localhost:8001/> in your browser.
+That starts the **control panel only** — no simulation is running yet.
+Open <http://localhost:8001/>, pick a config from the dropdown
+(`example_run.json`, `standard.json`, …), and click **Start simulation**.
 
-Press Ctrl-C to stop. Each run is saved under `runs/<name>_<timestamp>/`
-(SQLite DB + Chroma store + matplotlib graphs).
+Click **Stop simulation** to end the run. The control panel keeps running
+so you can pick another config and start again, or browse past runs in
+the Run manager. Press Ctrl-C in the terminal to shut the whole process
+down.
+
+Each run is saved under `runs/<name>_<timestamp>/` (SQLite DB + Chroma
+store + matplotlib graphs) and registered in `runs/_registry.db`.
 
 ## Run it with a real model
 
 The repo ships a small inference server under `inference_server/` that
-downloads GGUF models from HuggingFace and serves them on an OpenAI-compatible
-endpoint. It uses its own venv so its heavy GPU dependencies don't pollute
-this one.
+downloads GGUF models from HuggingFace and serves them on an OpenAI-
+compatible endpoint. It uses its own venv so its heavy GPU dependencies
+don't pollute this one.
 
 ```bash
 # 1. start the inference server (separate terminal, separate venv)
@@ -57,29 +66,44 @@ python serve.py qwen2.5-3b              # serves on http://localhost:8000
 # 2. in another terminal, from the repo root
 .venv/Scripts/activate
 python -m unimatrix.main \
-    --config config/example_run.json \
     --backend llama_cpp \
     --endpoint http://localhost:8000
 ```
+
+The control panel comes up; pick a config and Start. The `--backend` /
+`--endpoint` / `--model` CLI flags are applied as **overrides** to
+whichever config you pick at start time, so the same flags work whether
+the config defaults to a different backend.
 
 You can also point Unimatrix at any OpenAI-compatible endpoint (vLLM, an
 OpenAI-API-compatible cloud, etc.) with `--backend vllm --endpoint <url>`.
 
 ## Configuration
 
-Everything about a run lives in a single JSON file. `config/example_run.json`
-is a complete starting point: 50 agents, 15 roles, 4 classes, the social
-dynamics tuning, the inference settings. Copy it and edit.
+Everything about a run lives in a single JSON file in the configs
+directory (default: `config/`). Two starters ship with the repo:
 
-Useful CLI overrides:
+- `config/standard.json` — 30 agents, balanced default for a smoke test.
+- `config/example_run.json` — 50 agents, fuller demographics.
+
+Copy either one and edit. Any `*.json` file dropped into the configs
+directory shows up in the UI dropdown on the next page refresh.
+
+Useful CLI flags (all optional):
 
 | Flag | Effect |
 |------|--------|
-| `--backend stub\|llama_cpp\|vllm` | Override the config's backend |
-| `--endpoint URL` | Override the inference endpoint |
+| `--configs-dir DIR` | Where to look for config files (default: `config`) |
+| `--backend stub\|llama_cpp\|vllm` | Override `inference.backend` at start time |
+| `--endpoint URL` | Override `inference.endpoint` |
 | `--model NAME` | Override the model name sent to the endpoint |
+| `--host 127.0.0.1` | Web UI bind host |
 | `--port 8001` | Web UI port |
 | `--runs-dir runs` | Where per-run artifacts go |
+| `--log-level info` | Uvicorn log level |
+
+The control panel's **Recent events** box mirrors the orchestrator's
+terminal log line-by-line — the same human-readable feed, no JSON dump.
 
 ## Optional extras
 
@@ -105,10 +129,12 @@ src/unimatrix/
   voting/         proposals, mandatory votes, tally
   orchestrator/   main loop, social-need decay, anti-silence trigger
   graphs/         matplotlib renderers
-  web/            FastAPI + HTML UI
-  main.py         CLI entry point
-config/           example run config
+  web/            FastAPI control panel + HTML UI
+  session.py      simulation lifecycle (start / stop, one orchestrator)
+  log_console.py  Rich console that mirrors log lines into the UI
+  main.py         CLI entry point (starts the web server only)
+config/           ships with example configs
 inference_server/ bundled local llama.cpp host (own venv)
-runs/             per-run artifacts (gitignored)
+runs/             per-run artifacts + registry (gitignored)
 tests/            pytest suite (uses stub backend)
 ```

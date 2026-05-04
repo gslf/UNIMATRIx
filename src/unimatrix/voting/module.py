@@ -215,12 +215,11 @@ class VotingModule:
                 text = (raw or "").strip()
                 if not text:
                     continue
-                # Take the first non-empty line, cap length defensively.
+                # Take the first non-empty line.
                 first_line = next(
                     (ln.strip() for ln in text.splitlines() if ln.strip()),
                     "",
                 )
-                first_line = first_line[:600]
                 if not first_line:
                     continue
                 entry = {

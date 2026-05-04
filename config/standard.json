@@ -11,7 +11,7 @@
     "endpoint": "http://localhost:8000",
     "model": "gpt-oss-20b",
     "max_batch_size": 64,
-    "max_tokens_per_message": 200,
+    "max_tokens_per_message": 2000,
     "temperature": 0.95,
     "top_p": 0.95,
     "request_timeout_seconds": 240

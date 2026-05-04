@@ -291,7 +291,7 @@ class Orchestrator:
 
         # Build per-agent prompt
         recent_events = [
-            f"{e['event_type']}: {json.dumps(e['payload'])[:120]}"
+            f"{e['event_type']}: {json.dumps(e['payload'])[:600]}"
             for e in await asyncio.to_thread(self.store.recent_events, 10)
         ]
         peers = list(self.agents.values())

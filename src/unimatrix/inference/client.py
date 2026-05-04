@@ -115,7 +115,7 @@ class InferenceClient:
         try:
             data = r.json()
             content = data["choices"][0]["message"]["content"] or ""
-            return strip_harmony_channels(content)
+            return strip_think_tags(strip_harmony_channels(content))
         except (KeyError, IndexError, TypeError, ValueError) as exc:
             raise RuntimeError(
                 f"unexpected response shape from {self.cfg.endpoint}: "
@@ -272,6 +272,35 @@ def _stub_chat(req: GenerationRequest, rng: random.Random) -> str:
 # ---------------------------------------------------------------------------
 # JSON parsing helpers
 # ---------------------------------------------------------------------------
+
+# Reasoning models (Qwen/QwQ, DeepSeek-R1, etc.) emit chain-of-thought wrapped
+# in <think>...</think>. Some chat templates also pre-inject the opening
+# <think> tag, so the response can contain only </think> at the end of CoT.
+_THINK_BLOCK_RE = re.compile(r"<think\b[^>]*>.*?</think\s*>", re.DOTALL | re.IGNORECASE)
+_THINK_CLOSE_ONLY_RE = re.compile(r"^.*?</think\s*>", re.DOTALL | re.IGNORECASE)
+_THINK_OPEN_RE = re.compile(r"<think\b[^>]*>", re.IGNORECASE)
+_THINK_CLOSE_RE = re.compile(r"</think\s*>", re.IGNORECASE)
+
+
+def strip_think_tags(raw: str) -> str:
+    """Remove reasoning-model <think>...</think> chain-of-thought.
+
+    Handles three cases:
+      - Balanced <think>...</think> blocks are removed entirely.
+      - A trailing/lone </think> with no opener (chat template injected the
+        opener) drops everything up to and including </think>.
+      - An open <think> with no closer (truncated output) returns "" — the
+        model never reached the real reply.
+    """
+    if not raw:
+        return raw
+    out = _THINK_BLOCK_RE.sub("", raw)
+    if _THINK_CLOSE_RE.search(out) and not _THINK_OPEN_RE.search(out):
+        out = _THINK_CLOSE_ONLY_RE.sub("", out, count=1)
+    elif _THINK_OPEN_RE.search(out) and not _THINK_CLOSE_RE.search(out):
+        return ""
+    return out.strip()
+
 
 # gpt-oss / harmony-style channels — extract the final message body if present.
 _HARMONY_FINAL_RE = re.compile(

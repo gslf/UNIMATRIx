@@ -42,7 +42,7 @@ class InferenceConfig(BaseModel):
     request_timeout_seconds: float = Field(600.0, gt=0)
     # Hard cap on output tokens for short structured outputs (decisions, votes,
     # summaries). Conversation turns use max_tokens_per_message instead.
-    max_tokens_per_decision: int = Field(120, ge=16)
+    max_tokens_per_decision: int = Field(2000, ge=16)
 
 
 class MemoryConfig(BaseModel):
@@ -100,7 +100,7 @@ class VotingConfig(BaseModel):
     # Each round = one short speech per agent (parallel batch). 0 disables the
     # debate entirely (legacy fast-path, vote-only).
     debate_rounds: int = Field(1, ge=0)
-    max_tokens_per_debate_speech: int = Field(120, ge=10)
+    max_tokens_per_debate_speech: int = Field(2000, ge=10)
     # Maximum attempts (including the first) to get a well-formed vote from a
     # given agent. Anything malformed after the last attempt is recorded as a
     # 'null' vote that counts neither yes nor no.

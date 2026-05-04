@@ -1,9 +1,12 @@
 """FastAPI control server.
 
-Endpoints per spec section 12. The graph renderer is invoked synchronously on
-each /graphs/<name>.png request — cheap enough since rendering happens at most
-on user demand. Run deletion is performed on the registry + filesystem; the
-caller should ensure the run isn't currently active.
+Endpoints per spec section 12. The simulation lifecycle is owned by a
+SessionManager: the server starts with no active orchestrator, and the user
+chooses a config and clicks Start in the UI to spawn one. Endpoints that
+require a live orchestrator return HTTP 409 when none is active.
+
+The graph renderer is lazily built per-request from the session's current
+orchestrator, since `cfg` and `store` change across runs.
 """
 from __future__ import annotations
 
@@ -23,23 +26,57 @@ from pydantic import BaseModel, Field
 from ..graphs import GRAPH_NAMES, GraphRenderer
 from ..orchestrator import Orchestrator
 from ..persistence import Registry, RunStore
+from ..session import SessionError, SessionManager
 
 
 class BroadcastIn(BaseModel):
     message: str = Field(..., min_length=1, max_length=4000)
 
 
+class StartIn(BaseModel):
+    config: str = Field(..., min_length=1, max_length=200)
+
+
+def _idle_state(session: SessionManager) -> dict:
+    """State payload returned when no simulation is currently running."""
+    recent_lines = getattr(session.console, "recent_log_lines", None)
+    events = recent_lines(50) if callable(recent_lines) else []
+    return {
+        "running": False,
+        "run_id": None,
+        "paused": False,
+        "tick_no": 0,
+        "seconds_since_last_tick": None,
+        "seconds_since_last_activity": None,
+        "agents_per_state": {},
+        "agents_per_class": {},
+        "active_conversations": [],
+        "active_vote": None,
+        "broadcast_queue_length": 0,
+        "metrics": {},
+        "recent_events": events,
+        "configs": session.list_configs(),
+    }
+
+
 def build_app(
-    orch: Orchestrator,
+    session: SessionManager,
     registry: Registry,
     runs_dir: Path,
     static_dir: Path,
 ) -> FastAPI:
     app = FastAPI(title="Unimatrix Control")
 
-    graph_out = orch.run_dir / "graphs"
-    graph_out.mkdir(parents=True, exist_ok=True)
-    renderer = GraphRenderer(orch.cfg, orch.store, graph_out)
+    def _require_orch() -> Orchestrator:
+        orch = session.orchestrator
+        if orch is None or not session.is_active:
+            raise HTTPException(409, "no active simulation")
+        return orch
+
+    def _renderer_for(orch: Orchestrator) -> GraphRenderer:
+        graph_out = orch.run_dir / "graphs"
+        graph_out.mkdir(parents=True, exist_ok=True)
+        return GraphRenderer(orch.cfg, orch.store, graph_out)
 
     @contextmanager
     def open_run_store(run_id: int) -> Iterator[RunStore]:
@@ -50,7 +87,8 @@ def build_app(
         connection (WAL mode keeps reads non-blocking even if the original
         process is still writing) and close it when done.
         """
-        if run_id == orch.run_id:
+        orch = session.orchestrator
+        if orch is not None and run_id == orch.run_id:
             yield orch.store
             return
         info = registry.get(run_id)
@@ -87,33 +125,73 @@ def build_app(
             },
         )
 
+    # ----- session lifecycle -----
+
+    @app.get("/configs")
+    async def list_available_configs() -> JSONResponse:
+        return JSONResponse({"configs": session.list_configs()})
+
+    @app.post("/sim/start")
+    async def sim_start(body: StartIn) -> JSONResponse:
+        try:
+            run_id = await session.start(body.config)
+        except SessionError as exc:
+            raise HTTPException(exc.status, exc.message)
+        return JSONResponse({"running": True, "run_id": run_id})
+
+    @app.post("/sim/stop")
+    async def sim_stop() -> JSONResponse:
+        stopped = await session.stop()
+        return JSONResponse({"running": False, "stopped": stopped})
+
+    # ----- live orchestrator views -----
+
     @app.get("/state")
     async def state() -> JSONResponse:
+        orch = session.orchestrator
+        if orch is None or not session.is_active:
+            return JSONResponse(_idle_state(session))
         snap = orch.snapshot()
-        snap["recent_events"] = await asyncio.to_thread(orch.store.recent_events, 12)
+        snap["running"] = True
+        snap["configs"] = session.list_configs()
+        recent_lines = getattr(orch.console, "recent_log_lines", None)
+        if callable(recent_lines):
+            snap["recent_events"] = recent_lines(50)
+        else:
+            snap["recent_events"] = await asyncio.to_thread(
+                orch.store.recent_events, 12
+            )
         return JSONResponse(snap)
 
     @app.get("/diag")
     async def diag() -> JSONResponse:
+        orch = _require_orch()
         return JSONResponse(orch.diagnostics())
 
     @app.post("/broadcast")
     async def broadcast(body: BroadcastIn) -> JSONResponse:
+        orch = _require_orch()
         status = await orch.queue_broadcast("HUMAN", body.message)
-        return JSONResponse({"status": status, "queue_length": orch.snapshot()["broadcast_queue_length"]})
+        return JSONResponse({
+            "status": status,
+            "queue_length": orch.snapshot()["broadcast_queue_length"],
+        })
 
     @app.post("/pause")
     async def pause() -> JSONResponse:
+        orch = _require_orch()
         orch.pause()
         return JSONResponse({"paused": True})
 
     @app.post("/resume")
     async def resume() -> JSONResponse:
+        orch = _require_orch()
         orch.resume()
         return JSONResponse({"paused": False})
 
     @app.post("/checkpoint")
     async def checkpoint() -> JSONResponse:
+        orch = _require_orch()
         cid = await orch.force_checkpoint()
         return JSONResponse({"checkpoint_id": cid})
 
@@ -121,17 +199,23 @@ def build_app(
     async def graph(name: str) -> Response:
         if name not in GRAPH_NAMES:
             raise HTTPException(404, f"unknown graph {name}")
+        orch = _require_orch()
+        renderer = _renderer_for(orch)
         path = await asyncio.to_thread(renderer.render, name)
         return FileResponse(path, media_type="image/png")
 
     @app.post("/graphs/refresh")
     async def refresh_all() -> JSONResponse:
+        orch = _require_orch()
+        renderer = _renderer_for(orch)
         results = await asyncio.to_thread(renderer.render_all)
         return JSONResponse({k: str(v) for k, v in results.items()})
 
     @app.get("/agents")
     async def live_agents() -> JSONResponse:
         """Live-run roster used by the agent explorer panel."""
+        orch = _require_orch()
+
         def _impl() -> list[dict]:
             agents = orch.store.list_agents()
             return [
@@ -150,6 +234,7 @@ def build_app(
     @app.get("/agents/{agent_id}")
     async def live_agent_detail(agent_id: str) -> JSONResponse:
         """Live-run agent profile + compact memory + recent decisions."""
+        orch = _require_orch()
         roles_by_id = {r.id: r for r in orch.cfg.roles}
 
         def _impl() -> dict:
@@ -246,6 +331,8 @@ def build_app(
             }
 
         return JSONResponse(await asyncio.to_thread(_impl))
+
+    # ----- registry / past-run views -----
 
     @app.get("/runs")
     async def list_runs() -> JSONResponse:
@@ -403,7 +490,8 @@ def build_app(
         info = registry.get(run_id)
         if info is None:
             raise HTTPException(404, f"run {run_id} not found")
-        if run_id == orch.run_id:
+        orch = session.orchestrator
+        if orch is not None and run_id == orch.run_id and session.is_active:
             raise HTTPException(409, "cannot delete the currently running run")
         # remove db file
         db_path = Path(info["db_path"])

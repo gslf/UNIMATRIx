@@ -169,9 +169,34 @@
 </head>
 <body>
 <header>
-  <h1>::] UNIMATRIx</h1>
+  <h1>::] UNIMATRIx
+    <span id="header-status" style="float:right; font-weight:normal; font-size:0.85rem;
+          padding:2px 10px; border-radius:12px; background:#21262d;
+          color:#8b949e;">unknown</span>
+  </h1>
 </header>
 <main>
+  <section style="grid-column: 1 / -1;">
+    <h2>Simulation</h2>
+    <div id="sim-idle" class="row" style="display:none">
+      <label for="sim-config" class="muted-text">Config:</label>
+      <select id="sim-config" style="background:#0d1117; color:#e6edf3;
+              border:1px solid #30363d; border-radius:4px; padding:6px 8px;
+              min-width:240px; font-family:inherit;"></select>
+      <button id="btn-start">Start simulation</button>
+      <span id="sim-action-status" class="muted-text"></span>
+    </div>
+    <div id="sim-active" class="row" style="display:none">
+      <span class="muted-text">Active run:</span>
+      <span id="sim-active-info"><span class="pill">—</span></span>
+      <button id="btn-stop" class="danger">Stop simulation</button>
+      <span id="sim-action-status-active" class="muted-text"></span>
+    </div>
+    <div id="sim-loading" class="muted-text" style="font-size:0.85rem;">
+      checking session…
+    </div>
+  </section>
+
   <section class="capped">
     <h2>Current state</h2>
     <div class="capped-body">
@@ -298,12 +323,15 @@ function buildGraphs() {
   for (const g of GRAPHS) {
     const div = document.createElement("div");
     div.className = "graph";
+    // Don't request the image until a simulation is actually running —
+    // otherwise we'd burn 7 instant 409s on a fresh page load.
     div.innerHTML = `
       <div class="row" style="justify-content: space-between;">
         <strong>${g}</strong>
         <button class="muted" data-graph="${g}">Refresh</button>
       </div>
-      <img id="img-${g}" src="/graphs/${g}.png?ts=${Date.now()}" alt="${g}" />
+      <img id="img-${g}" alt="${g} (no run yet)"
+           style="min-height:40px; background:#0d1117;" />
     `;
     root.appendChild(div);
   }
@@ -321,36 +349,183 @@ async function refreshAll() {
   GRAPHS.forEach(refreshGraph);
 }
 
+let isRunning = false;
+
+function renderSimControls(s) {
+  const idle = document.getElementById("sim-idle");
+  const active = document.getElementById("sim-active");
+  const loading = document.getElementById("sim-loading");
+  const headerStatus = document.getElementById("header-status");
+  loading.style.display = "none";
+  if (s.running) {
+    idle.style.display = "none";
+    active.style.display = "flex";
+    document.getElementById("sim-active-info").innerHTML =
+      `<span class="pill">run #${s.run_id ?? "?"}</span>` +
+      `<span class="pill">tick ${s.tick_no ?? 0}</span>` +
+      (s.paused ? `<span class="pill bad">paused</span>` : `<span class="pill ok">running</span>`);
+    headerStatus.textContent = s.paused ? "paused" : "running";
+    headerStatus.style.color = s.paused ? "#d29922" : "#3fb950";
+  } else {
+    active.style.display = "none";
+    idle.style.display = "flex";
+    headerStatus.textContent = "idle";
+    headerStatus.style.color = "#8b949e";
+    populateConfigSelect(s.configs || []);
+  }
+  // Disable controls that require an orchestrator.
+  for (const id of ["btn-pause", "btn-resume", "btn-checkpoint",
+                     "btn-show-diag", "btn-send", "btn-refresh-all"]) {
+    const el = document.getElementById(id);
+    if (el) el.disabled = !s.running;
+  }
+  document.getElementById("msg").disabled = !s.running;
+}
+
+function populateConfigSelect(configs) {
+  const sel = document.getElementById("sim-config");
+  const prev = sel.value;
+  sel.innerHTML = "";
+  if (!configs.length) {
+    const opt = document.createElement("option");
+    opt.value = "";
+    opt.textContent = "(no configs found)";
+    opt.disabled = true;
+    sel.appendChild(opt);
+    document.getElementById("btn-start").disabled = true;
+    return;
+  }
+  for (const c of configs) {
+    const opt = document.createElement("option");
+    opt.value = c.file;
+    opt.textContent = c.error
+      ? `${c.file} — ⚠ ${c.error}`
+      : `${c.simulation_name} (${c.file}, ${c.agents ?? "?"} agents)`;
+    if (c.error) opt.disabled = true;
+    sel.appendChild(opt);
+  }
+  if (prev && Array.from(sel.options).some(o => o.value === prev)) {
+    sel.value = prev;
+  }
+  document.getElementById("btn-start").disabled = false;
+}
+
+async function startSim() {
+  const sel = document.getElementById("sim-config");
+  const status = document.getElementById("sim-action-status");
+  const startBtn = document.getElementById("btn-start");
+  if (!sel.value) {
+    status.textContent = "(pick a config first)";
+    return;
+  }
+  startBtn.disabled = true;
+  status.textContent = "starting…";
+  try {
+    const r = await fetch("/sim/start", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ config: sel.value }),
+    });
+    if (!r.ok) {
+      const err = await r.text();
+      status.textContent = `error: ${err}`;
+      startBtn.disabled = false;
+      return;
+    }
+    status.textContent = "started.";
+    loadState();
+  } catch (e) {
+    status.textContent = `error: ${e}`;
+    startBtn.disabled = false;
+  }
+}
+
+async function stopSim() {
+  if (!confirm("Stop the running simulation? Any active conversations will close.")) return;
+  const status = document.getElementById("sim-action-status-active");
+  const stopBtn = document.getElementById("btn-stop");
+  stopBtn.disabled = true;
+  status.textContent = "stopping…";
+  try {
+    const r = await fetch("/sim/stop", { method: "POST" });
+    if (!r.ok) {
+      status.textContent = `error: ${await r.text()}`;
+      stopBtn.disabled = false;
+      return;
+    }
+    status.textContent = "stopped.";
+    loadState();
+    loadRuns();
+  } catch (e) {
+    status.textContent = `error: ${e}`;
+    stopBtn.disabled = false;
+  }
+}
+
 async function loadState() {
   let s;
   try { s = await (await fetch("/state")).json(); }
   catch { return; }
+  const wasRunning = isRunning;
+  isRunning = !!s.running;
   liveRunId = s.run_id;
+  renderSimControls(s);
+  // When transitioning from idle → running, refresh the runs table and graphs
+  // so the user sees the new entry without waiting for the next interval.
+  if (!wasRunning && isRunning) {
+    loadRuns();
+    loadAgentList();
+    GRAPHS.forEach(refreshGraph);
+  }
   const sum = document.getElementById("state-summary");
-  const perClass = Object.entries(s.agents_per_class || {})
-    .map(([k, v]) => `<span class="pill">${k}: ${v}</span>`).join("");
-  const perState = Object.entries(s.agents_per_state || {})
-    .map(([k, v]) => `<span class="pill">${k}: ${v}</span>`).join("");
-  const conv = (s.active_conversations || []).map(c =>
-    `<span class="pill">${c.type} #${c.id} (${c.participants.length})</span>`).join("") || "<span class='muted-text'>none</span>";
-  const vote = s.active_vote
-    ? `<span class="pill">${s.active_vote.change_type} → ${s.active_vote.to_value} (target ${s.active_vote.target_id})</span>`
-    : "<span class='muted-text'>none</span>";
-  sum.innerHTML = `
-    <div><strong>tick:</strong> ${s.tick_no}
-      &nbsp;<span class="muted-text">last tick ${s.seconds_since_last_tick ?? "?"}s ago</span>
-      &nbsp; <strong>paused:</strong> <span class="${s.paused ? 'bad' : 'ok'}">${s.paused}</span>
-    </div>
-    <div style="margin-top:6px"><strong>by class:</strong> ${perClass}</div>
-    <div style="margin-top:6px"><strong>by state:</strong> ${perState}</div>
-    <div style="margin-top:6px"><strong>active conversations:</strong> ${conv}</div>
-    <div style="margin-top:6px"><strong>active vote:</strong> ${vote}</div>
-    <div style="margin-top:6px"><strong>broadcast queue:</strong> ${s.broadcast_queue_length}</div>
-  `;
-  renderMetrics(s.metrics || {});
+  if (!isRunning) {
+    sum.innerHTML = `<span class="muted-text">No simulation running. ` +
+      `Pick a config above and click <b>Start simulation</b>.</span>`;
+    document.getElementById("metrics-summary").innerHTML = "";
+    document.getElementById("error-banner").style.display = "none";
+  } else {
+    const perClass = Object.entries(s.agents_per_class || {})
+      .map(([k, v]) => `<span class="pill">${k}: ${v}</span>`).join("");
+    const perState = Object.entries(s.agents_per_state || {})
+      .map(([k, v]) => `<span class="pill">${k}: ${v}</span>`).join("");
+    const conv = (s.active_conversations || []).map(c =>
+      `<span class="pill">${c.type} #${c.id} (${c.participants.length})</span>`).join("") || "<span class='muted-text'>none</span>";
+    const vote = s.active_vote
+      ? `<span class="pill">${s.active_vote.change_type} → ${s.active_vote.to_value} (target ${s.active_vote.target_id})</span>`
+      : "<span class='muted-text'>none</span>";
+    sum.innerHTML = `
+      <div><strong>tick:</strong> ${s.tick_no}
+        &nbsp;<span class="muted-text">last tick ${s.seconds_since_last_tick ?? "?"}s ago</span>
+        &nbsp; <strong>paused:</strong> <span class="${s.paused ? 'bad' : 'ok'}">${s.paused}</span>
+      </div>
+      <div style="margin-top:6px"><strong>by class:</strong> ${perClass}</div>
+      <div style="margin-top:6px"><strong>by state:</strong> ${perState}</div>
+      <div style="margin-top:6px"><strong>active conversations:</strong> ${conv}</div>
+      <div style="margin-top:6px"><strong>active vote:</strong> ${vote}</div>
+      <div style="margin-top:6px"><strong>broadcast queue:</strong> ${s.broadcast_queue_length}</div>
+    `;
+    renderMetrics(s.metrics || {});
+  }
   const ev = s.recent_events || [];
-  document.getElementById("events").textContent =
-    ev.length ? JSON.stringify(ev, null, 2) : "(no events recorded yet)";
+  const evPane = document.getElementById("events");
+  if (!ev.length) {
+    evPane.textContent = "(no events recorded yet)";
+  } else if (typeof ev[0] === "object" && ev[0] && "text" in ev[0]) {
+    // New format: console-style log lines captured from the orchestrator.
+    evPane.textContent = ev.map(e => `[${e.ts || "?"}] ${e.text}`).join("\n");
+  } else {
+    // Fallback: legacy public_events rows.
+    evPane.textContent = JSON.stringify(ev, null, 2);
+  }
+  // Auto-scroll to bottom so the newest line stays visible. The scrolling
+  // container is `.capped-body`, not the <pre> itself. Only follow when the
+  // user is already near the bottom — don't yank them away if they scrolled
+  // up to read older entries.
+  const scroller = evPane.parentElement;
+  if (scroller) {
+    const nearBottom =
+      scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 60;
+    if (nearBottom) scroller.scrollTop = scroller.scrollHeight;
+  }
 }
 
 function renderMetrics(m) {
@@ -446,6 +621,16 @@ let agentListCache = [];
 let selectedAgentId = null;
 
 async function loadAgentList() {
+  if (!isRunning) {
+    agentListCache = [];
+    document.getElementById("agent-list").innerHTML =
+      `<div style="padding:12px" class="muted-text">No simulation running.</div>`;
+    document.getElementById("agent-count").textContent = "";
+    document.getElementById("agent-detail").innerHTML =
+      `<span class="muted-text">No simulation running.</span>`;
+    selectedAgentId = null;
+    return;
+  }
   let agents;
   try {
     const r = await fetch("/agents");
@@ -1156,6 +1341,8 @@ document.getElementById("btn-send").addEventListener("click", async () => {
   document.getElementById("msg").value = "";
 });
 document.getElementById("btn-refresh-all").addEventListener("click", refreshAll);
+document.getElementById("btn-start").addEventListener("click", startSim);
+document.getElementById("btn-stop").addEventListener("click", stopSim);
 
 buildGraphs();
 loadState();
@@ -1164,6 +1351,9 @@ loadAgentList();
 setInterval(loadState, 1500);
 setInterval(loadRuns, 15000);
 setInterval(() => {
+  // Skip live-roster polls when no simulation is running — /agents would
+  // just return 409 and the agent panel is hidden anyway.
+  if (!isRunning) return;
   loadAgentList();
   if (selectedAgentId) loadAgentDetail(selectedAgentId);
 }, 4000);
