@@ -8,10 +8,11 @@
   },
   "inference": {
     "backend": "vllm",
-    "endpoint": "http://localhost:8000",
-    "model": "gpt-oss-20b",
+    "endpoint": "http://127.0.0.1:1234",
+    "model": "phi-4-reasoning-plus",
     "max_batch_size": 64,
-    "max_tokens_per_message": 2000,
+    "max_tokens_per_message": 10000,
+    "max_tokens_per_decision": 10000,
     "temperature": 0.95,
     "top_p": 0.95,
     "request_timeout_seconds": 240
@@ -41,7 +42,7 @@
   },
   "voting": {
     "max_ticks_without_vote": 10,
-    "warmup_ticks": 4,
+    "warmup_ticks": 3,
     "debate_rounds": 1,
     "max_tokens_per_debate_speech": 120,
     "max_vote_attempts": 3

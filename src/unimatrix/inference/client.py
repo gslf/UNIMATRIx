@@ -86,8 +86,17 @@ class InferenceClient:
             "top_p": req.top_p if req.top_p is not None else self.cfg.top_p,
         }
         if req.json_mode:
-            # Both backends accept response_format={'type': 'json_object'}.
-            payload["response_format"] = {"type": "json_object"}
+            payload["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "response",
+                    "strict": True,
+                    "schema": {
+                        "type": "object",
+                        "minProperties": 1,
+                    },
+                },
+            }
         try:
             r = await self._client.post("/v1/chat/completions", json=payload)
         except httpx.TimeoutException as exc:

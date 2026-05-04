@@ -16,9 +16,10 @@ from the same UI.
 ## What you need
 
 - Python 3.11 or newer
-- Either a **GPU + local model** (recommended), or just the **stub backend**
-  if you only want to see the wiring run. The stub produces deterministic
-  fake replies — no LLM, no GPU, no network.
+- Either [**LM Studio**](https://lmstudio.ai/) running a local model
+  (recommended — see below), or just the **stub backend** if you only
+  want to see the wiring run. The stub produces deterministic fake
+  replies — no LLM, no GPU, no network.
 
 ## Run it (stub, no GPU)
 
@@ -45,38 +46,46 @@ down.
 Each run is saved under `runs/<name>_<timestamp>/` (SQLite DB + Chroma
 store + matplotlib graphs) and registered in `runs/_registry.db`.
 
-## Run it with a real model
+## Run it with a real model (LM Studio)
 
-The repo ships a small inference server under `inference_server/` that
-downloads GGUF models from HuggingFace and serves them on an OpenAI-
-compatible endpoint. It uses its own venv so its heavy GPU dependencies
-don't pollute this one.
+The recommended way to serve a local model is [**LM Studio**](https://lmstudio.ai/)
+— a desktop app that downloads GGUF models from HuggingFace and exposes
+them on an OpenAI-compatible HTTP endpoint. It handles GPU offload,
+quantization, and chat templates for you, so this repo doesn't need to.
+
+1. **Install LM Studio** from the [download page](https://lmstudio.ai/download)
+   (macOS, Windows, Linux).
+2. **Download a model** from inside the app — search HuggingFace and
+   pick any chat-tuned GGUF (e.g. `qwen2.5-3b-instruct`,
+   `phi-4-reasoning-plus`, …). See
+   [Download a model](https://lmstudio.ai/docs/app/basics/download-model).
+3. **Start the local server**: open the **Developer** tab and toggle
+   *Start Server*, or run `lms server start` from a terminal. By default
+   it listens on `http://localhost:1234`. See
+   [Local LLM API Server](https://lmstudio.ai/docs/app/api) and
+   [`lms server start`](https://lmstudio.ai/docs/cli/serve/server-start).
+4. **Load the model** in the same Developer tab so it's ready to serve
+   requests.
+
+Then, from this repo:
 
 ```bash
-# 1. start the inference server (separate terminal, separate venv)
-#    full instructions in inference_server/README.md
-cd inference_server
-py -3.12 -m venv .venv && .venv/Scripts/activate
-pip install .
-python download.py qwen2.5-3b           # ~2 GB, runs on CPU
-python serve.py qwen2.5-3b              # serves on http://localhost:8000
-```
-
-```bash
-# 2. in another terminal, from the repo root
 .venv/Scripts/activate
 python -m unimatrix.main \
-    --backend llama_cpp \
-    --endpoint http://localhost:8000
+    --backend vllm \
+    --endpoint http://localhost:1234 \
+    --model phi-4-reasoning-plus
 ```
 
 The control panel comes up; pick a config and Start. The `--backend` /
 `--endpoint` / `--model` CLI flags are applied as **overrides** to
-whichever config you pick at start time, so the same flags work whether
-the config defaults to a different backend.
+whichever config you pick at start time. `--backend vllm` works for any
+OpenAI-compatible endpoint, including LM Studio, vLLM, or a remote
+OpenAI-API-compatible cloud.
 
-You can also point Unimatrix at any OpenAI-compatible endpoint (vLLM, an
-OpenAI-API-compatible cloud, etc.) with `--backend vllm --endpoint <url>`.
+The shipped `config/standard.json` already points at LM Studio's default
+`http://127.0.0.1:1234`, so once a model is loaded you can drop the CLI
+flags entirely.
 
 ## Configuration
 
@@ -134,7 +143,6 @@ src/unimatrix/
   log_console.py  Rich console that mirrors log lines into the UI
   main.py         CLI entry point (starts the web server only)
 config/           ships with example configs
-inference_server/ bundled local llama.cpp host (own venv)
 runs/             per-run artifacts + registry (gitignored)
 tests/            pytest suite (uses stub backend)
 ```

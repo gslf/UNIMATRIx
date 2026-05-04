@@ -56,7 +56,10 @@
       "Bash(git stash *)",
       "Bash(PYTHONPATH=C:/Users/gioel/DevEnv/UNIMATRIx/src python -m pytest tests/test_voting.py tests/test_inference_stub.py -q)",
       "Bash(C:\\\\Users\\\\gioel\\\\DevEnv\\\\UNIMATRIx\\\\.venv\\\\Scripts\\\\python.exe *)",
-      "Bash(PYTHONPATH=src python -m pytest tests/ -x -q --tb=short)"
+      "Bash(PYTHONPATH=src python -m pytest tests/ -x -q --tb=short)",
+      "Bash(git -C C:\\\\Users\\\\gioel\\\\DevEnv\\\\UNIMATRIx ls-files)",
+      "Bash(findstr /i \"inference\")",
+      "WebFetch(domain:lmstudio.ai)"
     ]
   }
 }
