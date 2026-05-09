@@ -1,4 +1,5 @@
-# ::] UNIMATRIx
+# ::] UNIMATRIx v1.0.1
+
 
 A simulated society of LLM-driven agents. Each agent has a personality, a
 role (president, banker, scholar, worker, beggar...), and a social class.
@@ -103,7 +104,7 @@ Useful CLI flags (all optional):
 | Flag | Effect |
 |------|--------|
 | `--configs-dir DIR` | Where to look for config files (default: `config`) |
-| `--backend stub\|llama_cpp\|vllm` | Override `inference.backend` at start time |
+| `--backend stub\|vllm` | Override `inference.backend` at start time |
 | `--endpoint URL` | Override `inference.endpoint` |
 | `--model NAME` | Override the model name sent to the endpoint |
 | `--host 127.0.0.1` | Web UI bind host |

@@ -189,12 +189,11 @@ class Orchestrator:
     async def _tick(self) -> None:
         self._tick_no += 1
         now = time.monotonic()
-        elapsed = now - self._last_tick_ts
         self._last_tick_ts = now
 
         # 1) decay
         social_need.decay(
-            self.agents.values(), elapsed, self.cfg.social.social_need_decay_per_minute
+            self.agents.values(), self.cfg.social.social_need_decay_per_tick
         )
 
         # 2) recovery path: a vote left active from a prior tick (e.g. crash

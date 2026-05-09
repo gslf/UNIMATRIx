@@ -20,7 +20,6 @@ def stub_config(example_config_path, tmp_path) -> Path:
     cfg["simulation"]["tick_interval_seconds"] = 0.05
     cfg["simulation"]["auto_checkpoint_minutes"] = 999
     cfg["inference"]["backend"] = "stub"
-    cfg["memory"]["chroma_persist"] = False
     cfg["memory"]["embedding_model"] = ""
     cfg["social"]["silence_detection_seconds"] = 0.5
     cfg["agents"] = cfg["agents"][:6]

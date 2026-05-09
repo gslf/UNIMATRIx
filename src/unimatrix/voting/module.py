@@ -1,14 +1,4 @@
 """Voting module — proposals, mandatory votes, tally, application.
-
-Behavior per spec section 10:
-  - Only one active proposal at a time. Concurrent proposals are rejected.
-  - Opening a vote interrupts every active conversation.
-  - Voting is mandatory. Malformed responses are retried, then recorded as null.
-  - Inference is batched: all 50 votes go in a single asyncio.gather.
-  - Motivation is public.
-  - Simple majority; ties → rejected.
-  - On approval the role/class change is immediate; status_change is logged
-    and broadcast as a public_event.
 """
 from __future__ import annotations
 
@@ -164,11 +154,6 @@ class VotingModule:
 
     async def run_debate(self) -> None:
         """Pre-vote debate: every agent speaks once per round, in parallel.
-
-        Idempotent — guarded by `proposal.debated`. With `debate_rounds=0`
-        becomes a no-op that just sets the flag. Each speech is appended to
-        the in-memory `proposal.debate_transcript` and persisted as a
-        `vote_debate_speech` public_event for post-mortem inspection.
         """
         if self.active is None or self.active.debated:
             return
@@ -242,11 +227,6 @@ class VotingModule:
 
     async def collect_and_close(self) -> dict:
         """Run the batched vote round and apply the outcome.
-
-        Up to `cfg.voting.max_vote_attempts` passes are made over agents whose
-        previous response was malformed. Anything still malformed after the
-        last attempt is recorded as a 'null' vote that counts toward neither
-        yes nor no. The majority is computed only over yes vs. no.
         """
         assert self.active is not None
         proposal = self.active

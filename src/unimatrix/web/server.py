@@ -1,12 +1,4 @@
 """FastAPI control server.
-
-Endpoints per spec section 12. The simulation lifecycle is owned by a
-SessionManager: the server starts with no active orchestrator, and the user
-chooses a config and clicks Start in the UI to spawn one. Endpoints that
-require a live orchestrator return HTTP 409 when none is active.
-
-The graph renderer is lazily built per-request from the session's current
-orchestrator, since `cfg` and `store` change across runs.
 """
 from __future__ import annotations
 
@@ -251,12 +243,12 @@ def build_app(
                 values = {}
             role_id = a.get("role")
             role_spec = roles_by_id.get(role_id)
-            initial_opinions: dict = {}
+            opinions: dict = {}
             cfg_agent = next(
                 (s for s in orch.cfg.agents if s.id == agent_id), None
             )
             if cfg_agent is not None:
-                initial_opinions = dict(cfg_agent.initial_opinions or {})
+                opinions = dict(cfg_agent.opinions or {})
 
             summaries = orch.store.recent_summaries(
                 agent_id, orch.cfg.memory.medium_term_summaries
@@ -318,7 +310,7 @@ def build_app(
                 "personality": personality,
                 "values": values,
                 "backstory": a.get("backstory") or "",
-                "initial_opinions": initial_opinions,
+                "opinions": opinions,
                 "social_need": a.get("social_need"),
                 "state": a.get("state"),
                 "current_conversation_id": a.get("current_conversation_id"),

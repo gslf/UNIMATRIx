@@ -1,11 +1,3 @@
-"""CLI entry point.
-
-Starts only the FastAPI control server. The simulation itself is started
-later from the control panel UI: the user picks one of the JSON configs in
-`--configs-dir` (default: `config/`) and clicks Start. The CLI flags
-`--backend` / `--endpoint` / `--model` are applied as defaults to whichever
-config is later started.
-"""
 from __future__ import annotations
 
 import argparse
@@ -19,8 +11,6 @@ import uvicorn
 
 
 def _force_utf8_stdio() -> None:
-    """On Windows, stdout often defaults to cp1252 and rich emits unicode.
-    Reconfigure to utf-8 with replacement so logging never crashes the loop."""
     for stream in (sys.stdout, sys.stderr):
         try:
             stream.reconfigure(encoding="utf-8", errors="replace")
@@ -74,7 +64,6 @@ async def _run(args: argparse.Namespace) -> int:
             try:
                 loop.add_signal_handler(sig, _signal_handler)
             except NotImplementedError:
-                # Windows: signal handlers not always installable; rely on KeyboardInterrupt.
                 pass
 
     console.log(

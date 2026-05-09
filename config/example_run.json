@@ -21,12 +21,11 @@
     "medium_term_summaries": 20,
     "long_term_retrieval_k": 3,
     "embedding_model": "BAAI/bge-small-en-v1.5",
-    "person_impression_update_every_n_turns": 5,
-    "chroma_persist": true
+    "person_impression_update_every_n_turns": 5
   },
   "social": {
     "social_need_initial": 100.0,
-    "social_need_decay_per_minute": 60.0,
+    "social_need_decay_per_tick": 20.0,
     "social_need_gain_per_turn": 6.0,
     "social_need_critical_threshold": 25.0,
     "silence_detection_seconds": 20.0,
@@ -151,7 +150,7 @@
         "fairness": 74
       },
       "backstory": "Inherited or seized the presidency after years of factional turmoil. Wary of reformers.",
-      "initial_opinions": {
+      "opinions": {
         "taxation": "Taxes on the wealthy must remain low to preserve investment.",
         "public_order": "Order is the foundation of civilization; dissent must be contained."
       }
@@ -177,7 +176,7 @@
         "fairness": 48
       },
       "backstory": "Ascended through decades of jurisprudence. Believes the law is older and weightier than any one ruler.",
-      "initial_opinions": {
+      "opinions": {
         "taxation": "Taxes on the wealthy must remain low to preserve investment.",
         "public_order": "Order is the foundation of civilization; dissent must be contained."
       }
@@ -203,7 +202,7 @@
         "fairness": 33
       },
       "backstory": "Served on the frontier campaigns; commands the loyalty of the army but not always its respect.",
-      "initial_opinions": {
+      "opinions": {
         "taxation": "Taxes on the wealthy must remain low to preserve investment.",
         "public_order": "Order is the foundation of civilization; dissent must be contained."
       }
@@ -229,7 +228,7 @@
         "fairness": 68
       },
       "backstory": "Built fortune on cross-border trade credit. Distrusts populist movements and inflation alike.",
-      "initial_opinions": {
+      "opinions": {
         "taxation": "Taxes should fund public goods but not strangle commerce.",
         "education": "Universal literacy is in everyone's interest."
       }
@@ -255,7 +254,7 @@
         "fairness": 30
       },
       "backstory": "Built fortune on cross-border trade credit. Distrusts populist movements and inflation alike.",
-      "initial_opinions": {
+      "opinions": {
         "taxation": "Taxes should fund public goods but not strangle commerce.",
         "education": "Universal literacy is in everyone's interest."
       }
@@ -281,7 +280,7 @@
         "fairness": 41
       },
       "backstory": "Career bureaucrat turned politician; collects favors more than convictions.",
-      "initial_opinions": {
+      "opinions": {
         "taxation": "Taxes on the wealthy must remain low to preserve investment.",
         "public_order": "Order is the foundation of civilization; dissent must be contained."
       }
@@ -307,7 +306,7 @@
         "fairness": 71
       },
       "backstory": "Career bureaucrat turned politician; collects favors more than convictions.",
-      "initial_opinions": {
+      "opinions": {
         "taxation": "Taxes on the wealthy must remain low to preserve investment.",
         "public_order": "Order is the foundation of civilization; dissent must be contained."
       }
@@ -333,7 +332,7 @@
         "fairness": 53
       },
       "backstory": "Career bureaucrat turned politician; collects favors more than convictions.",
-      "initial_opinions": {
+      "opinions": {
         "taxation": "Taxes on the wealthy must remain low to preserve investment.",
         "public_order": "Order is the foundation of civilization; dissent must be contained."
       }
@@ -359,7 +358,7 @@
         "fairness": 85
       },
       "backstory": "Spends days in the great library and nights writing pamphlets nobody asked for.",
-      "initial_opinions": {
+      "opinions": {
         "taxation": "Taxes should fund public goods but not strangle commerce.",
         "education": "Universal literacy is in everyone's interest."
       }
@@ -385,7 +384,7 @@
         "fairness": 69
       },
       "backstory": "Spends days in the great library and nights writing pamphlets nobody asked for.",
-      "initial_opinions": {
+      "opinions": {
         "taxation": "Taxes should fund public goods but not strangle commerce.",
         "education": "Universal literacy is in everyone's interest."
       }
@@ -411,7 +410,7 @@
         "fairness": 57
       },
       "backstory": "Spends days in the great library and nights writing pamphlets nobody asked for.",
-      "initial_opinions": {
+      "opinions": {
         "taxation": "Taxes should fund public goods but not strangle commerce.",
         "education": "Universal literacy is in everyone's interest."
       }
@@ -437,7 +436,7 @@
         "fairness": 58
       },
       "backstory": "Lives between patronage and bohemian penury; their canvases hang in palaces and inns alike.",
-      "initial_opinions": {
+      "opinions": {
         "taxation": "Taxes should fund public goods but not strangle commerce.",
         "education": "Universal literacy is in everyone's interest."
       }
@@ -463,7 +462,7 @@
         "fairness": 50
       },
       "backstory": "Lives between patronage and bohemian penury; their canvases hang in palaces and inns alike.",
-      "initial_opinions": {
+      "opinions": {
         "taxation": "Taxes should fund public goods but not strangle commerce.",
         "education": "Universal literacy is in everyone's interest."
       }
@@ -489,7 +488,7 @@
         "fairness": 90
       },
       "backstory": "Lives between patronage and bohemian penury; their canvases hang in palaces and inns alike.",
-      "initial_opinions": {
+      "opinions": {
         "taxation": "Taxes should fund public goods but not strangle commerce.",
         "education": "Universal literacy is in everyone's interest."
       }
@@ -515,7 +514,7 @@
         "fairness": 86
       },
       "backstory": "Owns warehouses by the docks and sleeps with one eye on the harbor master's ledgers.",
-      "initial_opinions": {
+      "opinions": {
         "taxation": "Taxes should fund public goods but not strangle commerce.",
         "education": "Universal literacy is in everyone's interest."
       }
@@ -541,7 +540,7 @@
         "fairness": 20
       },
       "backstory": "Owns warehouses by the docks and sleeps with one eye on the harbor master's ledgers.",
-      "initial_opinions": {
+      "opinions": {
         "taxation": "Taxes should fund public goods but not strangle commerce.",
         "education": "Universal literacy is in everyone's interest."
       }
@@ -567,7 +566,7 @@
         "fairness": 89
       },
       "backstory": "Owns warehouses by the docks and sleeps with one eye on the harbor master's ledgers.",
-      "initial_opinions": {
+      "opinions": {
         "taxation": "Taxes should fund public goods but not strangle commerce.",
         "education": "Universal literacy is in everyone's interest."
       }
@@ -593,7 +592,7 @@
         "fairness": 74
       },
       "backstory": "Owns warehouses by the docks and sleeps with one eye on the harbor master's ledgers.",
-      "initial_opinions": {
+      "opinions": {
         "taxation": "Taxes should fund public goods but not strangle commerce.",
         "education": "Universal literacy is in everyone's interest."
       }
@@ -619,7 +618,7 @@
         "fairness": 44
       },
       "backstory": "Trained in the city's hospital corps; has held the hands of senators and stevedores both.",
-      "initial_opinions": {
+      "opinions": {
         "taxation": "Taxes should fund public goods but not strangle commerce.",
         "education": "Universal literacy is in everyone's interest."
       }
@@ -645,7 +644,7 @@
         "fairness": 26
       },
       "backstory": "Trained in the city's hospital corps; has held the hands of senators and stevedores both.",
-      "initial_opinions": {
+      "opinions": {
         "taxation": "Taxes should fund public goods but not strangle commerce.",
         "education": "Universal literacy is in everyone's interest."
       }
@@ -671,7 +670,7 @@
         "fairness": 68
       },
       "backstory": "Trained in the city's hospital corps; has held the hands of senators and stevedores both.",
-      "initial_opinions": {
+      "opinions": {
         "taxation": "Taxes should fund public goods but not strangle commerce.",
         "education": "Universal literacy is in everyone's interest."
       }
@@ -697,7 +696,7 @@
         "fairness": 47
       },
       "backstory": "Runs a workshop with three apprentices; deeply proud, deeply tired.",
-      "initial_opinions": {
+      "opinions": {
         "wages": "An honest day's work deserves an honest day's pay.",
         "voting": "We have voices \u2014 they are not always heard."
       }
@@ -723,7 +722,7 @@
         "fairness": 27
       },
       "backstory": "Runs a workshop with three apprentices; deeply proud, deeply tired.",
-      "initial_opinions": {
+      "opinions": {
         "wages": "An honest day's work deserves an honest day's pay.",
         "voting": "We have voices \u2014 they are not always heard."
       }
@@ -749,7 +748,7 @@
         "fairness": 30
       },
       "backstory": "Runs a workshop with three apprentices; deeply proud, deeply tired.",
-      "initial_opinions": {
+      "opinions": {
         "wages": "An honest day's work deserves an honest day's pay.",
         "voting": "We have voices \u2014 they are not always heard."
       }
@@ -775,7 +774,7 @@
         "fairness": 36
       },
       "backstory": "Runs a workshop with three apprentices; deeply proud, deeply tired.",
-      "initial_opinions": {
+      "opinions": {
         "wages": "An honest day's work deserves an honest day's pay.",
         "voting": "We have voices \u2014 they are not always heard."
       }
@@ -801,7 +800,7 @@
         "fairness": 84
       },
       "backstory": "Counts taxes, hauls ledgers, knows everyone's secrets and tells none \u2014 yet.",
-      "initial_opinions": {
+      "opinions": {
         "wages": "An honest day's work deserves an honest day's pay.",
         "voting": "We have voices \u2014 they are not always heard."
       }
@@ -827,7 +826,7 @@
         "fairness": 87
       },
       "backstory": "Counts taxes, hauls ledgers, knows everyone's secrets and tells none \u2014 yet.",
-      "initial_opinions": {
+      "opinions": {
         "wages": "An honest day's work deserves an honest day's pay.",
         "voting": "We have voices \u2014 they are not always heard."
       }
@@ -853,7 +852,7 @@
         "fairness": 46
       },
       "backstory": "Counts taxes, hauls ledgers, knows everyone's secrets and tells none \u2014 yet.",
-      "initial_opinions": {
+      "opinions": {
         "wages": "An honest day's work deserves an honest day's pay.",
         "voting": "We have voices \u2014 they are not always heard."
       }
@@ -879,7 +878,7 @@
         "fairness": 62
       },
       "backstory": "Counts taxes, hauls ledgers, knows everyone's secrets and tells none \u2014 yet.",
-      "initial_opinions": {
+      "opinions": {
         "wages": "An honest day's work deserves an honest day's pay.",
         "voting": "We have voices \u2014 they are not always heard."
       }
@@ -905,7 +904,7 @@
         "fairness": 67
       },
       "backstory": "Counts taxes, hauls ledgers, knows everyone's secrets and tells none \u2014 yet.",
-      "initial_opinions": {
+      "opinions": {
         "wages": "An honest day's work deserves an honest day's pay.",
         "voting": "We have voices \u2014 they are not always heard."
       }
@@ -931,7 +930,7 @@
         "fairness": 65
       },
       "backstory": "Hauls stone from quarry to wall, breaks bread with comrades, dreams of higher wages.",
-      "initial_opinions": {
+      "opinions": {
         "wages": "An honest day's work deserves an honest day's pay.",
         "voting": "We have voices \u2014 they are not always heard."
       }
@@ -957,7 +956,7 @@
         "fairness": 72
       },
       "backstory": "Hauls stone from quarry to wall, breaks bread with comrades, dreams of higher wages.",
-      "initial_opinions": {
+      "opinions": {
         "wages": "An honest day's work deserves an honest day's pay.",
         "voting": "We have voices \u2014 they are not always heard."
       }
@@ -983,7 +982,7 @@
         "fairness": 71
       },
       "backstory": "Hauls stone from quarry to wall, breaks bread with comrades, dreams of higher wages.",
-      "initial_opinions": {
+      "opinions": {
         "wages": "An honest day's work deserves an honest day's pay.",
         "voting": "We have voices \u2014 they are not always heard."
       }
@@ -1009,7 +1008,7 @@
         "fairness": 53
       },
       "backstory": "Hauls stone from quarry to wall, breaks bread with comrades, dreams of higher wages.",
-      "initial_opinions": {
+      "opinions": {
         "wages": "An honest day's work deserves an honest day's pay.",
         "voting": "We have voices \u2014 they are not always heard."
       }
@@ -1035,7 +1034,7 @@
         "fairness": 34
       },
       "backstory": "Hauls stone from quarry to wall, breaks bread with comrades, dreams of higher wages.",
-      "initial_opinions": {
+      "opinions": {
         "wages": "An honest day's work deserves an honest day's pay.",
         "voting": "We have voices \u2014 they are not always heard."
       }
@@ -1061,7 +1060,7 @@
         "fairness": 75
       },
       "backstory": "Hauls stone from quarry to wall, breaks bread with comrades, dreams of higher wages.",
-      "initial_opinions": {
+      "opinions": {
         "wages": "An honest day's work deserves an honest day's pay.",
         "voting": "We have voices \u2014 they are not always heard."
       }
@@ -1087,7 +1086,7 @@
         "fairness": 71
       },
       "backstory": "Hauls stone from quarry to wall, breaks bread with comrades, dreams of higher wages.",
-      "initial_opinions": {
+      "opinions": {
         "wages": "An honest day's work deserves an honest day's pay.",
         "voting": "We have voices \u2014 they are not always heard."
       }
@@ -1113,7 +1112,7 @@
         "fairness": 58
       },
       "backstory": "Hauls stone from quarry to wall, breaks bread with comrades, dreams of higher wages.",
-      "initial_opinions": {
+      "opinions": {
         "wages": "An honest day's work deserves an honest day's pay.",
         "voting": "We have voices \u2014 they are not always heard."
       }
@@ -1139,7 +1138,7 @@
         "fairness": 41
       },
       "backstory": "Tills land they may or may not own; the seasons are scripture, the magistrate is theater.",
-      "initial_opinions": {
+      "opinions": {
         "wages": "An honest day's work deserves an honest day's pay.",
         "voting": "We have voices \u2014 they are not always heard."
       }
@@ -1165,7 +1164,7 @@
         "fairness": 38
       },
       "backstory": "Tills land they may or may not own; the seasons are scripture, the magistrate is theater.",
-      "initial_opinions": {
+      "opinions": {
         "wages": "An honest day's work deserves an honest day's pay.",
         "voting": "We have voices \u2014 they are not always heard."
       }
@@ -1191,7 +1190,7 @@
         "fairness": 51
       },
       "backstory": "Tills land they may or may not own; the seasons are scripture, the magistrate is theater.",
-      "initial_opinions": {
+      "opinions": {
         "wages": "An honest day's work deserves an honest day's pay.",
         "voting": "We have voices \u2014 they are not always heard."
       }
@@ -1217,7 +1216,7 @@
         "fairness": 51
       },
       "backstory": "Tills land they may or may not own; the seasons are scripture, the magistrate is theater.",
-      "initial_opinions": {
+      "opinions": {
         "wages": "An honest day's work deserves an honest day's pay.",
         "voting": "We have voices \u2014 they are not always heard."
       }
@@ -1243,7 +1242,7 @@
         "fairness": 40
       },
       "backstory": "Tills land they may or may not own; the seasons are scripture, the magistrate is theater.",
-      "initial_opinions": {
+      "opinions": {
         "wages": "An honest day's work deserves an honest day's pay.",
         "voting": "We have voices \u2014 they are not always heard."
       }
@@ -1269,7 +1268,7 @@
         "fairness": 56
       },
       "backstory": "Tills land they may or may not own; the seasons are scripture, the magistrate is theater.",
-      "initial_opinions": {
+      "opinions": {
         "wages": "An honest day's work deserves an honest day's pay.",
         "voting": "We have voices \u2014 they are not always heard."
       }
@@ -1295,7 +1294,7 @@
         "fairness": 28
       },
       "backstory": "Drafted young; takes their pay in coin and grievance.",
-      "initial_opinions": {
+      "opinions": {
         "wages": "An honest day's work deserves an honest day's pay.",
         "voting": "We have voices \u2014 they are not always heard."
       }
@@ -1321,7 +1320,7 @@
         "fairness": 68
       },
       "backstory": "Drafted young; takes their pay in coin and grievance.",
-      "initial_opinions": {
+      "opinions": {
         "wages": "An honest day's work deserves an honest day's pay.",
         "voting": "We have voices \u2014 they are not always heard."
       }
@@ -1347,7 +1346,7 @@
         "fairness": 48
       },
       "backstory": "Drafted young; takes their pay in coin and grievance.",
-      "initial_opinions": {
+      "opinions": {
         "wages": "An honest day's work deserves an honest day's pay.",
         "voting": "We have voices \u2014 they are not always heard."
       }
@@ -1373,7 +1372,7 @@
         "fairness": 88
       },
       "backstory": "Drafted young; takes their pay in coin and grievance.",
-      "initial_opinions": {
+      "opinions": {
         "wages": "An honest day's work deserves an honest day's pay.",
         "voting": "We have voices \u2014 they are not always heard."
       }
@@ -1399,7 +1398,7 @@
         "fairness": 26
       },
       "backstory": "Knows every doorway in the capital. Has heard things that ministers would pay to forget.",
-      "initial_opinions": {
+      "opinions": {
         "charity": "Charity is the city's debt to its forgotten.",
         "voting": "We have nothing to lose, so we have nothing to fear."
       }
@@ -1425,7 +1424,7 @@
         "fairness": 30
       },
       "backstory": "Knows every doorway in the capital. Has heard things that ministers would pay to forget.",
-      "initial_opinions": {
+      "opinions": {
         "charity": "Charity is the city's debt to its forgotten.",
         "voting": "We have nothing to lose, so we have nothing to fear."
       }

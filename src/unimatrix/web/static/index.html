@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>Unimatrix — control</title>
+<title>UNIMATRIx — control</title>
 <style>
   body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
          background: #0d1117; color: #e6edf3; margin: 0; padding: 0; }
@@ -737,7 +737,7 @@ function renderAgentDetail(a) {
   const impressions = (a.memory && a.memory.impressions) || [];
   const decisions = a.recent_decisions || [];
   const votes = a.recent_votes || [];
-  const opinions = fmtOpinionsObj(a.initial_opinions);
+  const opinions = fmtOpinionsObj(a.opinions);
   root.innerHTML = `
     <h3>Anagrafica</h3>
     <div class="kv">

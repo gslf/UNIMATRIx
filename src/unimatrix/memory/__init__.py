@@ -1,4 +1,4 @@
 from .manager import MemoryManager
-from .chroma_store import VectorStore, ChromaVectorStore, InMemoryVectorStore
+from .chroma_store import ChromaVectorStore
 
-__all__ = ["MemoryManager", "VectorStore", "ChromaVectorStore", "InMemoryVectorStore"]
+__all__ = ["MemoryManager", "ChromaVectorStore"]

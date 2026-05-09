@@ -166,7 +166,7 @@ def main() -> None:
                 "personality": make_personality(rng, role_id),
                 "values": make_values(rng, role_id),
                 "backstory": BACKSTORIES.get(role_id, ""),
-                "initial_opinions": make_opinions(rng, klass),
+                "opinions": make_opinions(rng, klass),
             })
             counter += 1
 
@@ -194,11 +194,10 @@ def main() -> None:
             "long_term_retrieval_k": 3,
             "embedding_model": "BAAI/bge-small-en-v1.5",
             "person_impression_update_every_n_turns": 5,
-            "chroma_persist": True,
         },
         "social": {
             "social_need_initial": 100.0,
-            "social_need_decay_per_minute": 60.0,
+            "social_need_decay_per_tick": 5.0,
             "social_need_gain_per_turn": 6.0,
             "social_need_critical_threshold": 25.0,
             "silence_detection_seconds": 20.0,

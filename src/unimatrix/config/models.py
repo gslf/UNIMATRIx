@@ -53,14 +53,13 @@ class MemoryConfig(BaseModel):
     long_term_retrieval_k: int = Field(3, ge=0)
     embedding_model: str = "BAAI/bge-small-en-v1.5"
     person_impression_update_every_n_turns: int = Field(5, ge=1)
-    chroma_persist: bool = True
 
 
 class SocialConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     social_need_initial: float = 100.0
-    social_need_decay_per_minute: float = Field(60.0, ge=0.0)
+    social_need_decay_per_tick: float = Field(5.0, ge=0.0)
     social_need_gain_per_turn: float = Field(6.0, ge=0.0)
     social_need_critical_threshold: float = 25.0
     silence_detection_seconds: float = Field(20.0, gt=0)
@@ -136,7 +135,7 @@ class AgentSpec(BaseModel):
     personality: PersonalitySpec
     values: dict[str, int] = Field(default_factory=dict)
     backstory: str = ""
-    initial_opinions: dict[str, str] = Field(default_factory=dict)
+    opinions: dict[str, str] = Field(default_factory=dict)
 
 
 class Config(BaseModel):

@@ -39,8 +39,6 @@ class GenerationRequest:
     max_tokens: int | None = None
     temperature: float | None = None
     top_p: float | None = None
-    # Hint the backend that JSON output is required. Used by the stub to format
-    # output and by the vLLM backend (when supported) to enable guided JSON.
     json_mode: bool = False
     # Free-form tag for the stub to disambiguate output kinds.
     stub_kind: str | None = None

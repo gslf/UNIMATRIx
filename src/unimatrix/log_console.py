@@ -1,9 +1,3 @@
-"""Console subclass that mirrors `console.log` calls into a ring buffer.
-
-Used by `main.py` so the web UI's "Recent events" panel can display the same
-human-readable log lines that scroll past on the orchestrator terminal,
-instead of a JSON dump of public_events.
-"""
 from __future__ import annotations
 
 from collections import deque
@@ -17,10 +11,6 @@ from rich.text import Text
 
 class LoggingConsole(Console):
     """A Rich Console that also captures `log()` output as plain text.
-
-    Keeps the last `buffer_size` lines in memory. Reading the buffer is
-    cheap and thread-safe (the orchestrator runs in the asyncio loop while
-    the web server reads via a threadpool).
     """
 
     def __init__(self, *args: Any, buffer_size: int = 200, **kwargs: Any) -> None:

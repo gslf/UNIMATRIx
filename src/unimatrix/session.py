@@ -1,11 +1,3 @@
-"""Lifecycle manager for at most one orchestrator at a time.
-
-The CLI starts only the FastAPI control server. The simulation itself is
-spawned later — when the user picks a config in the UI and clicks Start —
-through `SessionManager.start(config_name)`. Stop tears down the
-orchestrator, the inference client, the memory manager, and the run store,
-leaving the registry row marked as "ended" so the run remains explorable.
-"""
 from __future__ import annotations
 
 import asyncio

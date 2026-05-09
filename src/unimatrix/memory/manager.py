@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 from ..config import MemoryConfig
 from ..persistence import RunStore
-from .chroma_store import make_vector_store
+from .chroma_store import ChromaVectorStore
 
 
 @dataclass
@@ -36,11 +36,10 @@ class MemoryManager:
         self.cfg = cfg
         self.store = store
         self.run_id = run_id
-        self.vector = make_vector_store(
+        self.vector = ChromaVectorStore(
             collection_name=f"run_{run_id}_memory",
             persist_dir=persist_dir,
             embedding_model=cfg.embedding_model,
-            prefer_chroma=cfg.chroma_persist,
         )
 
     async def close(self) -> None:

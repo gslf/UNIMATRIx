@@ -103,8 +103,8 @@ class PromptBuilder:
 
     def identity_block(self, agent: Agent) -> str:
         opinions = (
-            "\n".join(f"  - on {k}: {v}" for k, v in agent.initial_opinions.items())
-            if agent.initial_opinions
+            "\n".join(f"  - on {k}: {v}" for k, v in agent.opinions.items())
+            if agent.opinions
             else "  (none stated)"
         )
         return (

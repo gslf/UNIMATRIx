@@ -31,7 +31,7 @@ class Agent:
     personality: PersonalitySpec
     values: dict[str, int]
     backstory: str
-    initial_opinions: dict[str, str]
+    opinions: dict[str, str]
     social_need: float = 100.0
     state: AgentState = AgentState.IDLE
     current_conversation_id: int | None = None
@@ -47,7 +47,7 @@ class Agent:
             personality=spec.personality,
             values=dict(spec.values),
             backstory=spec.backstory,
-            initial_opinions=dict(spec.initial_opinions),
+            opinions=dict(spec.opinions),
             social_need=social_need_initial,
         )
 
