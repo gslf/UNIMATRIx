@@ -35,9 +35,15 @@ class Agent:
     social_need: float = 100.0
     state: AgentState = AgentState.IDLE
     current_conversation_id: int | None = None
+    bank_account: float = 0.0
 
     @classmethod
-    def from_spec(cls, spec: AgentSpec, social_need_initial: float) -> "Agent":
+    def from_spec(
+        cls,
+        spec: AgentSpec,
+        social_need_initial: float,
+        initial_balance: float = 0.0,
+    ) -> "Agent":
         return cls(
             id=spec.id,
             name=spec.name,
@@ -49,6 +55,7 @@ class Agent:
             backstory=spec.backstory,
             opinions=dict(spec.opinions),
             social_need=social_need_initial,
+            bank_account=initial_balance,
         )
 
     def to_db_row(self) -> dict:
@@ -64,6 +71,7 @@ class Agent:
             "social_need": self.social_need,
             "state": self.state.value,
             "current_conversation_id": self.current_conversation_id,
+            "bank_account": self.bank_account,
         }
 
     def is_busy(self) -> bool:

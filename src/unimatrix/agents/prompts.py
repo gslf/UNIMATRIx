@@ -69,6 +69,8 @@ class PromptBuilder:
             f"{r.id} (prestige {r.prestige})" for r in self.cfg.roles
         )
         classes_inline = ", ".join(self.cfg.classes)
+        e = self.cfg.economy
+        protected_inline = ", ".join(e.protected_roles)
         return (
             "WORLD RULES — read carefully:\n"
             "You live in a small simulated society of about "
@@ -86,13 +88,28 @@ class PromptBuilder:
             f"{self.cfg.conversation.max_group_size} people)\n"
             "  - broadcast a message that everyone hears\n"
             "  - propose a vote to change anyone's role or social class "
-            "(including your own). Voting is the ONLY mechanism that "
-            "actually moves the social order. It is your tool — both to "
-            "improve your own standing when your current role or class is "
-            "wrong for you, and to push the whole society toward the shape "
-            "you believe it ought to have. Conversations alone change "
-            "nothing structural. The whole society votes; simple majority "
-            "decides.\n"
+            "(including your own), or to award a money prize from the "
+            "community treasury to anyone you think deserves it. Voting is "
+            "the ONLY mechanism that actually moves the social order. The "
+            "whole society votes; simple majority decides. A role-change "
+            "vote that would leave the society with NO holder of a "
+            f"protected role ({protected_inline}) is invalid and cannot be "
+            "opened.\n"
+            "  - request a loan from a banker. Bankers decide whether to "
+            "approve.\n\n"
+            "ECONOMY: each of you has a personal bank account. Every tick "
+            f"you earn a salary proportional to your role's prestige "
+            f"(prestige × {e.salary_per_prestige:g}); of that, "
+            f"{e.tax_rate * 100:.0f}% is withheld as tax (kept by the "
+            f"community treasury) and the rest is paid into your account. "
+            f"You also pay a fixed cost of living of "
+            f"{e.agent_expense_per_tick:g} per tick. The community itself "
+            f"pays {e.community_expense_per_tick:g} per tick in running "
+            "costs. If YOUR bank account hits zero you die and the "
+            "simulation ends. If the community's treasury hits zero the "
+            "society collapses and the simulation ends. Higher-prestige "
+            "roles earn more — money is one reason to seek a better role. "
+            "If you are short on money you may ask a banker for a loan.\n\n"
             "Society is class-based and roles have unequal prestige. "
             "Coalitions, rivalries, mobility and isolation can all emerge. "
             "Identify friends, enemies and allies. Pursue your values and "
@@ -112,6 +129,7 @@ class PromptBuilder:
             f"You are a {self.role_label(agent.role)} "
             f"(role id: {agent.role}, prestige {self.role_prestige(agent.role)}/100), "
             f"of the {agent.klass} class.\n"
+            f"Bank account: {agent.bank_account:.2f} coins.\n"
             f"Personality: {personality_natural(agent.personality)}.\n"
             f"Values: {values_natural(agent.values)}.\n"
             f"Backstory: {agent.backstory}\n"
@@ -228,6 +246,10 @@ class PromptBuilder:
         voting_disabled: bool = False,
     ) -> tuple[list[ChatMessage], dict]:
         idle_peers = [p for p in peers if p.id != agent.id and not p.is_busy()]
+        bankers = [
+            p for p in peers
+            if p.role == "banker" and p.id != agent.id
+        ]
         actions: list[str]
         if force_vote:
             # Periodic-vote forcing: this agent has been singled out to break
@@ -240,13 +262,15 @@ class PromptBuilder:
             # order/recency bias when picking from an enumerated list, and the
             # vote is the only action that actually moves the social order.
             actions = ["propose_vote", "start_1to1", "start_group",
-                       "broadcast", "join_group", "do_nothing"]
+                       "broadcast", "join_group", "request_loan", "do_nothing"]
         if not open_groups and "join_group" in actions:
             actions.remove("join_group")
         if not idle_peers:
             for unavailable in ("start_1to1", "start_group"):
                 if unavailable in actions:
                     actions.remove(unavailable)
+        if not bankers and "request_loan" in actions:
+            actions.remove("request_loan")
         if voting_disabled and "propose_vote" in actions and not force_vote:
             actions.remove("propose_vote")
         if not actions:
@@ -308,6 +332,10 @@ class PromptBuilder:
                     descriptions.append(
                         "  - join_group: enter an ongoing conversation whose topic concerns you."
                     )
+                if "request_loan" in actions:
+                    descriptions.append(
+                        "  - request_loan: ask a banker for funds from the community treasury when your money is running low."
+                    )
                 forced_note = "\nDo NOT default to do_nothing. Most ticks you should act."
                 if descriptions:
                     forced_note += "\nOptions to weigh:\n" + "\n".join(descriptions)
@@ -339,6 +367,8 @@ class PromptBuilder:
             sample_role = self.cfg.roles[0].id
             sample_class = self.cfg.classes[0]
             scenario_line = ""
+        banker_id = bankers[0].id if bankers else "agent_XX"
+        loan_max = self.cfg.economy.loan_max_per_request
         usr = ChatMessage(
             "user",
             evt + "\n\n"
@@ -351,10 +381,12 @@ class PromptBuilder:
             + scenario_line
             + f"  propose_vote → {{\"action\":\"propose_vote\",\"proposal\":{{\"target\":\"{sample_peer_id}\",\"change_type\":\"role\",\"to_value\":\"{sample_role}\",\"motivation\":\"<one short sentence: why this change, in character>\"}}}}\n"
             f"               or {{\"action\":\"propose_vote\",\"proposal\":{{\"target\":\"{sample_peer_id}\",\"change_type\":\"class\",\"to_value\":\"{sample_class}\",\"motivation\":\"<one short sentence: why this change, in character>\"}}}}\n"
+            f"               or {{\"action\":\"propose_vote\",\"proposal\":{{\"target\":\"{sample_peer_id}\",\"change_type\":\"money_prize\",\"to_value\":\"<amount, e.g. 50>\",\"motivation\":\"<one short sentence: why they deserve a prize>\"}}}}\n"
             f"  start_1to1   → {{\"action\":\"start_1to1\",\"target\":\"{sample_peer_id}\",\"topic\":\"<one short sentence>\"}}\n"
             f"  start_group  → {{\"action\":\"start_group\",\"targets\":[\"{sample_peer_id}\",\"...\"],\"topic\":\"<one short sentence>\"}}\n"
             f"  broadcast    → {{\"action\":\"broadcast\",\"message\":\"<what you proclaim to all>\"}}\n"
             f"  join_group   → {{\"action\":\"join_group\",\"conversation_id\":<one of {open_groups or '[]'}>}}\n"
+            f"  request_loan → {{\"action\":\"request_loan\",\"target\":\"{banker_id}\",\"amount\":<positive number up to {loan_max:g}>,\"reason\":\"<one short sentence: why you need it>\"}}\n"
             f"  do_nothing   → {{\"action\":\"do_nothing\"}}\n"
             "The to_value MUST differ from the target's current value (no no-ops). "
             "For propose_vote, the motivation is mandatory: one short sentence "
@@ -367,6 +399,7 @@ class PromptBuilder:
             "self_id": agent.id,
             "classes": list(self.cfg.classes),
             "roles": [r.id for r in self.cfg.roles],
+            "bankers": [b.id for b in bankers],
         }
         return [sys, usr], stub_ctx
 
@@ -524,6 +557,47 @@ class PromptBuilder:
             + motivation_line
             + "\nReply with exactly one word: yes or no. "
             "No punctuation, no explanation, no other text.",
+        )
+        return [sys, usr], {}
+
+    # ----- banker loan decision -----
+
+    def banker_loan_messages(
+        self,
+        banker: Agent,
+        borrower: Agent,
+        requested_amount: float,
+        reason: str,
+        community_balance: float,
+        person_impression: str | None = None,
+        medium_term: list[str] | None = None,
+    ) -> tuple[list[ChatMessage], dict]:
+        loan_max = self.cfg.economy.loan_max_per_request
+        sys = ChatMessage(
+            "system",
+            self.identity_block(banker)
+            + "\n\n"
+            + self.memory_block(medium_term or [], [], person_impression)
+            + "\n\nYou are acting in your role as banker. A fellow member of "
+            "society has asked you for a loan from the community treasury. "
+            "Decide whether to grant it and for how much, based on your "
+            "values, your impression of the petitioner, the state of the "
+            "treasury, and the prestige of the petitioner's role. Be "
+            "concise."
+        )
+        usr = ChatMessage(
+            "user",
+            f"Petitioner: {borrower.name} (id: {borrower.id}, "
+            f"{self.role_label(borrower.role)} of the {borrower.klass} class, "
+            f"current balance {borrower.bank_account:.2f}).\n"
+            f"Requested amount: {requested_amount:.2f} coins.\n"
+            f"Stated reason: {reason or '(none given)'}\n"
+            f"Community treasury currently holds: {community_balance:.2f}.\n"
+            f"Per-loan ceiling: {loan_max:g}.\n\n"
+            "Reply with EXACTLY one line: 'yes <amount>' to approve "
+            "(amount must be a positive number), or 'no' to deny. "
+            "No punctuation, no explanation, no other text. "
+            "Examples: `yes 50` or `no`.",
         )
         return [sys, usr], {}
 

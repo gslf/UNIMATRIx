@@ -173,7 +173,16 @@ def _stub_generate(req: GenerationRequest) -> str:
         return _stub_person_impression(req, rng)
     if kind == "debate":
         return _stub_debate(req, rng)
+    if kind == "loan":
+        return _stub_loan(req, rng)
     return _stub_chat(req, rng)
+
+
+def _stub_loan(req: GenerationRequest, rng: random.Random) -> str:
+    if rng.random() < 0.55:
+        amount = int(rng.choice([10, 20, 30, 50, 75, 100]))
+        return f"yes {amount}"
+    return "no"
 
 
 def _stub_debate(req: GenerationRequest, rng: random.Random) -> str:

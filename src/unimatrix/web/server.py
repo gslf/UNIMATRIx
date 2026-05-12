@@ -299,6 +299,7 @@ def build_app(
                     "outcome": v.get("outcome"),
                 })
 
+            txs = orch.store.list_transactions(limit=30, agent_id=agent_id)
             return {
                 "id": a["agent_id"],
                 "name": a.get("name") or a["agent_id"],
@@ -314,6 +315,8 @@ def build_app(
                 "social_need": a.get("social_need"),
                 "state": a.get("state"),
                 "current_conversation_id": a.get("current_conversation_id"),
+                "bank_account": a.get("bank_account"),
+                "recent_transactions": txs,
                 "memory": {
                     "summaries": summaries,
                     "impressions": impressions,
@@ -443,6 +446,25 @@ def build_app(
                     "proposal": proposal,
                     "debate": debate,
                     "votes": votes,
+                }
+        return JSONResponse(await asyncio.to_thread(_impl))
+
+    @app.get("/runs/{run_id}/community")
+    async def run_community(run_id: int, limit: int = 500) -> JSONResponse:
+        """Community treasury: current balance + transactions touching it."""
+        def _impl() -> dict:
+            with open_run_store(run_id) as s:
+                balance = s.get_community_balance()
+                # Pull a window of all transactions; the UI shows everything,
+                # but movements relevant to the treasury are tagged.
+                all_txs = s.list_transactions(limit=limit)
+                community_txs: list[dict] = []
+                for t in all_txs:
+                    if t.get("from_party") == "community" or t.get("to_party") == "community":
+                        community_txs.append(t)
+                return {
+                    "balance": balance,
+                    "transactions": community_txs,
                 }
         return JSONResponse(await asyncio.to_thread(_impl))
 

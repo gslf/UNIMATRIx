@@ -59,7 +59,10 @@
       "Bash(PYTHONPATH=src python -m pytest tests/ -x -q --tb=short)",
       "Bash(git -C C:\\\\Users\\\\gioel\\\\DevEnv\\\\UNIMATRIx ls-files)",
       "Bash(findstr /i \"inference\")",
-      "WebFetch(domain:lmstudio.ai)"
+      "WebFetch(domain:lmstudio.ai)",
+      "PowerShell(Get-ChildItem -Force \"C:\\\\Users\\\\gioel\\\\DevEnv\\\\UNIMATRIx\" | Where-Object { $_.Name -ne '.venv' } | Select-Object Mode, Name)",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\gioel\\\\DevEnv\\\\UNIMATRIx\" -Directory)",
+      "Bash(Select-Object Name)"
     ]
   }
 }

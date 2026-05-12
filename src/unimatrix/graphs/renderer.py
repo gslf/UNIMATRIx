@@ -28,6 +28,7 @@ GRAPH_NAMES = (
     "mobility_heatmap",
     "isolation",
     "message_volume",
+    "balances",
 )
 
 
@@ -308,6 +309,99 @@ class GraphRenderer:
         ax.set_title("Message volume per agent")
         fig.tight_layout()
         return self._save(fig, "message_volume")
+
+    # ----- 8. balances over time -----
+
+    def _render_balances(self) -> Path:
+        """Single line chart: mean agent bank balance and the community
+        treasury balance over the lifetime of the run, reconstructed by
+        replaying the transactions log."""
+        # Pull the whole log in chronological order. list_transactions returns
+        # newest-first; reverse for replay.
+        txs = list(reversed(self.store.list_transactions(limit=1_000_000)))
+        agents = self.store.list_agents()
+        if not txs and not agents:
+            return self._empty_plot("balances", "no transactions yet")
+
+        agent_ids = {a["agent_id"] for a in agents}
+        agent_balance: dict[str, float] = {aid: 0.0 for aid in agent_ids}
+        community_balance: float = 0.0
+
+        # Bookkeeping rows from initialize() have no party but record the
+        # initial balance in `amount`. We can't tell from a single row whether
+        # that init applies to community or to an agent, so we look at the
+        # `reason` text (the EconomyModule writes "initial community balance"
+        # vs "initial balance for <id>") for a hint, and fall back to inferring
+        # from the agent id list. If we can't infer, the row is treated as a
+        # no-op for the running series — the final samples may then be off,
+        # but the SHAPE of the curve (relative movement) is still meaningful.
+        def _apply_init(tx: dict) -> None:
+            nonlocal community_balance
+            reason = (tx.get("reason") or "").lower()
+            amount = float(tx.get("amount") or 0)
+            if "community" in reason:
+                community_balance += amount
+                return
+            if reason.startswith("initial balance for "):
+                aid = tx.get("reason").split("for ", 1)[1].strip()
+                if aid in agent_balance:
+                    agent_balance[aid] += amount
+                return
+
+        ts_series: list[datetime] = []
+        mean_series: list[float] = []
+        community_series: list[float] = []
+
+        def _record_sample(ts_iso: str | None) -> None:
+            if not ts_iso:
+                return
+            try:
+                t = _parse_iso(ts_iso)
+            except (TypeError, ValueError):
+                return
+            mean = (
+                sum(agent_balance.values()) / max(1, len(agent_balance))
+                if agent_balance
+                else 0.0
+            )
+            ts_series.append(t)
+            mean_series.append(mean)
+            community_series.append(community_balance)
+
+        for tx in txs:
+            kind = tx.get("kind")
+            amount = float(tx.get("amount") or 0)
+            fp = tx.get("from_party")
+            tp = tx.get("to_party")
+            if kind == "init" and fp is None and tp is None:
+                _apply_init(tx)
+            else:
+                if fp == "community":
+                    community_balance -= amount
+                elif fp in agent_balance:
+                    agent_balance[fp] -= amount
+                if tp == "community":
+                    community_balance += amount
+                elif tp in agent_balance:
+                    agent_balance[tp] += amount
+            _record_sample(tx.get("ts"))
+
+        if not ts_series:
+            return self._empty_plot("balances", "no transactions yet")
+
+        fig, ax = plt.subplots(figsize=(10, 4.2))
+        ax.plot(ts_series, mean_series, label="mean agent balance",
+                color="#1f6feb", linewidth=1.6)
+        ax.plot(ts_series, community_series, label="community treasury",
+                color="#f0883e", linewidth=1.6)
+        ax.axhline(0, color="#aaa", linestyle=":", linewidth=0.8)
+        ax.set_title("Wealth over time (single chart)")
+        ax.set_ylabel("balance (coins)")
+        ax.set_xlabel("time")
+        ax.legend(loc="best", fontsize=9)
+        fig.autofmt_xdate()
+        fig.tight_layout()
+        return self._save(fig, "balances")
 
     # ----- helpers -----
 

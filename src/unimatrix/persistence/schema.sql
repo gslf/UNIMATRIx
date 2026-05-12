@@ -11,7 +11,24 @@ CREATE TABLE IF NOT EXISTS agents (
     backstory     TEXT,
     social_need   REAL,
     state         TEXT,
-    current_conversation_id INTEGER
+    current_conversation_id INTEGER,
+    bank_account  REAL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS community_account (
+    id      INTEGER PRIMARY KEY CHECK (id = 1),
+    balance REAL NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS transactions (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts          TEXT,
+    kind        TEXT,
+    from_party  TEXT,
+    to_party    TEXT,
+    amount      REAL,
+    reason      TEXT,
+    ref_id      INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS conversations (
@@ -104,3 +121,6 @@ CREATE INDEX IF NOT EXISTS idx_messages_conv     ON messages(conversation_id);
 CREATE INDEX IF NOT EXISTS idx_events_ts         ON public_events(ts);
 CREATE INDEX IF NOT EXISTS idx_summaries_agent   ON memory_summaries(agent_id);
 CREATE INDEX IF NOT EXISTS idx_status_agent      ON status_changes(agent_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_ts   ON transactions(ts);
+CREATE INDEX IF NOT EXISTS idx_transactions_to   ON transactions(to_party);
+CREATE INDEX IF NOT EXISTS idx_transactions_from ON transactions(from_party);

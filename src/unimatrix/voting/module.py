@@ -60,6 +60,9 @@ class VotingModule:
         self.agents = agents
         self.console = console or Console()
         self.active: Proposal | None = None
+        # Wired by the orchestrator after construction so approved money_prize
+        # proposals can transfer funds. Left as None until set.
+        self.economy = None
 
     def is_active(self) -> bool:
         return self.active is not None
@@ -72,16 +75,35 @@ class VotingModule:
         to_value: str,
     ) -> tuple[bool, str]:
         """Validate a proposal. Returns (accepted, reason). Does NOT open it."""
-        if change_type not in ("role", "class"):
-            return False, "change_type must be 'role' or 'class'"
+        if change_type not in ("role", "class", "money_prize"):
+            return False, "change_type must be 'role', 'class' or 'money_prize'"
         target = self.agents.get(target_id)
         if target is None:
             return False, f"unknown target {target_id}"
+        if change_type == "money_prize":
+            try:
+                amount = float(to_value)
+            except (TypeError, ValueError):
+                return False, f"money_prize amount unparseable: {to_value!r}"
+            if amount <= 0:
+                return False, "money_prize amount must be positive"
+            if self.active is not None:
+                return False, "another vote is already in progress"
+            return True, ""
         if change_type == "role":
             valid = {r.id for r in self.cfg.roles}
             if to_value not in valid:
                 return False, f"unknown role {to_value}"
             from_value = target.role
+            # Protected-role constraint: refuse a vote that would empty out
+            # one of the roles the society can't function without.
+            protected = set(self.cfg.economy.protected_roles)
+            if from_value in protected and from_value != to_value:
+                holders = sum(
+                    1 for a in self.agents.values() if a.role == from_value
+                )
+                if holders <= 1:
+                    return False, f"cannot remove last {from_value}"
         else:
             if to_value not in self.cfg.classes:
                 return False, f"unknown class {to_value}"
@@ -105,7 +127,12 @@ class VotingModule:
             self.console.log(f"[red]proposal rejected[/]: {reason}")
             return None
         target = self.agents[target_id]
-        from_value = target.role if change_type == "role" else target.klass
+        if change_type == "money_prize":
+            from_value = "community"
+        elif change_type == "role":
+            from_value = target.role
+        else:
+            from_value = target.klass
         prop_id = await asyncio.to_thread(
             self.store.open_proposal,
             proposer_id,
@@ -367,6 +394,30 @@ class VotingModule:
         return result
 
     async def _apply(self, proposal: Proposal, target: Agent) -> None:
+        if proposal.change_type == "money_prize":
+            try:
+                amount = float(proposal.to_value)
+            except (TypeError, ValueError):
+                amount = 0.0
+            paid = 0.0
+            info = "no economy module wired"
+            paid_ok = False
+            if self.economy is not None and amount > 0:
+                paid_ok, paid, info = await self.economy.pay_prize(
+                    target.id, amount, proposal.id
+                )
+            await asyncio.to_thread(
+                self.store.record_event,
+                "prize_paid" if paid_ok else "prize_underfunded",
+                {
+                    "target_id": target.id,
+                    "amount_requested": amount,
+                    "amount_paid": paid,
+                    "proposal_id": proposal.id,
+                    "info": info,
+                },
+            )
+            return
         if proposal.change_type == "role":
             old = target.role
             target.role = proposal.to_value

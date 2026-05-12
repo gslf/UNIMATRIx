@@ -23,6 +23,20 @@ def stub_config(example_config_path, tmp_path) -> Path:
     cfg["memory"]["embedding_model"] = ""
     cfg["social"]["silence_detection_seconds"] = 0.5
     cfg["agents"] = cfg["agents"][:6]
+    # Roomy economy for tests: the smoke loop runs many ticks with a fast
+    # interval, and the financial pass would otherwise drain the treasury
+    # before the assertions land. Tests that specifically exercise the
+    # economy override these in the test body.
+    cfg["economy"] = {
+        "salary_per_prestige": 0.5,
+        "tax_rate": 0.3,
+        "agent_initial_balance": 10000.0,
+        "agent_expense_per_tick": 0.0,
+        "community_initial_balance": 1_000_000.0,
+        "community_expense_per_tick": 0.0,
+        "protected_roles": ["president", "supreme_judge", "banker"],
+        "loan_max_per_request": 200.0,
+    }
     p = tmp_path / "config.json"
     p.write_text(json.dumps(cfg), encoding="utf-8")
     return p

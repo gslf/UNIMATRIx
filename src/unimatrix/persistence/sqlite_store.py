@@ -54,6 +54,14 @@ class RunStore:
         }
         if "raw_response" not in cols:
             self._conn.execute("ALTER TABLE votes ADD COLUMN raw_response TEXT")
+        agent_cols = {
+            r["name"]
+            for r in self._conn.execute("PRAGMA table_info(agents)").fetchall()
+        }
+        if "bank_account" not in agent_cols:
+            self._conn.execute(
+                "ALTER TABLE agents ADD COLUMN bank_account REAL DEFAULT 0"
+            )
 
     def close(self) -> None:
         with self._lock:
@@ -78,8 +86,9 @@ class RunStore:
                 """
                 INSERT INTO agents
                   (agent_id, name, gender, role, class, personality, values_json,
-                   backstory, social_need, state, current_conversation_id)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   backstory, social_need, state, current_conversation_id,
+                   bank_account)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(agent_id) DO UPDATE SET
                     name = excluded.name,
                     gender = excluded.gender,
@@ -90,7 +99,8 @@ class RunStore:
                     backstory = excluded.backstory,
                     social_need = excluded.social_need,
                     state = excluded.state,
-                    current_conversation_id = excluded.current_conversation_id
+                    current_conversation_id = excluded.current_conversation_id,
+                    bank_account = excluded.bank_account
                 """,
                 (
                     agent["agent_id"],
@@ -104,6 +114,7 @@ class RunStore:
                     agent.get("social_need", 100.0),
                     agent.get("state", "idle"),
                     agent.get("current_conversation_id"),
+                    agent.get("bank_account", 0.0),
                 ),
             )
 
@@ -115,6 +126,7 @@ class RunStore:
         current_conversation_id: int | None | object = ...,
         role: str | None = None,
         klass: str | None = None,
+        bank_account: float | None = None,
     ) -> None:
         sets: list[str] = []
         params: list[Any] = []
@@ -133,6 +145,9 @@ class RunStore:
         if klass is not None:
             sets.append("class = ?")
             params.append(klass)
+        if bank_account is not None:
+            sets.append("bank_account = ?")
+            params.append(bank_account)
         if not sets:
             return
         params.append(agent_id)
@@ -153,6 +168,108 @@ class RunStore:
             rows = self._conn.execute(
                 "SELECT * FROM agents ORDER BY agent_id"
             ).fetchall()
+            return [dict(r) for r in rows]
+
+    # ----- economy -----
+
+    def init_community_account(self, initial_balance: float) -> bool:
+        """Create the singleton community row if missing.
+
+        Returns True if the row was just inserted, False if it already existed.
+        Idempotent — never overwrites an existing balance.
+        """
+        with self._tx() as c:
+            cur = c.execute(
+                "INSERT OR IGNORE INTO community_account (id, balance) "
+                "VALUES (1, ?)",
+                (float(initial_balance),),
+            )
+            return (cur.rowcount or 0) > 0
+
+    def get_community_balance(self) -> float:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT balance FROM community_account WHERE id = 1"
+            ).fetchone()
+            return float(row["balance"]) if row else 0.0
+
+    def get_agent_balance(self, agent_id: str) -> float:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT bank_account FROM agents WHERE agent_id = ?",
+                (agent_id,),
+            ).fetchone()
+            return float(row["bank_account"]) if row else 0.0
+
+    def apply_transaction(
+        self,
+        kind: str,
+        from_party: str | None,
+        to_party: str | None,
+        amount: float,
+        reason: str = "",
+        ref_id: int | None = None,
+    ) -> int:
+        """Atomically record a transaction and move the funds.
+
+        `from_party` / `to_party` are either an agent_id, the literal string
+        'community', or None (for one-sided init/expense rows). Money flows
+        from → to; if either side is None it is a sink/source.
+        All balance mutations and the log row land in the same SQL transaction.
+        """
+        amt = float(amount)
+        with self._tx() as c:
+            cur = c.execute(
+                "INSERT INTO transactions "
+                "(ts, kind, from_party, to_party, amount, reason, ref_id) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (utc_now_iso(), kind, from_party, to_party, amt, reason, ref_id),
+            )
+            tx_id = int(cur.lastrowid or 0)
+            if from_party == "community":
+                c.execute(
+                    "UPDATE community_account SET balance = balance - ? "
+                    "WHERE id = 1",
+                    (amt,),
+                )
+            elif from_party is not None:
+                c.execute(
+                    "UPDATE agents SET bank_account = bank_account - ? "
+                    "WHERE agent_id = ?",
+                    (amt, from_party),
+                )
+            if to_party == "community":
+                c.execute(
+                    "UPDATE community_account SET balance = balance + ? "
+                    "WHERE id = 1",
+                    (amt,),
+                )
+            elif to_party is not None:
+                c.execute(
+                    "UPDATE agents SET bank_account = bank_account + ? "
+                    "WHERE agent_id = ?",
+                    (amt, to_party),
+                )
+            return tx_id
+
+    def list_transactions(
+        self,
+        limit: int = 200,
+        agent_id: str | None = None,
+    ) -> list[dict]:
+        with self._lock:
+            if agent_id is None:
+                rows = self._conn.execute(
+                    "SELECT * FROM transactions ORDER BY id DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
+            else:
+                rows = self._conn.execute(
+                    "SELECT * FROM transactions "
+                    "WHERE from_party = ? OR to_party = ? "
+                    "ORDER BY id DESC LIMIT ?",
+                    (agent_id, agent_id, limit),
+                ).fetchall()
             return [dict(r) for r in rows]
 
     # ----- conversations -----

@@ -30,6 +30,7 @@ from rich.console import Console
 from ..agents import Agent, AgentState, PromptBuilder
 from ..config import Config
 from ..conversations import ConversationEngine
+from ..economy import EconomyModule
 from ..inference import GenerationRequest, InferenceClient
 from ..inference.client import parse_json_lenient
 from ..memory import MemoryManager
@@ -72,6 +73,10 @@ class Orchestrator:
         self.voting = VotingModule(
             cfg, store, memory, inference, self.prompts, self.agents, self.console
         )
+        self.economy = EconomyModule(cfg, store, self.agents, self.console)
+        # Voting reads pay_prize from the economy module on approved
+        # money_prize proposals.
+        self.voting.economy = self.economy
         self._broadcast_queue: list[BroadcastItem] = []
         self._paused = asyncio.Event()
         self._paused.set()  # set means NOT paused; clear() to pause
@@ -98,11 +103,17 @@ class Orchestrator:
             "votes_null_total": 0,        # cumulative malformed-after-retries votes
             "forced_vote_failures": 0,     # forced propose_vote that didn't apply
             "broadcasts_sent": 0,
+            "loans_requested": 0,
+            "loans_granted": 0,
+            "loans_denied": 0,
+            "prizes_paid": 0,
             "inference_errors": 0,
             "last_error": None,
             "last_error_ts": None,
             "last_decision_raw": None,     # last raw LLM response (truncated)
             "last_skip_reason": None,
+            "community_balance": 0.0,
+            "failure_reason": None,
         }
 
     # ----- bootstrap -----
@@ -110,7 +121,11 @@ class Orchestrator:
     async def initialize(self) -> None:
         # seed agent runtime objects from spec, persist initial state
         for spec in self.cfg.agents:
-            ag = Agent.from_spec(spec, self.cfg.social.social_need_initial)
+            ag = Agent.from_spec(
+                spec,
+                self.cfg.social.social_need_initial,
+                initial_balance=0.0,  # the economy module seeds balances atomically
+            )
             self.agents[ag.id] = ag
             await asyncio.to_thread(self.store.upsert_agent, ag.to_db_row())
             await asyncio.to_thread(
@@ -119,6 +134,9 @@ class Orchestrator:
             await asyncio.to_thread(
                 self.store.record_status_change, ag.id, "initial", None, ag.klass
             )
+        # Seed the community treasury and per-agent balances (idempotent;
+        # safe to call across resumes).
+        await self.economy.initialize()
 
     # ----- public controls -----
 
@@ -175,7 +193,11 @@ class Orchestrator:
                 except asyncio.TimeoutError:
                     pass
         finally:
-            self.registry.update_status(self.run_id, "ended", utc_now_iso())
+            # Don't overwrite a terminal failure status with "ended".
+            if self.metrics.get("failure_reason"):
+                pass
+            else:
+                self.registry.update_status(self.run_id, "ended", utc_now_iso())
 
     async def _on_pause_entered(self) -> None:
         self.console.log("[bold red]paused[/]; closing active conversations")
@@ -195,6 +217,16 @@ class Orchestrator:
         social_need.decay(
             self.agents.values(), self.cfg.social.social_need_decay_per_tick
         )
+
+        # 1b) economy pass: salary/tax/expense for every agent + community
+        # expense. If anyone goes bankrupt (agent or community), end the run.
+        failure = await self.economy.apply_tick()
+        self.metrics["community_balance"] = await asyncio.to_thread(
+            self.store.get_community_balance
+        )
+        if failure is not None:
+            await self._end_run_failed(failure)
+            return
 
         # 2) recovery path: a vote left active from a prior tick (e.g. crash
         # mid-vote) — resolve it before doing anything else.
@@ -242,6 +274,21 @@ class Orchestrator:
 
         # 6) anti-silence
         await self._maybe_break_silence()
+
+    async def _end_run_failed(self, reason: str) -> None:
+        """Record a terminal failure and stop the loop cleanly."""
+        self.metrics["failure_reason"] = reason
+        self.console.log(f"[bold red]SIMULATION FAILED[/]: {reason}")
+        await asyncio.to_thread(
+            self.store.record_event,
+            "simulation_failed",
+            {"reason": reason, "tick": self._tick_no, "ts": utc_now_iso()},
+        )
+        try:
+            self.registry.update_status(self.run_id, "failed", utc_now_iso())
+        except Exception as exc:
+            self.console.log(f"[red]could not mark registry failed[/]: {exc}")
+        self.request_stop()
 
     async def _resolve_active_vote(self) -> None:
         """Run debate + tally for the currently-open proposal, then resume.
@@ -449,6 +496,16 @@ class Orchestrator:
         ct_raw = (str(change_type_raw or "")).strip().lower()
         tv_raw = (str(to_value_raw or "")).strip()
         tv_lc = tv_raw.lower()
+        # money_prize fast-path: to_value is a positive number; no role/class
+        # resolution applies.
+        if ct_raw == "money_prize":
+            try:
+                amount = float(tv_raw)
+            except ValueError:
+                return None, "", f"money_prize amount unparseable: {to_value_raw!r}"
+            if amount <= 0:
+                return None, "", f"money_prize amount must be positive (got {amount})"
+            return "money_prize", str(amount), ""
         # Resolve to_value as a role or a class via id or name.
         as_role = role_ids.get(tv_lc) or role_names.get(tv_lc)
         as_class = class_ids.get(tv_lc)
@@ -573,6 +630,85 @@ class Orchestrator:
                 self._applied(action)
             else:
                 self._skip("join_group", f"{ag.id}: cannot join conv {cid_i}")
+            return
+        if action == "request_loan":
+            self.metrics["loans_requested"] += 1
+            tgt = self._resolve_agent_ref(dec.get("target"))
+            if not tgt or tgt.id == ag.id:
+                self._skip("request_loan", f"{ag.id}: target={dec.get('target')!r} not resolved")
+                return
+            if tgt.role != "banker":
+                self._skip(
+                    "request_loan",
+                    f"{ag.id}: target {tgt.id} is not a banker (role={tgt.role})",
+                )
+                return
+            try:
+                amount = float(dec.get("amount") or 0)
+            except (TypeError, ValueError):
+                self._skip("request_loan", f"{ag.id}: bad amount={dec.get('amount')!r}")
+                return
+            if amount <= 0:
+                self._skip("request_loan", f"{ag.id}: non-positive amount {amount}")
+                return
+            amount = min(amount, self.cfg.economy.loan_max_per_request)
+            reason = str(dec.get("reason") or "").strip()
+            try:
+                community = await asyncio.to_thread(
+                    self.store.get_community_balance
+                )
+                msgs, _ = self.prompts.banker_loan_messages(
+                    banker=tgt,
+                    borrower=ag,
+                    requested_amount=amount,
+                    reason=reason,
+                    community_balance=community,
+                )
+                raw = await self.inference.generate(
+                    GenerationRequest(
+                        messages=msgs,
+                        max_tokens=16,
+                        stub_kind="loan",
+                    )
+                )
+                approved, paid, info = await self.economy.grant_loan(
+                    tgt, ag, amount, raw
+                )
+            except Exception as exc:
+                self.metrics["inference_errors"] += 1
+                self.metrics["last_error"] = str(exc)
+                self.metrics["last_error_ts"] = utc_now_iso()
+                self._skip("request_loan", f"{ag.id}: loan call failed: {exc}")
+                return
+            event_payload = {
+                "borrower_id": ag.id,
+                "banker_id": tgt.id,
+                "requested": amount,
+                "approved": approved,
+                "paid": paid,
+                "reason": reason,
+                "info": info,
+                "banker_reply": (raw or "")[:200],
+            }
+            if approved:
+                self.metrics["loans_granted"] += 1
+                await asyncio.to_thread(
+                    self.store.record_event, "loan_granted", event_payload
+                )
+                self.console.log(
+                    f"[green]loan granted[/]: {tgt.name} → {ag.name} "
+                    f"{paid:.2f} (requested {amount:.2f})"
+                )
+            else:
+                self.metrics["loans_denied"] += 1
+                await asyncio.to_thread(
+                    self.store.record_event, "loan_denied", event_payload
+                )
+                self.console.log(
+                    f"[yellow]loan denied[/]: {tgt.name} → {ag.name} "
+                    f"({info})"
+                )
+            self._applied(action)
             return
         if action == "propose_vote":
             if self._tick_no <= self.cfg.voting.warmup_ticks:
@@ -778,6 +914,26 @@ class Orchestrator:
                 "last_text": last_text,
             })
         now = time.monotonic()
+        # Lightweight balance peek — list_agents would re-serialize; use the
+        # in-memory cache (kept in sync by the economy module).
+        agent_balances = [
+            {
+                "agent_id": a.id,
+                "name": a.name,
+                "role": a.role,
+                "class": a.klass,
+                "balance": round(a.bank_account, 2),
+            }
+            for a in self.agents.values()
+        ]
+        try:
+            community_balance = self.store.get_community_balance()
+        except Exception:
+            community_balance = self.metrics.get("community_balance", 0.0)
+        try:
+            recent_transactions = self.store.list_transactions(limit=20)
+        except Exception:
+            recent_transactions = []
         return {
             "run_id": self.run_id,
             "paused": self.is_paused(),
@@ -791,6 +947,10 @@ class Orchestrator:
                 self.voting.active.to_dict() if self.voting.active else None
             ),
             "broadcast_queue_length": len(self._broadcast_queue),
+            "community_balance": round(community_balance, 2),
+            "agent_balances": agent_balances,
+            "recent_transactions": recent_transactions,
+            "failure_reason": self.metrics.get("failure_reason"),
             "metrics": {
                 "decisions_attempted": self.metrics["decisions_attempted"],
                 "decisions_unparsed": self.metrics["decisions_unparsed"],
@@ -804,6 +964,12 @@ class Orchestrator:
                 "votes_rejected": self.metrics["votes_rejected"],
                 "votes_null_total": self.metrics["votes_null_total"],
                 "broadcasts_sent": self.metrics["broadcasts_sent"],
+                "loans_requested": self.metrics["loans_requested"],
+                "loans_granted": self.metrics["loans_granted"],
+                "loans_denied": self.metrics["loans_denied"],
+                "prizes_paid": self.economy.prizes_paid,
+                "community_balance": self.metrics["community_balance"],
+                "failure_reason": self.metrics["failure_reason"],
                 "inference_errors": self.metrics["inference_errors"],
                 "last_error": self.metrics["last_error"],
                 "last_error_ts": self.metrics["last_error_ts"],

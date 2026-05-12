@@ -264,6 +264,7 @@
       <button class="explorer-tab active" data-tab="conversations">Conversations</button>
       <button class="explorer-tab" data-tab="votes">Votes</button>
       <button class="explorer-tab" data-tab="broadcasts">Broadcasts</button>
+      <button class="explorer-tab" data-tab="community">Community</button>
     </div>
 
     <div class="explorer-pane active" id="pane-conversations">
@@ -301,6 +302,32 @@
         </div>
       </div>
     </div>
+
+    <div class="explorer-pane" id="pane-community">
+      <div class="row" style="align-items:baseline;">
+        <strong>Community treasury:</strong>
+        <span id="community-balance" class="ok" style="font-size:1.1rem;">…</span>
+        <span class="muted-text">coins</span>
+        <input id="community-filter" class="conv-filter" style="flex:1; margin-left:12px"
+               placeholder="Filter movements by kind, party, or reason..." />
+      </div>
+      <div style="margin-top:8px">
+        <table id="community-tx-table" style="width:100%; font-size:0.82rem; border-collapse:collapse;">
+          <thead>
+            <tr style="text-align:left; border-bottom:1px solid #30363d;">
+              <th>when</th>
+              <th>kind</th>
+              <th>from</th>
+              <th>to</th>
+              <th style="text-align:right;">amount</th>
+              <th style="text-align:right;">Δ treasury</th>
+              <th>reason</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
   </section>
 
   <section class="graphs">
@@ -315,6 +342,7 @@
 const GRAPHS = [
   "class_distribution", "role_distribution", "social_network",
   "voting_timeline", "mobility_heatmap", "isolation", "message_volume",
+  "balances",
 ];
 
 function buildGraphs() {
@@ -738,6 +766,28 @@ function renderAgentDetail(a) {
   const decisions = a.recent_decisions || [];
   const votes = a.recent_votes || [];
   const opinions = fmtOpinionsObj(a.opinions);
+  const txs = a.recent_transactions || [];
+  const balance = a.bank_account != null ? Number(a.bank_account) : null;
+  const balanceCls = balance == null ? "muted-text"
+    : (balance <= 0 ? "bad" : (balance < 20 ? "muted-text" : "ok"));
+  // Aggregate per-kind totals across the most recent transactions so the user
+  // sees flow (income vs cost), not just balance.
+  const flowByKind = {};
+  for (const t of txs) {
+    const amt = Number(t.amount) || 0;
+    let signed = 0;
+    if (t.from_party === a.id) signed = -amt;
+    else if (t.to_party === a.id) signed = amt;
+    if (!signed) continue;
+    flowByKind[t.kind] = (flowByKind[t.kind] || 0) + signed;
+  }
+  const flowLine = Object.entries(flowByKind)
+    .sort((x, y) => Math.abs(y[1]) - Math.abs(x[1]))
+    .map(([k, v]) => {
+      const sign = v >= 0 ? "+" : "−";
+      const cls = v >= 0 ? "ok" : "bad";
+      return `<span class="muted-text">${escapeHtml(k)}:</span> <span class="${cls}">${sign}${Math.abs(v).toFixed(2)}</span>`;
+    }).join(" · ") || `<span class="muted-text">no movement recorded</span>`;
   root.innerHTML = `
     <h3>Anagrafica</h3>
     <div class="kv">
@@ -754,6 +804,35 @@ function renderAgentDetail(a) {
       <div><b>Values:</b> <span class="muted-text">${fmtValuesObj(a.values)}</span></div>
       ${opinions ? `<div style="margin-top:6px"><b>Initial opinions:</b><div class="muted-text" style="margin-left:8px">${opinions}</div></div>` : ""}
     </div>
+    <h3>Finances</h3>
+    <div class="kv">
+      <div><b>Bank account:</b>
+        <span class="${balanceCls}">${balance == null ? "?" : balance.toFixed(2)}</span> coins
+      </div>
+      <div style="margin-top:4px"><b>Recent flow:</b> ${flowLine}</div>
+    </div>
+    ${txs.length
+      ? `<div style="margin-top:6px"><b>Last transactions:</b>
+          <div style="margin-top:4px; max-height:200px; overflow:auto;">
+          ${txs.map(t => {
+            const isFrom = t.from_party === a.id;
+            const isTo = t.to_party === a.id;
+            const amt = Number(t.amount) || 0;
+            const sign = isTo ? "+" : (isFrom ? "−" : "·");
+            const cls = isTo ? "ok" : (isFrom ? "bad" : "muted-text");
+            const other = isTo ? t.from_party : (isFrom ? t.to_party : null);
+            const flow = other ? `${escapeHtml(other)} ${isTo ? "→ you" : "← you"}` : "bookkeeping";
+            return `<div class="summary-item" style="font-size:0.78rem">
+              <span class="kind-badge">${escapeHtml(t.kind || "?")}</span>
+              <span class="${cls}"><b>${sign}${Math.abs(amt).toFixed(2)}</b></span>
+              <span class="muted-text">· ${flow}</span>
+              <div class="ts">${escapeHtml(t.ts || "")}${t.reason ? " · " + escapeHtml(t.reason) : ""}</div>
+            </div>`;
+          }).join("")}
+          </div>
+        </div>`
+      : `<div class="muted-text" style="margin-top:4px">no transactions yet</div>`}
+
     <h3>Backstory</h3>
     <div class="backstory">${escapeHtml(a.backstory || "(none)")}</div>
 
@@ -879,6 +958,7 @@ async function openExplorer(runId, runName) {
   currentExplorerData = null;
   currentVotesData = null;
   currentBroadcastsData = null;
+  currentCommunityData = null;
   currentSelectedConv = null;
   currentSelectedVote = null;
   currentSelectedBroadcast = null;
@@ -904,6 +984,7 @@ function setExplorerTab(name) {
   if (name === "conversations") loadConversationsList();
   else if (name === "votes") loadVotesList();
   else if (name === "broadcasts") loadBroadcastsList();
+  else if (name === "community") loadCommunity();
 }
 
 function closeExplorer() {
@@ -1271,6 +1352,67 @@ function renderBroadcastDetail(b) {
     </div>`;
 }
 
+// ---- community tab ----
+let currentCommunityData = null;
+
+async function loadCommunity() {
+  const balanceEl = document.getElementById("community-balance");
+  const body = document.querySelector("#community-tx-table tbody");
+  if (!currentCommunityData) {
+    body.innerHTML = `<tr><td colspan="7" class="muted-text">loading…</td></tr>`;
+  }
+  try {
+    const r = await fetch(`/runs/${currentExplorerRun}/community?limit=500`);
+    if (!r.ok) throw new Error(await r.text());
+    currentCommunityData = await r.json();
+  } catch (e) {
+    balanceEl.textContent = "?";
+    body.innerHTML = `<tr><td colspan="7" style="color:#f85149">${escapeHtml(e.message)}</td></tr>`;
+    return;
+  }
+  renderCommunity();
+}
+
+function renderCommunity() {
+  if (!currentCommunityData) return;
+  const balanceEl = document.getElementById("community-balance");
+  const body = document.querySelector("#community-tx-table tbody");
+  const bal = Number(currentCommunityData.balance) || 0;
+  balanceEl.className = bal <= 0 ? "bad" : (bal < 100 ? "muted-text" : "ok");
+  balanceEl.textContent = bal.toFixed(2);
+
+  const filter = (document.getElementById("community-filter").value || "").trim().toLowerCase();
+  const txs = currentCommunityData.transactions || [];
+  const filtered = txs.filter(t => {
+    if (!filter) return true;
+    const hay = [
+      t.kind || "", t.from_party || "", t.to_party || "", t.reason || "",
+    ].join(" ").toLowerCase();
+    return hay.includes(filter);
+  });
+  if (!filtered.length) {
+    body.innerHTML = `<tr><td colspan="7" class="muted-text">no movements${filter ? " match the filter" : " yet"}</td></tr>`;
+    return;
+  }
+  body.innerHTML = filtered.map(t => {
+    const amt = Number(t.amount) || 0;
+    let delta = 0;
+    if (t.to_party === "community") delta += amt;
+    if (t.from_party === "community") delta -= amt;
+    const deltaCls = delta > 0 ? "ok" : (delta < 0 ? "bad" : "muted-text");
+    const deltaSign = delta > 0 ? "+" : (delta < 0 ? "−" : "·");
+    return `<tr style="border-bottom:1px solid #161b22;">
+      <td class="muted-text" style="font-size:0.72rem;">${escapeHtml(t.ts || "")}</td>
+      <td><span class="kind-badge">${escapeHtml(t.kind || "?")}</span></td>
+      <td>${escapeHtml(t.from_party || "—")}</td>
+      <td>${escapeHtml(t.to_party || "—")}</td>
+      <td style="text-align:right;">${amt.toFixed(2)}</td>
+      <td style="text-align:right;" class="${deltaCls}">${deltaSign}${Math.abs(delta).toFixed(2)}</td>
+      <td class="muted-text" style="font-size:0.78rem;">${escapeHtml(t.reason || "")}</td>
+    </tr>`;
+  }).join("");
+}
+
 function escapeHtml(s) {
   return String(s == null ? "" : s)
     .replace(/&/g, "&amp;").replace(/</g, "&lt;")
@@ -1281,6 +1423,7 @@ document.getElementById("btn-close-explorer").addEventListener("click", closeExp
 document.getElementById("conv-filter").addEventListener("input", renderConvList);
 document.getElementById("vote-filter").addEventListener("input", renderVotesList);
 document.getElementById("bcast-filter").addEventListener("input", renderBroadcastsList);
+document.getElementById("community-filter").addEventListener("input", renderCommunity);
 document.querySelectorAll(".explorer-tab").forEach(b =>
   b.addEventListener("click", () => setExplorerTab(b.dataset.tab)));
 
@@ -1313,6 +1456,11 @@ setInterval(() => {
     fetch(`/runs/${currentExplorerRun}/broadcasts?limit=500`)
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d) { currentBroadcastsData = d; renderBroadcastsList(); } })
+      .catch(() => {});
+  } else if (currentExplorerTab === "community") {
+    fetch(`/runs/${currentExplorerRun}/community?limit=500`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) { currentCommunityData = d; renderCommunity(); } })
       .catch(() => {});
   }
 }, 2000);

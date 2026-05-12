@@ -106,6 +106,32 @@ class VotingConfig(BaseModel):
     max_vote_attempts: int = Field(3, ge=1)
 
 
+class EconomyConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # Salary paid per tick to each agent is `role.prestige * salary_per_prestige`.
+    salary_per_prestige: float = Field(0.5, ge=0)
+    # Flat fraction of the gross salary withheld and kept by the community.
+    # The agent receives (gross * (1 - tax_rate)); the community pays only the
+    # net out — taxes never actually leave the community account.
+    tax_rate: float = Field(0.3, ge=0, le=1)
+    # Starting balance for every agent.
+    agent_initial_balance: float = Field(100.0, ge=0)
+    # Fixed cost every agent pays each tick (cost of living).
+    agent_expense_per_tick: float = Field(5.0, ge=0)
+    # Starting balance for the community treasury.
+    community_initial_balance: float = Field(10000.0, ge=0)
+    # Fixed cost the community pays each tick (running the polity).
+    community_expense_per_tick: float = Field(50.0, ge=0)
+    # Roles for which the society must always retain at least one holder.
+    # A role-change proposal that would empty one of these is rejected.
+    protected_roles: list[str] = Field(
+        default_factory=lambda: ["senator", "judge", "banker"]
+    )
+    # Hard cap on a single loan request. Agents asking for more get clamped.
+    loan_max_per_request: float = Field(200.0, ge=0)
+
+
 class RoleSpec(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -147,6 +173,7 @@ class Config(BaseModel):
     social: SocialConfig
     conversation: ConversationConfig
     voting: VotingConfig
+    economy: EconomyConfig = Field(default_factory=EconomyConfig)
     classes: list[str]
     roles: list[RoleSpec]
     agents: list[AgentSpec]
@@ -192,6 +219,21 @@ class Config(BaseModel):
             if a.class_initial not in class_ids:
                 raise ValueError(
                     f"agent {a.id}: class_initial '{a.class_initial}' not in classes list"
+                )
+        # Economy: each protected role must exist and the initial population
+        # must already contain at least one agent holding it — otherwise the
+        # "never zero" constraint is violated from tick 1.
+        role_counts: dict[str, int] = {}
+        for a in self.agents:
+            role_counts[a.role_initial] = role_counts.get(a.role_initial, 0) + 1
+        for pr in self.economy.protected_roles:
+            if pr not in role_ids:
+                raise ValueError(
+                    f"economy.protected_roles entry '{pr}' is not in the roles table"
+                )
+            if role_counts.get(pr, 0) < 1:
+                raise ValueError(
+                    f"initial population has no agent with protected role '{pr}'"
                 )
         return self
 
