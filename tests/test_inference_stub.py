@@ -27,7 +27,7 @@ async def test_stub_decision_returns_json(stub_client: InferenceClient) -> None:
         messages=[ChatMessage("system", "x"), ChatMessage("user", "respond with json")],
         stub_kind="decision",
         stub_context={
-            "available_actions": ["do_nothing", "start_1to1", "broadcast"],
+            "available_actions": ["do_nothing", "start_1to1", "start_group"],
             "idle_peers": ["a", "b"],
             "open_groups": [],
             "self_id": "me",

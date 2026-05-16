@@ -688,6 +688,19 @@ class RunStore:
             )
             return int(cur.lastrowid or 0)
 
+    def latest_checkpoint(self) -> dict | None:
+        """Return the most recently written checkpoint payload, or None."""
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT state FROM checkpoints ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+        if not row:
+            return None
+        try:
+            return json.loads(row["state"])
+        except (TypeError, json.JSONDecodeError):
+            return None
+
     # ----- analytics helpers (used by the graph renderer) -----
 
     def all_messages_with_conv(self) -> list[dict]:

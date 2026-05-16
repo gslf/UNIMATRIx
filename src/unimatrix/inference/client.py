@@ -207,7 +207,7 @@ def _infer_stub_kind(req: GenerationRequest) -> str:
 def _stub_decision(req: GenerationRequest, rng: random.Random) -> str:
     ctx = req.stub_context
     available = ctx.get("available_actions") or [
-        "do_nothing", "start_1to1", "start_group", "broadcast"
+        "do_nothing", "start_1to1", "start_group"
     ]
     others = ctx.get("idle_peers") or []
     classes = ctx.get("classes") or []
@@ -222,11 +222,6 @@ def _stub_decision(req: GenerationRequest, rng: random.Random) -> str:
         size = min(len(others), rng.randint(2, 5))
         out["targets"] = rng.sample(others, size)
         out["topic"] = rng.choice(_STUB_TOPICS)
-    elif action == "broadcast":
-        out["message"] = (
-            f"{rng.choice(_STUB_OPENERS)} we must reflect on "
-            f"{rng.choice(_STUB_TOPICS)} {rng.choice(_STUB_CLOSERS)}"
-        )
     elif action == "propose_vote" and others and (classes or roles):
         target = rng.choice([self_id] + others) if self_id else rng.choice(others)
         if rng.random() < 0.5 and roles:

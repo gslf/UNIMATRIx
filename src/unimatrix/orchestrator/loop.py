@@ -102,7 +102,6 @@ class Orchestrator:
             "votes_rejected": 0,
             "votes_null_total": 0,        # cumulative malformed-after-retries votes
             "forced_vote_failures": 0,     # forced propose_vote that didn't apply
-            "broadcasts_sent": 0,
             "loans_requested": 0,
             "loans_granted": 0,
             "loans_denied": 0,
@@ -137,6 +136,67 @@ class Orchestrator:
         # Seed the community treasury and per-agent balances (idempotent;
         # safe to call across resumes).
         await self.economy.initialize()
+
+    async def initialize_from_existing(self) -> None:
+        """Re-attach to a previously-paused run.
+
+        Agents are reconstructed from cfg.agents (for personality/values/
+        backstory/opinions) and overlaid with their stored runtime state
+        (role/class/social_need/state/balance). Tick counter and broadcast
+        queue are restored from the latest checkpoint when present. Any
+        active conversation found on agents is dropped — `_on_pause_entered`
+        already closed conversations before checkpointing.
+        """
+        rows_by_id = {
+            r["agent_id"]: r
+            for r in await asyncio.to_thread(self.store.list_agents)
+        }
+        for spec in self.cfg.agents:
+            ag = Agent.from_spec(
+                spec,
+                self.cfg.social.social_need_initial,
+                initial_balance=0.0,
+            )
+            row = rows_by_id.get(ag.id)
+            if row is not None:
+                if row.get("role"):
+                    ag.role = row["role"]
+                if row.get("class"):
+                    ag.klass = row["class"]
+                sn = row.get("social_need")
+                if sn is not None:
+                    ag.social_need = float(sn)
+                try:
+                    ag.state = AgentState(row.get("state") or "idle")
+                except ValueError:
+                    ag.state = AgentState.IDLE
+                # Conversations were closed at pause time; ignore the stale
+                # current_conversation_id so the agent starts idle next tick.
+                ag.current_conversation_id = None
+                if ag.state in (AgentState.IN_1TO1, AgentState.IN_GROUP,
+                                AgentState.VOTING):
+                    ag.state = AgentState.IDLE
+                bal = row.get("bank_account")
+                if bal is not None:
+                    ag.bank_account = float(bal)
+            self.agents[ag.id] = ag
+        # Idempotent — won't overwrite an existing treasury balance.
+        await self.economy.initialize()
+        # Restore loop scalars from the most recent checkpoint, if any.
+        ckpt = await asyncio.to_thread(self.store.latest_checkpoint)
+        if ckpt:
+            try:
+                self._tick_no = int(ckpt.get("tick_no") or 0)
+            except (TypeError, ValueError):
+                self._tick_no = 0
+            for item in ckpt.get("broadcast_queue") or []:
+                if isinstance(item, dict) and item.get("message"):
+                    self._broadcast_queue.append(
+                        BroadcastItem(
+                            item.get("sender_id") or "HUMAN",
+                            str(item["message"]),
+                        )
+                    )
 
     # ----- public controls -----
 
@@ -606,15 +666,6 @@ class Orchestrator:
             self.metrics["conversations_opened"] += 1
             self._applied(action)
             return
-        if action == "broadcast":
-            msg = str(dec.get("message") or "").strip()
-            if not msg:
-                self._skip("broadcast", f"{ag.id}: empty message")
-                return
-            await self.queue_broadcast(ag.id, msg)
-            self.metrics["broadcasts_sent"] += 1
-            self._applied(action)
-            return
         if action == "join_group":
             cid = dec.get("conversation_id")
             try:
@@ -763,8 +814,6 @@ class Orchestrator:
             return f"→ {dec.get('target')!r} : {str(dec.get('topic',''))[:60]!r}"
         if action == "start_group":
             return f"→ {dec.get('targets')} : {str(dec.get('topic',''))[:60]!r}"
-        if action == "broadcast":
-            return f": {str(dec.get('message',''))[:80]!r}"
         if action == "join_group":
             return f"#{dec.get('conversation_id')}"
         if action == "propose_vote":
@@ -963,7 +1012,6 @@ class Orchestrator:
                 "votes_approved": self.metrics["votes_approved"],
                 "votes_rejected": self.metrics["votes_rejected"],
                 "votes_null_total": self.metrics["votes_null_total"],
-                "broadcasts_sent": self.metrics["broadcasts_sent"],
                 "loans_requested": self.metrics["loans_requested"],
                 "loans_granted": self.metrics["loans_granted"],
                 "loans_denied": self.metrics["loans_denied"],

@@ -192,6 +192,14 @@
       <button id="btn-stop" class="danger">Stop simulation</button>
       <span id="sim-action-status-active" class="muted-text"></span>
     </div>
+    <div id="sim-past" class="row" style="display:none">
+      <span class="muted-text">Viewing past run:</span>
+      <span id="sim-past-info"><span class="pill">—</span></span>
+      <button id="btn-resume-past" class="muted">Resume</button>
+      <button id="btn-end-past" class="danger">Stop</button>
+      <button id="btn-exit-past" class="muted">Close past view</button>
+      <span id="sim-action-status-past" class="muted-text"></span>
+    </div>
     <div id="sim-loading" class="muted-text" style="font-size:0.85rem;">
       checking session…
     </div>
@@ -263,7 +271,6 @@
     <div class="explorer-tabs">
       <button class="explorer-tab active" data-tab="conversations">Conversations</button>
       <button class="explorer-tab" data-tab="votes">Votes</button>
-      <button class="explorer-tab" data-tab="broadcasts">Broadcasts</button>
       <button class="explorer-tab" data-tab="community">Community</button>
     </div>
 
@@ -287,18 +294,6 @@
         <div class="conv-list" id="vote-list">loading…</div>
         <div class="conv-detail" id="vote-detail">
           <span class="muted-text">Select a vote on the left.</span>
-        </div>
-      </div>
-    </div>
-
-    <div class="explorer-pane" id="pane-broadcasts">
-      <div class="row">
-        <input id="bcast-filter" class="conv-filter" placeholder="Filter by sender or text..." />
-      </div>
-      <div class="explorer-grid">
-        <div class="conv-list" id="bcast-list">loading…</div>
-        <div class="conv-detail" id="bcast-detail">
-          <span class="muted-text">Select a broadcast on the left.</span>
         </div>
       </div>
     </div>
@@ -367,13 +362,40 @@ function buildGraphs() {
     b.addEventListener("click", e => refreshGraph(e.target.dataset.graph)));
 }
 
+// viewMode: 'idle' (no sim, not viewing anything), 'live' (sim running, viewing it),
+// or 'past' (no sim, viewing an older run). viewedRunId tracks the currently-
+// displayed run for live or past mode.
+let viewMode = "idle";
+let viewedRunId = null;
+let pastRunInfo = null;   // registry row for the past run currently being viewed
+
+function endpoints() {
+  if (viewMode === "past" && viewedRunId != null) {
+    const id = encodeURIComponent(viewedRunId);
+    return {
+      state: `/runs/${id}/state`,
+      roster: `/runs/${id}/roster`,
+      agent: (aid) => `/runs/${id}/agents/${encodeURIComponent(aid)}`,
+      graph: (n) => `/runs/${id}/graphs/${n}.png`,
+      graphsRefresh: `/runs/${id}/graphs/refresh`,
+    };
+  }
+  return {
+    state: "/state",
+    roster: "/agents",
+    agent: (aid) => `/agents/${encodeURIComponent(aid)}`,
+    graph: (n) => `/graphs/${n}.png`,
+    graphsRefresh: "/graphs/refresh",
+  };
+}
+
 function refreshGraph(name) {
   const img = document.getElementById("img-" + name);
-  img.src = `/graphs/${name}.png?ts=${Date.now()}`;
+  img.src = `${endpoints().graph(name)}?ts=${Date.now()}`;
 }
 
 async function refreshAll() {
-  await fetch("/graphs/refresh", { method: "POST" });
+  await fetch(endpoints().graphsRefresh, { method: "POST" });
   GRAPHS.forEach(refreshGraph);
 }
 
@@ -382,11 +404,29 @@ let isRunning = false;
 function renderSimControls(s) {
   const idle = document.getElementById("sim-idle");
   const active = document.getElementById("sim-active");
+  const past = document.getElementById("sim-past");
   const loading = document.getElementById("sim-loading");
   const headerStatus = document.getElementById("header-status");
   loading.style.display = "none";
-  if (s.running) {
-    idle.style.display = "none";
+  idle.style.display = "none";
+  active.style.display = "none";
+  past.style.display = "none";
+  if (viewMode === "past") {
+    past.style.display = "flex";
+    const status = (pastRunInfo && pastRunInfo.status) || "?";
+    const pillClass = status === "paused" ? "bad"
+                    : status === "ended" ? "ok"
+                    : status === "failed" ? "bad"
+                    : "muted-text";
+    document.getElementById("sim-past-info").innerHTML =
+      `<span class="pill">run #${s.run_id ?? viewedRunId}</span>` +
+      `<span class="pill">tick ${s.tick_no ?? 0}</span>` +
+      `<span class="pill ${pillClass}">${escapeHtml(status)}</span>`;
+    document.getElementById("btn-resume-past").disabled = (status !== "paused");
+    document.getElementById("btn-end-past").disabled = (status !== "paused");
+    headerStatus.textContent = `past run #${viewedRunId}`;
+    headerStatus.style.color = "#58a6ff";
+  } else if (s.running) {
     active.style.display = "flex";
     document.getElementById("sim-active-info").innerHTML =
       `<span class="pill">run #${s.run_id ?? "?"}</span>` +
@@ -395,19 +435,23 @@ function renderSimControls(s) {
     headerStatus.textContent = s.paused ? "paused" : "running";
     headerStatus.style.color = s.paused ? "#d29922" : "#3fb950";
   } else {
-    active.style.display = "none";
     idle.style.display = "flex";
     headerStatus.textContent = "idle";
     headerStatus.style.color = "#8b949e";
     populateConfigSelect(s.configs || []);
   }
-  // Disable controls that require an orchestrator.
+  // Live-only controls: enabled only when an orchestrator is actually ticking.
+  const liveOnly = viewMode === "live" && !!s.running;
   for (const id of ["btn-pause", "btn-resume", "btn-checkpoint",
-                     "btn-show-diag", "btn-send", "btn-refresh-all"]) {
+                     "btn-show-diag", "btn-send"]) {
     const el = document.getElementById(id);
-    if (el) el.disabled = !s.running;
+    if (el) el.disabled = !liveOnly;
   }
-  document.getElementById("msg").disabled = !s.running;
+  document.getElementById("msg").disabled = !liveOnly;
+  // The "Refresh all" graphs button is fine in both live and past view
+  // (graphs render from whichever store backs the current view).
+  document.getElementById("btn-refresh-all").disabled =
+    !(liveOnly || viewMode === "past");
 }
 
 function populateConfigSelect(configs) {
@@ -491,11 +535,18 @@ async function stopSim() {
 
 async function loadState() {
   let s;
-  try { s = await (await fetch("/state")).json(); }
+  try { s = await (await fetch(endpoints().state)).json(); }
   catch { return; }
+  // In live mode the /state response controls running-ness; in past mode the
+  // top-of-page sim controls are driven by viewMode, not s.running.
   const wasRunning = isRunning;
-  isRunning = !!s.running;
-  liveRunId = s.run_id;
+  if (viewMode !== "past") {
+    isRunning = !!s.running;
+    liveRunId = s.run_id;
+    // If a sim started elsewhere while we were idle, snap into 'live'.
+    if (isRunning) viewMode = "live";
+    else viewMode = "idle";
+  }
   renderSimControls(s);
   // When transitioning from idle → running, refresh the runs table and graphs
   // so the user sees the new entry without waiting for the next interval.
@@ -505,7 +556,8 @@ async function loadState() {
     GRAPHS.forEach(refreshGraph);
   }
   const sum = document.getElementById("state-summary");
-  if (!isRunning) {
+  const showSummary = viewMode === "past" || isRunning;
+  if (!showSummary) {
     sum.innerHTML = `<span class="muted-text">No simulation running. ` +
       `Pick a config above and click <b>Start simulation</b>.</span>`;
     document.getElementById("metrics-summary").innerHTML = "";
@@ -558,6 +610,14 @@ async function loadState() {
 
 function renderMetrics(m) {
   const banner = document.getElementById("error-banner");
+  const metricsBox = document.getElementById("metrics-summary");
+  // Past runs don't carry live LLM-flow metrics; suppress the banner + line.
+  if (viewMode === "past") {
+    banner.style.display = "none";
+    metricsBox.innerHTML = `<span class="muted-text">` +
+      `Past-run metrics are not persisted; live LLM stats unavailable.</span>`;
+    return;
+  }
   let bannerLines = [];
 
   // Inference error within last 60s → red banner
@@ -576,7 +636,6 @@ function renderMetrics(m) {
   const votesDone = m.votes_completed || 0;
   const votesYes = m.votes_approved || 0;
   const votesNo = m.votes_rejected || 0;
-  const broadcasts = m.broadcasts_sent || 0;
   const lastSkip = m.last_skip_reason;
 
   // High-level diagnostic banners
@@ -592,9 +651,9 @@ function renderMetrics(m) {
       "uses a different chat template (try --chat-format harmony for gpt-oss)\n" +
       "or is ignoring the JSON schema. Click 'Show last LLM raw output'."
     );
-  } else if (total > 5 && opened === 0 && votes === 0 && broadcasts === 0) {
+  } else if (total > 5 && opened === 0 && votes === 0) {
     bannerLines.push(
-      `${total} decisions made but 0 conversations / 0 votes / 0 broadcasts.\n` +
+      `${total} decisions made but 0 conversations / 0 votes.\n` +
       `Either every decision is do_nothing, or every action is being skipped.\n` +
       (lastSkip ? `Last skip reason: ${lastSkip}` : "")
     );
@@ -621,7 +680,7 @@ function renderMetrics(m) {
     <span class="${errClass}">${unparsed} unparseable</span> ·
     ${skipped} skipped ·
     inference errors: ${m.inference_errors || 0}<br/>
-    outcomes: ${opened} conversations opened · ${votes} votes proposed (${votesDone} closed: ${votesYes} approved / ${votesNo} rejected) · ${broadcasts} broadcasts sent<br/>
+    outcomes: ${opened} conversations opened · ${votes} votes proposed (${votesDone} closed: ${votesYes} approved / ${votesNo} rejected)<br/>
     by action (picked/applied): <span class="muted-text">${actStr}</span>
     ${lastSkip ? `<br/>last skip: <span class="muted-text">${escapeHtml(lastSkip)}</span>` : ""}
   `;
@@ -649,7 +708,7 @@ let agentListCache = [];
 let selectedAgentId = null;
 
 async function loadAgentList() {
-  if (!isRunning) {
+  if (viewMode === "idle") {
     agentListCache = [];
     document.getElementById("agent-list").innerHTML =
       `<div style="padding:12px" class="muted-text">No simulation running.</div>`;
@@ -661,7 +720,7 @@ async function loadAgentList() {
   }
   let agents;
   try {
-    const r = await fetch("/agents");
+    const r = await fetch(endpoints().roster);
     if (!r.ok) return;
     agents = await r.json();
   } catch { return; }
@@ -699,7 +758,7 @@ async function loadAgentDetail(agentId) {
   const root = document.getElementById("agent-detail");
   root.innerHTML = "loading…";
   try {
-    const r = await fetch(`/agents/${encodeURIComponent(agentId)}`);
+    const r = await fetch(endpoints().agent(agentId));
     if (!r.ok) throw new Error(await r.text());
     renderAgentDetail(await r.json());
   } catch (e) {
@@ -892,13 +951,24 @@ async function loadRuns() {
   for (const run of runs) {
     const tr = document.createElement("tr");
     const isOpen = String(currentExplorerRun) === String(run.id);
+    const isLive = isRunning && String(liveRunId) === String(run.id);
+    // While a sim is running, only the live run's Explore button works.
+    const exploreDisabled = isRunning && !isLive;
+    const exploreTitle = exploreDisabled
+      ? "Stop the running simulation to explore older runs"
+      : "Load this run into the GUI";
     tr.innerHTML = `
       <td>${run.id}</td>
       <td>${run.name}</td>
       <td>${run.status}</td>
       <td class="muted-text">${run.started_at}</td>
       <td>
-        <button class="muted ${isOpen ? "active" : ""}" data-explore="${run.id}" data-name="${run.name}">Explore</button>
+        <button class="muted ${isOpen ? "active" : ""}"
+                data-explore="${run.id}"
+                data-name="${run.name}"
+                data-status="${run.status}"
+                title="${exploreTitle}"
+                ${exploreDisabled ? "disabled" : ""}>Explore</button>
         <button class="muted" data-export="${run.id}">Export</button>
         <button class="danger" data-delete="${run.id}">Delete</button>
       </td>`;
@@ -908,7 +978,15 @@ async function loadRuns() {
     b.addEventListener("click", e => {
       const id = e.target.dataset.explore;
       const name = e.target.dataset.name;
-      openExplorer(id, name);
+      const status = e.target.dataset.status;
+      // When a live sim is up, Explore on the live row only opens the
+      // bottom explorer pane (state/agents/graphs already show it). For
+      // any older run while idle, take over the whole GUI.
+      if (isRunning) {
+        openExplorer(id, name);
+      } else {
+        enterPastView(id, name, status);
+      }
     }));
   body.querySelectorAll("button[data-export]").forEach(b =>
     b.addEventListener("click", e => {
@@ -926,15 +1004,13 @@ async function loadRuns() {
     }));
 }
 
-// ---- run explorer (tabs: conversations / votes / broadcasts) ----
+// ---- run explorer (tabs: conversations / votes / community) ----
 let currentExplorerRun = null;
 let currentExplorerData = null;       // { conversations: [...], agents: {...} }
 let currentSelectedConv = null;
-let currentExplorerTab = "conversations";  // 'conversations' | 'votes' | 'broadcasts'
+let currentExplorerTab = "conversations";  // 'conversations' | 'votes' | 'community'
 let currentVotesData = null;          // { proposals: [...], agents: {...} }
 let currentSelectedVote = null;       // proposal_id
-let currentBroadcastsData = null;     // { broadcasts: [...], agents: {...} }
-let currentSelectedBroadcast = null;  // event id
 
 function fmtParticipants(c, agents) {
   const names = (c.participant_names && c.participant_names.length)
@@ -954,20 +1030,16 @@ async function openExplorer(runId, runName) {
   document.getElementById("explorer").classList.add("open");
   document.getElementById("explorer-title").textContent =
     ` — run #${runId} (${runName || ""})`;
-  // Reset all three panes' selection / data
+  // Reset all panes' selection / data
   currentExplorerData = null;
   currentVotesData = null;
-  currentBroadcastsData = null;
   currentCommunityData = null;
   currentSelectedConv = null;
   currentSelectedVote = null;
-  currentSelectedBroadcast = null;
   document.getElementById("conv-detail").innerHTML =
     `<span class="muted-text">Select a conversation on the left.</span>`;
   document.getElementById("vote-detail").innerHTML =
     `<span class="muted-text">Select a vote on the left.</span>`;
-  document.getElementById("bcast-detail").innerHTML =
-    `<span class="muted-text">Select a broadcast on the left.</span>`;
   // Load whichever tab is currently active.
   setExplorerTab(currentExplorerTab || "conversations");
   loadRuns();   // refresh button highlight
@@ -983,7 +1055,6 @@ function setExplorerTab(name) {
   if (currentExplorerRun == null) return;
   if (name === "conversations") loadConversationsList();
   else if (name === "votes") loadVotesList();
-  else if (name === "broadcasts") loadBroadcastsList();
   else if (name === "community") loadCommunity();
 }
 
@@ -993,8 +1064,6 @@ function closeExplorer() {
   currentSelectedConv = null;
   currentVotesData = null;
   currentSelectedVote = null;
-  currentBroadcastsData = null;
-  currentSelectedBroadcast = null;
   document.getElementById("explorer").classList.remove("open");
   loadRuns();
 }
@@ -1269,89 +1338,6 @@ function renderVoteDetail(data) {
   root.scrollTop = prevScroll;
 }
 
-// ---- broadcasts tab ----
-async function loadBroadcastsList() {
-  const root = document.getElementById("bcast-list");
-  if (!currentBroadcastsData) root.innerHTML = "loading…";
-  try {
-    const r = await fetch(`/runs/${currentExplorerRun}/broadcasts?limit=500`);
-    if (!r.ok) throw new Error(await r.text());
-    currentBroadcastsData = await r.json();
-  } catch (e) {
-    root.innerHTML = `<div style="padding:10px; color:#f85149">${escapeHtml(e.message)}</div>`;
-    return;
-  }
-  renderBroadcastsList();
-}
-
-function renderBroadcastsList() {
-  const root = document.getElementById("bcast-list");
-  if (!currentBroadcastsData) { root.innerHTML = ""; return; }
-  const filter = (document.getElementById("bcast-filter").value || "").trim().toLowerCase();
-  const { broadcasts } = currentBroadcastsData;
-  const filtered = broadcasts.filter(b => {
-    if (!filter) return true;
-    const hay = [
-      b.sender_name || "", b.sender_id || "", b.message || "",
-    ].join(" ").toLowerCase();
-    return hay.includes(filter);
-  });
-  const header = `
-    <div class="conv-list-header">
-      <span>${broadcasts.length} total · showing ${filtered.length}</span>
-      <span>newest first</span>
-    </div>`;
-  if (!filtered.length) {
-    root.innerHTML = header +
-      `<div style="padding:14px" class="muted-text">No broadcasts match the filter.</div>`;
-    return;
-  }
-  root.innerHTML = header + filtered.map(b => {
-    const isHuman = b.event_type === "broadcast_human";
-    return `
-      <div class="conv-row ${currentSelectedBroadcast === b.id ? "selected" : ""}"
-           data-bcast-id="${b.id}">
-        <div>
-          <span class="pill">#${b.id}</span>
-          ${isHuman ? `<span class="pill kind-badge v-pending">human</span>` : ""}
-        </div>
-        <div class="meta">
-          <b>${escapeHtml(b.sender_name || "?")}</b><br/>
-          ${escapeHtml((b.message || "").slice(0, 80))}${(b.message || "").length > 80 ? "…" : ""}<br/>
-          ${fmtTs(b.ts)}
-        </div>
-      </div>`;
-  }).join("");
-  root.querySelectorAll(".conv-row").forEach(el =>
-    el.addEventListener("click", () => {
-      const id = parseInt(el.dataset.bcastId, 10);
-      const b = currentBroadcastsData.broadcasts.find(x => x.id === id);
-      if (b) renderBroadcastDetail(b);
-    }));
-}
-
-function renderBroadcastDetail(b) {
-  currentSelectedBroadcast = b.id;
-  renderBroadcastsList();
-  const root = document.getElementById("bcast-detail");
-  const isHuman = b.event_type === "broadcast_human";
-  root.innerHTML = `
-    <div style="margin-bottom:12px">
-      <div>
-        <strong>Broadcast #${b.id}</strong>
-        ${isHuman ? `<span class="pill kind-badge v-pending">human</span>` : ""}
-      </div>
-      <div class="muted-text" style="font-size:0.8rem; margin-top:2px">
-        From <b>${escapeHtml(b.sender_name || "?")}</b>
-        ${b.sender_id && b.sender_id !== "HUMAN" ? `<span class="muted-text"> [${escapeHtml(b.sender_id)}]</span>` : ""}
-        · ${fmtTs(b.ts)}
-      </div>
-    </div>
-    <div class="msg">
-      <div class="body">${escapeHtml(b.message || "")}</div>
-    </div>`;
-}
-
 // ---- community tab ----
 let currentCommunityData = null;
 
@@ -1419,10 +1405,15 @@ function escapeHtml(s) {
     .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
 
-document.getElementById("btn-close-explorer").addEventListener("click", closeExplorer);
+document.getElementById("btn-close-explorer").addEventListener("click", () => {
+  // In past mode the explorer is bound to the run currently being viewed,
+  // so closing it should drop the whole past view; otherwise just collapse
+  // the bottom panel and leave the live sim alone.
+  if (viewMode === "past") exitPastView();
+  else closeExplorer();
+});
 document.getElementById("conv-filter").addEventListener("input", renderConvList);
 document.getElementById("vote-filter").addEventListener("input", renderVotesList);
-document.getElementById("bcast-filter").addEventListener("input", renderBroadcastsList);
 document.getElementById("community-filter").addEventListener("input", renderCommunity);
 document.querySelectorAll(".explorer-tab").forEach(b =>
   b.addEventListener("click", () => setExplorerTab(b.dataset.tab)));
@@ -1452,11 +1443,6 @@ setInterval(() => {
         .then(d => { if (d) renderVoteDetail(d); })
         .catch(() => {});
     }
-  } else if (currentExplorerTab === "broadcasts") {
-    fetch(`/runs/${currentExplorerRun}/broadcasts?limit=500`)
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d) { currentBroadcastsData = d; renderBroadcastsList(); } })
-      .catch(() => {});
   } else if (currentExplorerTab === "community") {
     fetch(`/runs/${currentExplorerRun}/community?limit=500`)
       .then(r => r.ok ? r.json() : null)
@@ -1464,6 +1450,97 @@ setInterval(() => {
       .catch(() => {});
   }
 }, 2000);
+
+function enterPastView(runId, runName, runStatus) {
+  if (isRunning) {
+    alert("Stop the running simulation before exploring an older one.");
+    return;
+  }
+  viewMode = "past";
+  viewedRunId = Number(runId);
+  pastRunInfo = { id: viewedRunId, name: runName, status: runStatus };
+  // Reset agent panel; new run, new roster.
+  selectedAgentId = null;
+  document.getElementById("agent-list").innerHTML = "loading…";
+  document.getElementById("agent-detail").innerHTML =
+    `<span class="muted-text">Select an agent on the left.</span>`;
+  // Open the run explorer pane so conversations/votes/community follow too.
+  openExplorer(viewedRunId, runName);
+  loadState();
+  loadAgentList();
+  GRAPHS.forEach(refreshGraph);
+  loadRuns();   // refresh button highlight
+}
+
+function exitPastView() {
+  viewMode = "idle";
+  viewedRunId = null;
+  pastRunInfo = null;
+  selectedAgentId = null;
+  // Clear images so we don't show stale past-run graphs while idle.
+  for (const g of GRAPHS) {
+    const img = document.getElementById("img-" + g);
+    if (img) { img.removeAttribute("src"); img.alt = `${g} (no run yet)`; }
+  }
+  closeExplorer();
+  loadState();
+  loadAgentList();
+  loadRuns();
+}
+
+async function resumePastRun() {
+  if (viewMode !== "past" || viewedRunId == null) return;
+  const status = document.getElementById("sim-action-status-past");
+  const btn = document.getElementById("btn-resume-past");
+  btn.disabled = true;
+  status.textContent = "resuming…";
+  try {
+    const r = await fetch(`/runs/${encodeURIComponent(viewedRunId)}/resume`,
+                          { method: "POST" });
+    if (!r.ok) {
+      status.textContent = `error: ${await r.text()}`;
+      btn.disabled = false;
+      return;
+    }
+    status.textContent = "resumed.";
+    // Switch into live view of the freshly-resumed run.
+    viewMode = "live";
+    pastRunInfo = null;
+    loadState();
+    loadAgentList();
+    loadRuns();
+    GRAPHS.forEach(refreshGraph);
+  } catch (e) {
+    status.textContent = `error: ${e}`;
+    btn.disabled = false;
+  }
+}
+
+async function endPastRun() {
+  if (viewMode !== "past" || viewedRunId == null) return;
+  if (!confirm(`Terminally mark run #${viewedRunId} as ended? `
+               + `It will no longer be resumable.`)) return;
+  const status = document.getElementById("sim-action-status-past");
+  const btn = document.getElementById("btn-end-past");
+  btn.disabled = true;
+  status.textContent = "ending…";
+  try {
+    const r = await fetch(`/runs/${encodeURIComponent(viewedRunId)}/end`,
+                          { method: "POST" });
+    if (!r.ok) {
+      status.textContent = `error: ${await r.text()}`;
+      btn.disabled = false;
+      return;
+    }
+    status.textContent = "ended.";
+    if (pastRunInfo) pastRunInfo.status = "ended";
+    renderSimControls({ run_id: viewedRunId, tick_no: 0 });
+    loadRuns();
+  } catch (e) {
+    status.textContent = `error: ${e}`;
+    btn.disabled = false;
+  }
+}
 
 document.getElementById("btn-pause").addEventListener("click", async () => {
   await fetch("/pause", { method: "POST" });
@@ -1491,6 +1568,9 @@ document.getElementById("btn-send").addEventListener("click", async () => {
 document.getElementById("btn-refresh-all").addEventListener("click", refreshAll);
 document.getElementById("btn-start").addEventListener("click", startSim);
 document.getElementById("btn-stop").addEventListener("click", stopSim);
+document.getElementById("btn-resume-past").addEventListener("click", resumePastRun);
+document.getElementById("btn-end-past").addEventListener("click", endPastRun);
+document.getElementById("btn-exit-past").addEventListener("click", exitPastView);
 
 buildGraphs();
 loadState();
@@ -1499,9 +1579,9 @@ loadAgentList();
 setInterval(loadState, 1500);
 setInterval(loadRuns, 15000);
 setInterval(() => {
-  // Skip live-roster polls when no simulation is running — /agents would
-  // just return 409 and the agent panel is hidden anyway.
-  if (!isRunning) return;
+  // Past-run data is immutable so a single load is enough; in idle mode the
+  // panel is empty. Only poll when a live sim is running.
+  if (viewMode !== "live" || !isRunning) return;
   loadAgentList();
   if (selectedAgentId) loadAgentDetail(selectedAgentId);
 }, 4000);

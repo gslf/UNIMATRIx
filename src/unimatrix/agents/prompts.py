@@ -86,7 +86,6 @@ class PromptBuilder:
             "  - start a private 1-to-1 chat with another person\n"
             "  - start or join a small group chat (max "
             f"{self.cfg.conversation.max_group_size} people)\n"
-            "  - broadcast a message that everyone hears\n"
             "  - propose a vote to change anyone's role or social class "
             "(including your own), or to award a money prize from the "
             "community treasury to anyone you think deserves it. Voting is "
@@ -256,13 +255,13 @@ class PromptBuilder:
             # the silence on the social order. Restrict to a single action.
             actions = ["propose_vote"]
         elif forced_action:
-            actions = ["start_1to1", "start_group", "broadcast", "propose_vote"]
+            actions = ["start_1to1", "start_group", "propose_vote"]
         else:
             # propose_vote is listed first deliberately: LLMs have a strong
             # order/recency bias when picking from an enumerated list, and the
             # vote is the only action that actually moves the social order.
             actions = ["propose_vote", "start_1to1", "start_group",
-                       "broadcast", "join_group", "request_loan", "do_nothing"]
+                       "join_group", "request_loan", "do_nothing"]
         if not open_groups and "join_group" in actions:
             actions.remove("join_group")
         if not idle_peers:
@@ -324,10 +323,6 @@ class PromptBuilder:
                     descriptions.append(
                         "  - start_1to1 / start_group: build understanding, expose disagreement."
                     )
-                if "broadcast" in actions:
-                    descriptions.append(
-                        "  - broadcast: address the whole society at once when you have something they all need to hear."
-                    )
                 if "join_group" in actions:
                     descriptions.append(
                         "  - join_group: enter an ongoing conversation whose topic concerns you."
@@ -384,7 +379,6 @@ class PromptBuilder:
             f"               or {{\"action\":\"propose_vote\",\"proposal\":{{\"target\":\"{sample_peer_id}\",\"change_type\":\"money_prize\",\"to_value\":\"<amount, e.g. 50>\",\"motivation\":\"<one short sentence: why they deserve a prize>\"}}}}\n"
             f"  start_1to1   → {{\"action\":\"start_1to1\",\"target\":\"{sample_peer_id}\",\"topic\":\"<one short sentence>\"}}\n"
             f"  start_group  → {{\"action\":\"start_group\",\"targets\":[\"{sample_peer_id}\",\"...\"],\"topic\":\"<one short sentence>\"}}\n"
-            f"  broadcast    → {{\"action\":\"broadcast\",\"message\":\"<what you proclaim to all>\"}}\n"
             f"  join_group   → {{\"action\":\"join_group\",\"conversation_id\":<one of {open_groups or '[]'}>}}\n"
             f"  request_loan → {{\"action\":\"request_loan\",\"target\":\"{banker_id}\",\"amount\":<positive number up to {loan_max:g}>,\"reason\":\"<one short sentence: why you need it>\"}}\n"
             f"  do_nothing   → {{\"action\":\"do_nothing\"}}\n"

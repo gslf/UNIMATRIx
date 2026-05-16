@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import Config, load_config
+from pydantic import ValidationError
 from .inference import InferenceClient
 from .log_console import LoggingConsole
 from .memory import MemoryManager
@@ -93,6 +94,69 @@ class SessionManager:
             self._lock = asyncio.Lock()
         return self._lock
 
+    def _apply_inference_overrides(self, cfg: Config) -> None:
+        if self.defaults.get("backend"):
+            cfg.inference.backend = self.defaults["backend"]
+        if self.defaults.get("endpoint"):
+            cfg.inference.endpoint = self.defaults["endpoint"]
+        if self.defaults.get("model"):
+            cfg.inference.model = self.defaults["model"]
+
+    async def _bring_up(
+        self,
+        cfg: Config,
+        run_id: int,
+        run_subdir: Path,
+        *,
+        resume: bool,
+    ) -> Orchestrator:
+        store = RunStore(self.runs_dir / f"{run_subdir.name}.db")
+        memory = MemoryManager(
+            cfg.memory, store, run_id, persist_dir=str(run_subdir / "chroma")
+        )
+        inference = InferenceClient(cfg.inference)
+        orch = Orchestrator(
+            cfg=cfg,
+            store=store,
+            memory=memory,
+            inference=inference,
+            registry=self.registry,
+            run_id=run_id,
+            run_dir=run_subdir,
+            console=self.console,
+        )
+        try:
+            if resume:
+                await orch.initialize_from_existing()
+            else:
+                await orch.initialize()
+        except Exception as exc:
+            self.console.log(f"[red]initialization failed[/]: {exc!r}")
+            try:
+                await inference.aclose()
+            except Exception:
+                pass
+            try:
+                await memory.close()
+            except Exception:
+                pass
+            try:
+                store.close()
+            except Exception:
+                pass
+            from .persistence import utc_now_iso
+            self.registry.update_status(run_id, "failed", utc_now_iso())
+            raise SessionError(500, f"initialization failed: {exc}") from exc
+
+        self._orch = orch
+        self._store = store
+        self._memory = memory
+        self._inference = inference
+        self._task = asyncio.create_task(
+            self._run_with_cleanup(), name=f"orchestrator-{run_id}"
+        )
+        return orch
+
     async def start(self, config_file: str) -> int:
         """Spin up a new simulation from `<configs_dir>/<config_file>`."""
         async with self._get_lock():
@@ -108,13 +172,7 @@ class SessionManager:
             except Exception as exc:
                 raise SessionError(400, f"invalid config: {exc}") from exc
 
-            # CLI defaults applied as overrides at start time.
-            if self.defaults.get("backend"):
-                cfg.inference.backend = self.defaults["backend"]
-            if self.defaults.get("endpoint"):
-                cfg.inference.endpoint = self.defaults["endpoint"]
-            if self.defaults.get("model"):
-                cfg.inference.model = self.defaults["model"]
+            self._apply_inference_overrides(cfg)
 
             run_slug = f"{cfg.simulation.name}_{_ts_slug()}"
             run_subdir = self.runs_dir / run_slug
@@ -130,52 +188,50 @@ class SessionManager:
                 f"[bold]registered run[/] id={run_id} db={db_path} "
                 f"(config: {config_file})"
             )
-
-            store = RunStore(db_path)
-            memory = MemoryManager(
-                cfg.memory, store, run_id, persist_dir=str(run_subdir / "chroma")
-            )
-            inference = InferenceClient(cfg.inference)
-            orch = Orchestrator(
-                cfg=cfg,
-                store=store,
-                memory=memory,
-                inference=inference,
-                registry=self.registry,
-                run_id=run_id,
-                run_dir=run_subdir,
-                console=self.console,
-            )
-            try:
-                await orch.initialize()
-            except Exception as exc:
-                # Initialization failed — clean up what we built and surface
-                # the error to the caller without leaving a half-open run.
-                self.console.log(f"[red]initialization failed[/]: {exc!r}")
-                try:
-                    await inference.aclose()
-                except Exception:
-                    pass
-                try:
-                    await memory.close()
-                except Exception:
-                    pass
-                try:
-                    store.close()
-                except Exception:
-                    pass
-                from .persistence import utc_now_iso
-                self.registry.update_status(run_id, "failed", utc_now_iso())
-                raise SessionError(500, f"initialization failed: {exc}") from exc
-
-            self._orch = orch
-            self._store = store
-            self._memory = memory
-            self._inference = inference
-            self._task = asyncio.create_task(
-                self._run_with_cleanup(), name=f"orchestrator-{run_id}"
-            )
+            await self._bring_up(cfg, run_id, run_subdir, resume=False)
             return run_id
+
+    async def resume(self, run_id: int) -> None:
+        """Re-attach to a previously-paused run and resume ticking.
+
+        Only runs whose registry status is exactly `paused` are eligible.
+        """
+        async with self._get_lock():
+            if self.is_active:
+                raise SessionError(409, "a simulation is already running")
+            info = self.registry.get(run_id)
+            if info is None:
+                raise SessionError(404, f"run {run_id} not found")
+            if (info.get("status") or "") != "paused":
+                raise SessionError(
+                    409,
+                    f"run {run_id} is '{info.get('status')}', only paused runs "
+                    "can be resumed",
+                )
+            try:
+                cfg_dict = json.loads(info["config_json"])
+                cfg: Config = Config.model_validate(cfg_dict)
+            except (ValidationError, ValueError) as exc:
+                raise SessionError(
+                    500, f"saved config for run {run_id} is invalid: {exc}"
+                ) from exc
+
+            self._apply_inference_overrides(cfg)
+
+            db_path = Path(info["db_path"])
+            if not db_path.exists():
+                raise SessionError(
+                    410, f"run {run_id} db file missing at {db_path}"
+                )
+            run_subdir = self.runs_dir / db_path.stem
+            run_subdir.mkdir(parents=True, exist_ok=True)
+
+            self.console.log(
+                f"[bold]resuming run[/] id={run_id} db={db_path}"
+            )
+            await self._bring_up(cfg, run_id, run_subdir, resume=True)
+            # Loop will tick immediately; flip status from "paused" to running.
+            self.registry.update_status(run_id, "running")
 
     async def _run_with_cleanup(self) -> None:
         orch = self._orch

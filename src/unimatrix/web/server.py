@@ -15,9 +15,10 @@ from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 
+from ..config import Config
 from ..graphs import GRAPH_NAMES, GraphRenderer
 from ..orchestrator import Orchestrator
-from ..persistence import Registry, RunStore
+from ..persistence import Registry, RunStore, utc_now_iso
 from ..session import SessionError, SessionManager
 
 
@@ -27,6 +28,18 @@ class BroadcastIn(BaseModel):
 
 class StartIn(BaseModel):
     config: str = Field(..., min_length=1, max_length=200)
+
+
+def _config_for_run(registry: Registry, run_id: int) -> Config:
+    info = registry.get(run_id)
+    if info is None:
+        raise HTTPException(404, f"run {run_id} not found")
+    try:
+        return Config.model_validate(json.loads(info["config_json"]))
+    except Exception as exc:
+        raise HTTPException(
+            500, f"saved config for run {run_id} is invalid: {exc}"
+        )
 
 
 def _idle_state(session: SessionManager) -> dict:
@@ -340,6 +353,249 @@ def build_app(
                 return _agents_map(s)
         return JSONResponse(await asyncio.to_thread(_impl))
 
+    # ---- past-run "load everything into the GUI" endpoints ----
+
+    @app.post("/runs/{run_id}/resume")
+    async def runs_resume(run_id: int) -> JSONResponse:
+        try:
+            await session.resume(run_id)
+        except SessionError as exc:
+            raise HTTPException(exc.status, exc.message)
+        return JSONResponse({"running": True, "run_id": run_id})
+
+    @app.post("/runs/{run_id}/end")
+    async def runs_end(run_id: int) -> JSONResponse:
+        """Terminally mark a paused past-run as ended without resuming."""
+        info = registry.get(run_id)
+        if info is None:
+            raise HTTPException(404, f"run {run_id} not found")
+        orch = session.orchestrator
+        if orch is not None and run_id == orch.run_id and session.is_active:
+            raise HTTPException(
+                409, "this run is currently live; use /sim/stop instead"
+            )
+        if (info.get("status") or "") not in ("paused", "running"):
+            raise HTTPException(
+                409,
+                f"run {run_id} is '{info.get('status')}'; only paused/running "
+                "runs can be ended manually",
+            )
+        registry.update_status(run_id, "ended", utc_now_iso())
+        return JSONResponse({"run_id": run_id, "status": "ended"})
+
+    @app.get("/runs/{run_id}/state")
+    async def run_state(run_id: int) -> JSONResponse:
+        """Read-only snapshot synthesized from the past run's DB."""
+        info = registry.get(run_id)
+        if info is None:
+            raise HTTPException(404, f"run {run_id} not found")
+
+        def _impl() -> dict:
+            with open_run_store(run_id) as s:
+                agents = s.list_agents()
+                per_state: dict[str, int] = {}
+                per_class: dict[str, int] = {}
+                for a in agents:
+                    st = a.get("state") or "idle"
+                    cl = a.get("class") or "?"
+                    per_state[st] = per_state.get(st, 0) + 1
+                    per_class[cl] = per_class.get(cl, 0) + 1
+                ckpt = s.latest_checkpoint() or {}
+                try:
+                    tick_no = int(ckpt.get("tick_no") or 0)
+                except (TypeError, ValueError):
+                    tick_no = 0
+                try:
+                    community_balance = s.get_community_balance()
+                except Exception:
+                    community_balance = 0.0
+                try:
+                    recent_transactions = s.list_transactions(limit=20)
+                except Exception:
+                    recent_transactions = []
+                events = s.recent_events(50)
+            return {
+                "run_id": run_id,
+                "running": False,
+                "paused": (info.get("status") == "paused"),
+                "status": info.get("status"),
+                "started_at": info.get("started_at"),
+                "ended_at": info.get("ended_at"),
+                "name": info.get("name"),
+                "tick_no": tick_no,
+                "seconds_since_last_tick": None,
+                "seconds_since_last_activity": None,
+                "agents_per_state": per_state,
+                "agents_per_class": per_class,
+                "active_conversations": [],
+                "active_vote": None,
+                "broadcast_queue_length": 0,
+                "community_balance": round(community_balance, 2),
+                "recent_transactions": recent_transactions,
+                "recent_events": events,
+                "metrics": {},
+            }
+        return JSONResponse(await asyncio.to_thread(_impl))
+
+    @app.get("/runs/{run_id}/roster")
+    async def run_roster(run_id: int) -> JSONResponse:
+        """Past-run agent roster shaped like the live `/agents` endpoint."""
+        def _impl() -> list[dict]:
+            with open_run_store(run_id) as s:
+                return [
+                    {
+                        "id": a["agent_id"],
+                        "name": a["name"] or a["agent_id"],
+                        "role": a.get("role"),
+                        "class": a.get("class"),
+                        "state": a.get("state"),
+                        "social_need": a.get("social_need"),
+                    }
+                    for a in s.list_agents()
+                ]
+        return JSONResponse(await asyncio.to_thread(_impl))
+
+    @app.get("/runs/{run_id}/agents/{agent_id}")
+    async def run_agent_detail(run_id: int, agent_id: str) -> JSONResponse:
+        """Past-run agent profile mirroring the live `/agents/{id}` shape."""
+        cfg = _config_for_run(registry, run_id)
+        roles_by_id = {r.id: r for r in cfg.roles}
+        opinions_by_agent: dict[str, dict] = {
+            s.id: dict(s.opinions or {}) for s in cfg.agents
+        }
+
+        def _impl() -> dict:
+            with open_run_store(run_id) as s:
+                a = s.get_agent(agent_id)
+                if a is None:
+                    raise HTTPException(404, f"agent {agent_id} not found")
+                try:
+                    personality = json.loads(a.get("personality") or "{}")
+                except json.JSONDecodeError:
+                    personality = {}
+                try:
+                    values = json.loads(a.get("values_json") or "{}")
+                except json.JSONDecodeError:
+                    values = {}
+                role_id = a.get("role")
+                role_spec = roles_by_id.get(role_id)
+                opinions = opinions_by_agent.get(agent_id, {})
+
+                summaries = s.recent_summaries(
+                    agent_id, cfg.memory.medium_term_summaries
+                )
+                impressions = s.list_person_memories_for(agent_id)
+                agents_map = _agents_map(s)
+                for imp in impressions:
+                    imp["subject_name"] = agents_map.get(
+                        imp["subject_id"], {"name": imp["subject_id"]}
+                    )["name"]
+
+                decisions = s.agent_decision_history(agent_id, limit=15)
+                for d in decisions:
+                    if d["kind"] == "started_conversation":
+                        d["participant_names"] = [
+                            agents_map.get(p, {"name": p})["name"]
+                            for p in d.get("participants", [])
+                        ]
+                    elif d["kind"] == "vote_proposed":
+                        d["target_name"] = agents_map.get(
+                            d.get("target_id"), {"name": d.get("target_id")}
+                        )["name"]
+
+                votes_raw = s.get_votes_by_voter(agent_id, limit=10)
+                recent_votes: list[dict] = []
+                for v in votes_raw:
+                    motivation = v.get("motivation") or ""
+                    status = (
+                        "malformed"
+                        if motivation.startswith("malformed response")
+                        else (v.get("vote") or "unknown")
+                    )
+                    tgt_id = v.get("target_id")
+                    recent_votes.append({
+                        "proposal_id": v["proposal_id"],
+                        "status": status,
+                        "vote": v.get("vote"),
+                        "motivation": motivation,
+                        "raw_response": v.get("raw_response"),
+                        "voted_at": v.get("voted_at"),
+                        "target_id": tgt_id,
+                        "target_name": agents_map.get(
+                            tgt_id, {"name": tgt_id}
+                        )["name"],
+                        "change_type": v.get("change_type"),
+                        "from_value": v.get("from_value"),
+                        "to_value": v.get("to_value"),
+                        "outcome": v.get("outcome"),
+                    })
+
+                txs = s.list_transactions(limit=30, agent_id=agent_id)
+                return {
+                    "id": a["agent_id"],
+                    "name": a.get("name") or a["agent_id"],
+                    "gender": a.get("gender"),
+                    "role": role_id,
+                    "role_label": role_spec.name if role_spec else role_id,
+                    "role_prestige": role_spec.prestige if role_spec else None,
+                    "class": a.get("class"),
+                    "personality": personality,
+                    "values": values,
+                    "backstory": a.get("backstory") or "",
+                    "opinions": opinions,
+                    "social_need": a.get("social_need"),
+                    "state": a.get("state"),
+                    "current_conversation_id": a.get("current_conversation_id"),
+                    "bank_account": a.get("bank_account"),
+                    "recent_transactions": txs,
+                    "memory": {
+                        "summaries": summaries,
+                        "impressions": impressions,
+                    },
+                    "recent_decisions": decisions,
+                    "recent_votes": recent_votes,
+                }
+        return JSONResponse(await asyncio.to_thread(_impl))
+
+    @app.get("/runs/{run_id}/graphs/{name}.png")
+    async def run_graph(run_id: int, name: str) -> Response:
+        if name not in GRAPH_NAMES:
+            raise HTTPException(404, f"unknown graph {name}")
+        info = registry.get(run_id)
+        if info is None:
+            raise HTTPException(404, f"run {run_id} not found")
+        cfg = _config_for_run(registry, run_id)
+        db_path = Path(info["db_path"])
+        run_subdir = runs_dir / db_path.stem
+        graph_out = run_subdir / "graphs"
+        graph_out.mkdir(parents=True, exist_ok=True)
+
+        def _render() -> Path:
+            with open_run_store(run_id) as s:
+                renderer = GraphRenderer(cfg, s, graph_out)
+                return renderer.render(name)
+
+        path = await asyncio.to_thread(_render)
+        return FileResponse(path, media_type="image/png")
+
+    @app.post("/runs/{run_id}/graphs/refresh")
+    async def run_graphs_refresh(run_id: int) -> JSONResponse:
+        info = registry.get(run_id)
+        if info is None:
+            raise HTTPException(404, f"run {run_id} not found")
+        cfg = _config_for_run(registry, run_id)
+        db_path = Path(info["db_path"])
+        run_subdir = runs_dir / db_path.stem
+        graph_out = run_subdir / "graphs"
+        graph_out.mkdir(parents=True, exist_ok=True)
+
+        def _render_all() -> dict:
+            with open_run_store(run_id) as s:
+                renderer = GraphRenderer(cfg, s, graph_out)
+                return {k: str(v) for k, v in renderer.render_all().items()}
+
+        return JSONResponse(await asyncio.to_thread(_render_all))
+
     @app.get("/runs/{run_id}/conversations")
     async def run_conversations(run_id: int, limit: int = 500) -> JSONResponse:
         def _impl() -> dict:
@@ -466,37 +722,6 @@ def build_app(
                     "balance": balance,
                     "transactions": community_txs,
                 }
-        return JSONResponse(await asyncio.to_thread(_impl))
-
-    @app.get("/runs/{run_id}/broadcasts")
-    async def run_broadcasts(run_id: int, limit: int = 500) -> JSONResponse:
-        """List of broadcast events (human + agent) newest first."""
-        def _impl() -> dict:
-            with open_run_store(run_id) as s:
-                events = s.events_by_type(
-                    ["broadcast_agent", "broadcast_human"], limit=limit
-                )
-                agents = _agents_map(s)
-                broadcasts: list[dict] = []
-                for e in events:
-                    payload = e.get("payload") or {}
-                    sender_id = payload.get("sender_id") or ""
-                    sender_name = (
-                        "(human / public crier)"
-                        if sender_id == "HUMAN"
-                        else agents.get(
-                            sender_id, {"name": sender_id}
-                        )["name"]
-                    )
-                    broadcasts.append({
-                        "id": e.get("id"),
-                        "ts": e.get("ts"),
-                        "event_type": e.get("event_type"),
-                        "sender_id": sender_id,
-                        "sender_name": sender_name,
-                        "message": payload.get("message") or "",
-                    })
-                return {"broadcasts": broadcasts, "agents": agents}
         return JSONResponse(await asyncio.to_thread(_impl))
 
     @app.delete("/runs/{run_id}")
