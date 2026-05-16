@@ -16,3 +16,4 @@ runs/
 .DS_Store
 chroma_*/
 .claude/
+analysis_scripts/
