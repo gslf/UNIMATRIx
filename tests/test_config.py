@@ -98,3 +98,64 @@ def test_economy_block_round_trips(
     role_ids = {r.id for r in cfg.roles}
     for pr in cfg.economy.protected_roles:
         assert pr in role_ids
+
+
+def test_mobility_and_office_defaults(example_config_path: Path) -> None:
+    """A config without mobility/office_powers/agent_powers loads with defaults
+    and resolves offices positionally to powers."""
+    cfg = load_config(example_config_path)
+    assert cfg.mobility.influence_step > 0
+    assert cfg.office_ids() == cfg.economy.protected_roles
+    assert cfg.power_of_office(cfg.office_ids()[0]) == "legislative"
+    assert cfg.power_of_office(cfg.office_ids()[2]) == "financial"
+    # Ordinary roles exclude the three offices.
+    assert not (set(cfg.office_ids()) & set(cfg.ordinary_role_ids()))
+
+
+def test_explicit_mobility_block_loads(
+    example_config_path: Path, tmp_path: Path
+) -> None:
+    raw = json.loads(example_config_path.read_text(encoding="utf-8"))
+    raw["mobility"] = {
+        "influence_step": 4,
+        "class_thresholds": {
+            "aristocracy": {"popularity_min": 70, "balance_min": 100},
+            "bourgeoisie": {"popularity_min": 40, "balance_min": 50},
+            "people": {"popularity_min": 15, "balance_min": 0},
+            "marginal": {"popularity_min": 0, "balance_min": 0},
+        },
+    }
+    p = tmp_path / "with_mobility.json"
+    p.write_text(json.dumps(raw))
+    cfg = load_config(p)
+    assert cfg.mobility.influence_step == 4
+    assert cfg.resolved_class_thresholds()["aristocracy"].popularity_min == 70
+
+
+def test_class_thresholds_must_match_classes(
+    example_config_path: Path, tmp_path: Path
+) -> None:
+    raw = json.loads(example_config_path.read_text(encoding="utf-8"))
+    raw["mobility"] = {
+        "class_thresholds": {
+            "aristocracy": {"popularity_min": 70, "balance_min": 100},
+            # missing the other classes / wrong key
+            "nonexistent": {"popularity_min": 0, "balance_min": 0},
+        }
+    }
+    p = tmp_path / "bad_thresholds.json"
+    p.write_text(json.dumps(raw))
+    with pytest.raises(ValidationError):
+        load_config(p)
+
+
+def test_influence_must_be_smaller_than_office(
+    example_config_path: Path, tmp_path: Path
+) -> None:
+    raw = json.loads(example_config_path.read_text(encoding="utf-8"))
+    raw["mobility"] = {"influence_step": 50}
+    raw["office_powers"] = {"senator_prestige_power": 20, "judge_popularity_power": 20}
+    p = tmp_path / "too_big_influence.json"
+    p.write_text(json.dumps(raw))
+    with pytest.raises(ValidationError):
+        load_config(p)

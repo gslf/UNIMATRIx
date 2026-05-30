@@ -2,7 +2,7 @@
 
 The vLLM backend talks to vLLM's OpenAI-compatible /v1/chat/completions endpoint;
 batching is handled implicitly — vLLM merges concurrent in-flight requests on
-its side. We just cap concurrency with a semaphore so we don't overwhelm it.
+its side. We cap concurrency with a semaphore.
 
 The llama_cpp backend talks to llama.cpp's /v1/chat/completions (same shape).
 
@@ -16,12 +16,38 @@ import hashlib
 import json
 import random
 import re
+import time
 from dataclasses import dataclass, field
-from typing import Sequence
+from typing import TYPE_CHECKING, Sequence
 
 import httpx
 
 from ..config import InferenceConfig
+
+if TYPE_CHECKING:
+    from ..log_console import LoggingConsole
+
+
+def _new_stats_window() -> dict:
+    """Per-window inference accumulator. The orchestrator drains it each tick.
+
+    Mutated only on the (single) event-loop thread between awaits, so no lock
+    is needed. `usage_calls`/`timings_calls` count how many calls actually
+    reported token usage / server timings, so averages divide by the right N.
+    """
+    return {
+        "calls": 0,
+        "errors": 0,
+        "timeouts": 0,
+        "latency_sum_s": 0.0,
+        "latency_max_s": 0.0,
+        "prompt_tokens_sum": 0,
+        "completion_tokens_sum": 0,
+        "prefill_ms_sum": 0.0,
+        "decode_ms_sum": 0.0,
+        "usage_calls": 0,
+        "timings_calls": 0,
+    }
 
 
 @dataclass
@@ -44,16 +70,41 @@ class GenerationRequest:
     stub_kind: str | None = None
     # Free-form metadata available to the stub for deterministic output.
     stub_context: dict = field(default_factory=dict)
+    # Optional human label (e.g. the agent id) used only for slow-call
+    # diagnostics — names which request is hung when one exceeds the threshold.
+    label: str | None = None
 
 
 class InferenceClient:
-    def __init__(self, cfg: InferenceConfig) -> None:
+    def __init__(
+        self, cfg: InferenceConfig, console: "LoggingConsole | None" = None
+    ) -> None:
         self.cfg = cfg
-        self._semaphore = asyncio.Semaphore(cfg.max_batch_size)
+        self._console = console
         self._client: httpx.AsyncClient | None = None
+        # Cap total in-flight HTTP requests across the whole simulation (this
+        # client is shared by decisions, voting and messaging). asyncio.Semaphore
+        # binds to the running loop lazily on first acquire (3.11+), so building
+        # it here — outside any loop (tests) or inside one (session bring-up) —
+        # is safe.
+        self._sem = asyncio.Semaphore(cfg.max_concurrent_requests)
+        # Live gauges (instantaneous) + a drained-each-tick stats window. Plain
+        # ints/floats, mutated only on the event-loop thread → no lock needed.
+        self._queued = 0       # generate() calls waiting for a semaphore permit
+        self._inflight = 0     # POSTs actively awaiting the backend
+        self._peak_inflight = 0
+        self._win = _new_stats_window()
         if cfg.backend in ("vllm", "llama_cpp"):
             self._client = httpx.AsyncClient(
-                base_url=cfg.endpoint, timeout=cfg.request_timeout_seconds
+                base_url=cfg.endpoint,
+                # Short connect ceiling fails fast on a dead endpoint; the full
+                # (possibly large) budget still applies to the slow read/generate.
+                timeout=httpx.Timeout(cfg.request_timeout_seconds, connect=10.0),
+                # Never open more sockets than the semaphore lets fly at once.
+                limits=httpx.Limits(
+                    max_connections=cfg.max_concurrent_requests,
+                    max_keepalive_connections=cfg.max_concurrent_requests,
+                ),
             )
 
     async def aclose(self) -> None:
@@ -61,16 +112,104 @@ class InferenceClient:
             await self._client.aclose()
 
     async def generate(self, req: GenerationRequest) -> str:
-        async with self._semaphore:
-            if self.cfg.backend == "stub":
-                return _stub_generate(req)
+        if self.cfg.backend == "stub":
+            return _stub_generate(req)
+        # Track two distinct states so observers can tell "throttled client-side"
+        # (queued, waiting for a permit) from "the backend is slow" (inflight,
+        # POST in progress). The semaphore is still the single choke point.
+        self._queued += 1
+        try:
+            await self._sem.acquire()
+        except BaseException:
+            self._queued -= 1
+            raise
+        self._queued -= 1
+        self._inflight += 1
+        self._peak_inflight = max(self._peak_inflight, self._inflight)
+        start = time.perf_counter()
+        error = timed_out = False
+        try:
             return await self._http_generate(req)
+        except Exception as exc:
+            error = True
+            timed_out = "timeout" in str(exc).lower()
+            raise
+        finally:
+            elapsed = time.perf_counter() - start
+            self._inflight -= 1
+            self._sem.release()
+            self._record_call(elapsed, error=error, timed_out=timed_out)
+            if elapsed >= self.cfg.slow_request_warn_seconds and self._console:
+                who = req.label or req.stub_kind or "request"
+                self._console.log(
+                    f"[yellow]slow inference[/] {who}: {elapsed:.0f}s "
+                    f"(in-flight {self._inflight + 1}/{self.cfg.max_concurrent_requests})"
+                )
 
     async def generate_batch(
         self, reqs: Sequence[GenerationRequest]
     ) -> list[str]:
-        # vLLM batches via concurrent HTTP requests; the semaphore caps fan-out.
+        # Flat gather: each request still goes through generate(), whose
+        # semaphore caps in-flight requests, so this honors max_concurrent_requests
+        # without head-of-line blocking (a freed permit is taken immediately).
         return await asyncio.gather(*(self.generate(r) for r in reqs))
+
+    # ----- observability -----
+
+    def _record_call(self, elapsed_s: float, *, error: bool, timed_out: bool) -> None:
+        w = self._win
+        w["calls"] += 1
+        w["latency_sum_s"] += elapsed_s
+        w["latency_max_s"] = max(w["latency_max_s"], elapsed_s)
+        if error:
+            w["errors"] += 1
+        if timed_out:
+            w["timeouts"] += 1
+
+    def _record_usage(self, usage: dict | None, timings: dict | None) -> None:
+        w = self._win
+        if usage:
+            w["usage_calls"] += 1
+            w["prompt_tokens_sum"] += int(usage.get("prompt_tokens") or 0)
+            w["completion_tokens_sum"] += int(usage.get("completion_tokens") or 0)
+        if timings:
+            w["timings_calls"] += 1
+            w["prefill_ms_sum"] += float(timings.get("prompt_ms") or 0.0)
+            w["decode_ms_sum"] += float(timings.get("predicted_ms") or 0.0)
+
+    def inflight_snapshot(self) -> dict:
+        """Instantaneous gauges — safe to read at any time (e.g. from /state)."""
+        return {
+            "queued": self._queued,
+            "inflight": self._inflight,
+            "peak_inflight": self._peak_inflight,
+            "cap": self.cfg.max_concurrent_requests,
+        }
+
+    def window_stats(self) -> dict:
+        """Aggregates for the current window, with averages already computed."""
+        w = self._win
+        calls = w["calls"] or 1
+        usage_n = w["usage_calls"] or 1
+        return {
+            "calls": w["calls"],
+            "errors": w["errors"],
+            "timeouts": w["timeouts"],
+            "avg_latency_s": round(w["latency_sum_s"] / calls, 2),
+            "max_latency_s": round(w["latency_max_s"], 2),
+            "avg_prompt_tokens": round(w["prompt_tokens_sum"] / usage_n),
+            "avg_completion_tokens": round(w["completion_tokens_sum"] / usage_n),
+            "prefill_s": round(w["prefill_ms_sum"] / 1000.0, 1),
+            "decode_s": round(w["decode_ms_sum"] / 1000.0, 1),
+            "peak_inflight": self._peak_inflight,
+            "cap": self.cfg.max_concurrent_requests,
+        }
+
+    def reset_window(self) -> None:
+        """Start a fresh window. Peak resets to the live count (not zero) so a
+        request still in flight across the boundary keeps being represented."""
+        self._win = _new_stats_window()
+        self._peak_inflight = self._inflight
 
     async def _http_generate(self, req: GenerationRequest) -> str:
         assert self._client is not None
@@ -122,12 +261,17 @@ class InferenceClient:
         try:
             data = r.json()
             content = data["choices"][0]["message"]["content"] or ""
-            return strip_think_tags(strip_harmony_channels(content))
         except (KeyError, IndexError, TypeError, ValueError) as exc:
             raise RuntimeError(
                 f"unexpected response shape from {self.cfg.endpoint}: "
                 f"{r.text[:300]!r}"
             ) from exc
+        # Record token usage (prefill vs decode size) and, when the backend
+        # reports them (llama.cpp / LM Studio), the server-side prompt/predict
+        # timings. Best-effort — never let a missing field break a generation.
+        if isinstance(data, dict):
+            self._record_usage(data.get("usage"), data.get("timings"))
+        return strip_think_tags(strip_harmony_channels(content))
 
 
 # ---------------------------------------------------------------------------
@@ -167,6 +311,10 @@ def _stub_generate(req: GenerationRequest) -> str:
         return _stub_decision(req, rng)
     if kind == "vote":
         return _stub_vote(req, rng)
+    if kind == "election_ballot":
+        return _stub_election_ballot(req, rng)
+    if kind == "election_reassign":
+        return _stub_election_reassign(req, rng)
     if kind == "summary":
         return _stub_summary(req, rng)
     if kind == "person_impression":
@@ -176,6 +324,20 @@ def _stub_generate(req: GenerationRequest) -> str:
     if kind == "loan":
         return _stub_loan(req, rng)
     return _stub_chat(req, rng)
+
+
+def _stub_election_ballot(req: GenerationRequest, rng: random.Random) -> str:
+    cands = req.stub_context.get("candidates") or []
+    if not cands:
+        return "abstain"
+    return rng.choice(cands)
+
+
+def _stub_election_reassign(req: GenerationRequest, rng: random.Random) -> str:
+    roles = req.stub_context.get("roles") or []
+    if not roles:
+        return "worker"
+    return rng.choice(roles)
 
 
 def _stub_loan(req: GenerationRequest, rng: random.Random) -> str:
@@ -206,46 +368,84 @@ def _infer_stub_kind(req: GenerationRequest) -> str:
 
 def _stub_decision(req: GenerationRequest, rng: random.Random) -> str:
     ctx = req.stub_context
-    available = ctx.get("available_actions") or [
-        "do_nothing", "start_1to1", "start_group"
-    ]
-    others = ctx.get("idle_peers") or []
-    classes = ctx.get("classes") or []
-    roles = ctx.get("roles") or []
-    self_id = ctx.get("self_id")
-    action = rng.choice(available)
+    available = ctx.get("available_actions") or ["do_nothing"]
+    others = ctx.get("others") or []
+    officeholders = ctx.get("officeholders") or []
+    bankers = ctx.get("bankers") or []
+    inbox_senders = ctx.get("inbox_senders") or []
+    forced = bool(ctx.get("forced"))
+
+    def _sample(pool: list, lo: int = 1, hi: int = 2) -> list:
+        if not pool:
+            return []
+        return rng.sample(pool, min(len(pool), rng.randint(lo, hi)))
+
+    # 1) the optional flat power/economy action (legacy talk actions dropped).
+    actionable = [
+        a for a in available
+        if a not in ("start_1to1", "start_group", "join_group")
+    ] or ["do_nothing"]
+    action = rng.choice(actionable)
     out: dict = {"action": action}
-    if action == "start_1to1" and others:
-        out["target"] = rng.choice(others)
-        out["topic"] = rng.choice(_STUB_TOPICS)
-    elif action == "start_group" and len(others) >= 2:
-        size = min(len(others), rng.randint(2, 5))
-        out["targets"] = rng.sample(others, size)
-        out["topic"] = rng.choice(_STUB_TOPICS)
-    elif action == "propose_vote" and others and (classes or roles):
-        target = rng.choice([self_id] + others) if self_id else rng.choice(others)
-        if rng.random() < 0.5 and roles:
-            out["proposal"] = {
-                "target": target,
-                "change_type": "role",
-                "to_value": rng.choice(roles),
-                "motivation": "The order would be more just under this change.",
-            }
-        elif classes:
-            out["proposal"] = {
-                "target": target,
-                "change_type": "class",
-                "to_value": rng.choice(classes),
-                "motivation": "The order would be more just under this change.",
-            }
+
+    if action == "request_loan":
+        if bankers:
+            out["target"] = rng.choice(bankers)
+            out["amount"] = rng.choice([10, 20, 50])
+            out["reason"] = "running low on coin"
         else:
             out["action"] = "do_nothing"
-    elif action == "join_group":
-        groups = ctx.get("open_groups") or []
-        if groups:
-            out["conversation_id"] = rng.choice(groups)
+    elif action in ("praise", "denounce"):
+        if others:
+            out["targets"] = _sample(others)
+            out["aspect"] = rng.choice(["popularity", "prestige", "both"])
         else:
             out["action"] = "do_nothing"
+    elif action == "steal":
+        if others:
+            out["target"] = rng.choice(others)
+            out["amount"] = rng.choice([10, 20, 30])
+        else:
+            out["action"] = "do_nothing"
+    elif action == "gift":
+        if others:
+            out["target"] = rng.choice(others)
+            out["amount"] = rng.choice([10, 20])
+        else:
+            out["action"] = "do_nothing"
+    elif action == "sabotage":
+        if officeholders:
+            out["target"] = rng.choice(officeholders)
+        else:
+            out["action"] = "do_nothing"
+    elif action == "decree":
+        if others:
+            out["targets"] = _sample(others)
+            out["direction"] = rng.choice(["raise", "lower"])
+        else:
+            out["action"] = "do_nothing"
+    elif action == "ruling":
+        if others:
+            out["targets"] = _sample(others)
+            out["verdict"] = rng.choice(["sanction", "vindicate"])
+        else:
+            out["action"] = "do_nothing"
+    elif action == "policy":
+        if others:
+            out["targets"] = _sample(others)
+            out["direction"] = rng.choice(["subsidy", "levy"])
+            out["amount"] = rng.choice([20, 50])
+        else:
+            out["action"] = "do_nothing"
+
+    # 2) the messages array — reply to inbox senders, else maybe message a peer.
+    # When forced (low social need) at least one message is guaranteed.
+    pool = inbox_senders or others
+    messages: list[dict] = []
+    if pool and (forced or rng.random() < 0.5):
+        to = rng.sample(pool, min(len(pool), rng.randint(1, 2)))
+        messages.append({"to": to, "content": rng.choice(_STUB_TOPICS)})
+    out["messages"] = messages
     return json.dumps(out)
 
 

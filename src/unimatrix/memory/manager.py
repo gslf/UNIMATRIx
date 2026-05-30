@@ -67,6 +67,31 @@ class MemoryManager:
             ],
         )
 
+    async def add_summary(
+        self, agent_id: str, summary: str, tick_no: int | None = None
+    ) -> None:
+        """Persist a reflection summary (not tied to a conversation) + embed it.
+
+        The async messaging model has no conversation to close, so summaries
+        come from the periodic per-agent reflection pass. `conversation_id` is
+        stored NULL; the vector metadata carries `tick_no` instead.
+        """
+        sid = await asyncio.to_thread(
+            self.store.add_memory_summary, agent_id, None, summary
+        )
+        await asyncio.to_thread(
+            self.vector.add,
+            [f"summary_{sid}_{agent_id}"],
+            [summary],
+            [
+                {
+                    "agent_id": agent_id,
+                    "type": "reflection",
+                    "tick_no": tick_no if tick_no is not None else -1,
+                }
+            ],
+        )
+
     async def add_public_event(
         self, event_id: int, agent_ids: list[str], summary: str
     ) -> None:

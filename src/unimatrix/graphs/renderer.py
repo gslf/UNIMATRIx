@@ -159,7 +159,7 @@ class GraphRenderer:
     # ----- 3. social network -----
 
     def _render_social_network(self) -> Path:
-        msgs = self.store.all_messages_with_conv()
+        msgs = self.store.all_messages_with_recipients()
         agents = self.store.list_agents()
         agent_class = {a["agent_id"]: a["class"] for a in agents}
         agent_name = {a["agent_id"]: a["name"] or a["agent_id"] for a in agents}
@@ -167,7 +167,7 @@ class GraphRenderer:
         edge_weights: dict[tuple[str, str], int] = defaultdict(int)
         for m in msgs:
             sender = m["sender_id"]
-            for other in m.get("participants", []):
+            for other in m.get("recipients", []):
                 if other == sender:
                     continue
                 key = (sender, other) if sender < other else (other, sender)
@@ -209,9 +209,13 @@ class GraphRenderer:
         fig, ax = plt.subplots(figsize=(10, 5))
         for p in proposals:
             ts = _parse_iso(p["closed_at"] or p["proposed_at"])
-            color = "#2ecc71" if p["outcome"] == "approved" else (
-                "#e74c3c" if p["outcome"] == "rejected" else "#999"
-            )
+            outcome = p["outcome"]
+            color = {
+                "approved": "#2ecc71",
+                "rejected": "#e74c3c",
+                "elected": "#3498db",     # office ballot
+                "reassigned": "#9b59b6",  # outgoing-holder reassignment
+            }.get(outcome, "#999")
             ax.scatter([ts], [p["id"]], color=color, s=120)
             ax.annotate(
                 f"{p['change_type']}→{p['to_value']} ({p['target_id']})",
@@ -291,7 +295,7 @@ class GraphRenderer:
         agents = self.store.list_agents()
         agent_class = {a["agent_id"]: a.get("class") for a in agents}
         agent_name = {a["agent_id"]: a["name"] or a["agent_id"] for a in agents}
-        msgs = self.store.all_messages_with_conv()
+        msgs = self.store.all_messages_with_recipients()
         counts: dict[str, int] = {a["agent_id"]: 0 for a in agents}
         for m in msgs:
             sid = m["sender_id"]

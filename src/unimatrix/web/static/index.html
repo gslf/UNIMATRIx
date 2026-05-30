@@ -269,19 +269,19 @@
       <button id="btn-close-explorer" class="muted" style="float: right;">Close</button>
     </h2>
     <div class="explorer-tabs">
-      <button class="explorer-tab active" data-tab="conversations">Conversations</button>
+      <button class="explorer-tab active" data-tab="messages">Messages</button>
       <button class="explorer-tab" data-tab="votes">Votes</button>
       <button class="explorer-tab" data-tab="community">Community</button>
     </div>
 
-    <div class="explorer-pane active" id="pane-conversations">
+    <div class="explorer-pane active" id="pane-messages">
       <div class="row">
-        <input id="conv-filter" class="conv-filter" placeholder="Filter by participant, type, or text in summary..." />
+        <input id="conv-filter" class="conv-filter" placeholder="Filter by sender, recipient, or message text..." />
       </div>
       <div class="explorer-grid">
         <div class="conv-list" id="conv-list">loading…</div>
         <div class="conv-detail" id="conv-detail">
-          <span class="muted-text">Select a conversation on the left.</span>
+          <span class="muted-text">Select a message on the left to see the thread.</span>
         </div>
       </div>
     </div>
@@ -567,10 +567,17 @@ async function loadState() {
       .map(([k, v]) => `<span class="pill">${k}: ${v}</span>`).join("");
     const perState = Object.entries(s.agents_per_state || {})
       .map(([k, v]) => `<span class="pill">${k}: ${v}</span>`).join("");
-    const conv = (s.active_conversations || []).map(c =>
-      `<span class="pill">${c.type} #${c.id} (${c.participants.length})</span>`).join("") || "<span class='muted-text'>none</span>";
+    const recentMsgs = (s.recent_messages || []).slice(0, 6).map(m => {
+      const to = (m.recipient_names || m.recipients || []).join(", ");
+      const tag = m.is_broadcast ? "📢 " : "";
+      return `<div class="muted-text" style="font-size:0.78rem; margin-top:2px">`
+        + `${tag}<b>${escapeHtml(m.sender_name || m.sender_id)}</b> → ${escapeHtml(to)}: `
+        + `${escapeHtml((m.content || "").slice(0, 90))}</div>`;
+    }).join("") || "<span class='muted-text'>none yet</span>";
     const vote = s.active_vote
-      ? `<span class="pill">${s.active_vote.change_type} → ${s.active_vote.to_value} (target ${s.active_vote.target_id})</span>`
+      ? (s.active_vote.offices
+          ? `<span class="pill">ELECTION (tick ${s.active_vote.election_tick}): ${(s.active_vote.offices || []).join(", ")}</span>`
+          : `<span class="pill">${s.active_vote.change_type} → ${s.active_vote.to_value} (target ${s.active_vote.target_id})</span>`)
       : "<span class='muted-text'>none</span>";
     sum.innerHTML = `
       <div><strong>tick:</strong> ${s.tick_no}
@@ -579,7 +586,7 @@ async function loadState() {
       </div>
       <div style="margin-top:6px"><strong>by class:</strong> ${perClass}</div>
       <div style="margin-top:6px"><strong>by state:</strong> ${perState}</div>
-      <div style="margin-top:6px"><strong>active conversations:</strong> ${conv}</div>
+      <div style="margin-top:6px"><strong>recent messages:</strong> ${recentMsgs}</div>
       <div style="margin-top:6px"><strong>active vote:</strong> ${vote}</div>
       <div style="margin-top:6px"><strong>broadcast queue:</strong> ${s.broadcast_queue_length}</div>
     `;
@@ -619,6 +626,8 @@ function renderMetrics(m) {
     return;
   }
   let bannerLines = [];
+  const inf = m.inference || {};
+  const live = m.inference_live || {};
 
   // Inference error within last 60s → red banner
   if (m.last_error && m.last_error_ts) {
@@ -631,7 +640,7 @@ function renderMetrics(m) {
   const total = m.decisions_attempted || 0;
   const unparsed = m.decisions_unparsed || 0;
   const skipped = m.decisions_skipped || 0;
-  const opened = m.conversations_opened || 0;
+  const opened = m.messages_sent || 0;
   const votes = m.votes_proposed || 0;
   const votesDone = m.votes_completed || 0;
   const votesYes = m.votes_approved || 0;
@@ -653,9 +662,19 @@ function renderMetrics(m) {
     );
   } else if (total > 5 && opened === 0 && votes === 0) {
     bannerLines.push(
-      `${total} decisions made but 0 conversations / 0 votes.\n` +
-      `Either every decision is do_nothing, or every action is being skipped.\n` +
+      `${total} decisions made but 0 messages / 0 votes.\n` +
+      `Either every decision is empty, or every action is being skipped.\n` +
       (lastSkip ? `Last skip reason: ${lastSkip}` : "")
+    );
+  }
+
+  // Reasoning-model heads-up: a very large average output means decode is the
+  // bottleneck, not the client. Connects the live stats to the model choice.
+  if ((inf.avg_completion_tokens || 0) > 2000) {
+    bannerLines.push(
+      `Model is generating ~${inf.avg_completion_tokens} output tokens/decision\n` +
+      `(reasoning model?). That decode dominates wall time — consider a\n` +
+      `non-reasoning instruct model or a lower max_tokens_per_decision.`
     );
   }
 
@@ -675,12 +694,25 @@ function renderMetrics(m) {
     .join(" · ") || "(no decisions yet)";
   const root = document.getElementById("metrics-summary");
   const errClass = (unparsed && total && unparsed/total > 0.3) ? "bad" : "muted-text";
+  // Inference line: live in-flight/queued gauges (update mid-batch) plus the
+  // last decisions-batch timing & token breakdown (prefill vs decode).
+  const cap = (live.cap ?? inf.cap ?? "?");
+  let infLine = `inference: in-flight ${live.inflight ?? 0}/${cap}`
+    + (live.queued ? ` (queued ${live.queued})` : "");
+  if (inf.calls) {
+    infLine += ` · ${inf.decisions ?? inf.calls} calls in ${inf.batch_wall_s ?? "?"}s`
+      + ` · avg ${inf.avg_latency_s}s/call max ${inf.max_latency_s}s`
+      + ` · prompt ~${inf.avg_prompt_tokens} out ~${inf.avg_completion_tokens} tok`
+      + ((inf.prefill_s || inf.decode_s) ? ` · prefill ${inf.prefill_s}s / decode ${inf.decode_s}s` : "")
+      + ` · peak ${inf.peak_inflight}/${cap}`;
+  }
   root.innerHTML = `
     decisions: ${total} attempted ·
     <span class="${errClass}">${unparsed} unparseable</span> ·
     ${skipped} skipped ·
     inference errors: ${m.inference_errors || 0}<br/>
-    outcomes: ${opened} conversations opened · ${votes} votes proposed (${votesDone} closed: ${votesYes} approved / ${votesNo} rejected)<br/>
+    <span class="muted-text">${infLine}</span><br/>
+    outcomes: ${opened} messages sent · ${votes} votes proposed (${votesDone} closed: ${votesYes} approved / ${votesNo} rejected)<br/>
     by action (picked/applied): <span class="muted-text">${actStr}</span>
     ${lastSkip ? `<br/>last skip: <span class="muted-text">${escapeHtml(lastSkip)}</span>` : ""}
   `;
@@ -790,13 +822,12 @@ function fmtOpinionsObj(o) {
 }
 
 function fmtDecision(d) {
-  if (d.kind === "started_conversation") {
-    const partners = (d.participant_names || d.participants || [])
-      .filter(n => n !== d.id).join(", ") || "—";
+  if (d.kind === "sent_message") {
+    const to = (d.recipient_names || d.recipients || []).join(", ") || "—";
     return `
-      <span class="kind-badge">${d.conv_type || "conv"}</span>
-      started conversation #${d.conv_id} with <b>${escapeHtml(partners)}</b>
-      ${d.summary ? `<div class="muted-text" style="margin-top:4px">${escapeHtml(d.summary)}</div>` : ""}
+      <span class="kind-badge">message</span>
+      to <b>${escapeHtml(to)}</b>${d.tick_no != null ? ` <span class="muted-text">· tick ${d.tick_no}</span>` : ""}
+      ${d.content ? `<div class="muted-text" style="margin-top:4px">${escapeHtml(d.content)}</div>` : ""}
     `;
   }
   if (d.kind === "broadcast") {
@@ -857,7 +888,10 @@ function renderAgentDetail(a) {
         <span class="muted-text">(id: ${escapeHtml(a.role || "?")}${a.role_prestige != null ? `, prestige ${a.role_prestige}/100` : ""})</span>
       </div>
       <div><b>Class:</b> ${escapeHtml(a["class"] || "?")}</div>
-      <div><b>State:</b> ${escapeHtml(a.state || "?")}${a.current_conversation_id != null ? ` (in conv #${a.current_conversation_id})` : ""}</div>
+      ${a.office ? `<div><b>Office:</b> <span class="pill">${escapeHtml(a.office)}</span></div>` : ""}
+      <div><b>Prestige:</b> ${a.prestige != null ? Number(a.prestige).toFixed(0) : "?"}/100
+        &nbsp; <b>Popularity:</b> ${a.popularity != null ? Number(a.popularity).toFixed(0) : "?"}/100</div>
+      <div><b>State:</b> ${escapeHtml(a.state || "?")}</div>
       <div><b>Social need:</b> ${a.social_need != null ? a.social_need.toFixed(0) : "?"}/100</div>
       <div style="margin-top:6px"><b>Personality:</b> <span class="muted-text">${fmtTraitsObj(a.personality)}</span></div>
       <div><b>Values:</b> <span class="muted-text">${fmtValuesObj(a.values)}</span></div>
@@ -895,14 +929,14 @@ function renderAgentDetail(a) {
     <h3>Backstory</h3>
     <div class="backstory">${escapeHtml(a.backstory || "(none)")}</div>
 
-    <h3>Memory — recent conversation summaries (${summaries.length})</h3>
+    <h3>Memory — recent reflections (${summaries.length})</h3>
     ${summaries.length
       ? summaries.slice().reverse().map(s => `
           <div class="summary-item">
-            <span class="ts">${escapeHtml(s.ts || "")}${s.conversation_id ? ` · conv #${s.conversation_id}` : ""}</span>
+            <span class="ts">${escapeHtml(s.ts || "")}</span>
             <div>${escapeHtml(s.summary || "")}</div>
           </div>`).join("")
-      : `<span class="muted-text">no summaries yet</span>`}
+      : `<span class="muted-text">no reflections yet</span>`}
 
     <h3>Memory — impressions of others (${impressions.length})</h3>
     ${impressions.length
@@ -1004,18 +1038,18 @@ async function loadRuns() {
     }));
 }
 
-// ---- run explorer (tabs: conversations / votes / community) ----
+// ---- run explorer (tabs: messages / votes / community) ----
 let currentExplorerRun = null;
-let currentExplorerData = null;       // { conversations: [...], agents: {...} }
-let currentSelectedConv = null;
-let currentExplorerTab = "conversations";  // 'conversations' | 'votes' | 'community'
+let currentExplorerData = null;       // { messages: [...], agents: {...} }
+let currentSelectedMsg = null;        // selected message id
+let currentExplorerTab = "messages";  // 'messages' | 'votes' | 'community'
 let currentVotesData = null;          // { proposals: [...], agents: {...} }
 let currentSelectedVote = null;       // proposal_id
 
-function fmtParticipants(c, agents) {
-  const names = (c.participant_names && c.participant_names.length)
-    ? c.participant_names
-    : (c.participants || []).map(p => (agents[p] || { name: p }).name);
+function fmtRecipients(m, agents) {
+  const names = (m.recipient_names && m.recipient_names.length)
+    ? m.recipient_names
+    : (m.recipients || []).map(p => (agents[p] || { name: p }).name);
   if (names.length <= 3) return names.join(", ");
   return names.slice(0, 3).join(", ") + ` +${names.length - 3}`;
 }
@@ -1034,14 +1068,14 @@ async function openExplorer(runId, runName) {
   currentExplorerData = null;
   currentVotesData = null;
   currentCommunityData = null;
-  currentSelectedConv = null;
+  currentSelectedMsg = null;
   currentSelectedVote = null;
   document.getElementById("conv-detail").innerHTML =
-    `<span class="muted-text">Select a conversation on the left.</span>`;
+    `<span class="muted-text">Select a message on the left to see the thread.</span>`;
   document.getElementById("vote-detail").innerHTML =
     `<span class="muted-text">Select a vote on the left.</span>`;
   // Load whichever tab is currently active.
-  setExplorerTab(currentExplorerTab || "conversations");
+  setExplorerTab(currentExplorerTab || "messages");
   loadRuns();   // refresh button highlight
   document.getElementById("explorer").scrollIntoView({ behavior: "smooth" });
 }
@@ -1053,7 +1087,7 @@ function setExplorerTab(name) {
   document.querySelectorAll(".explorer-pane").forEach(p =>
     p.classList.toggle("active", p.id === "pane-" + name));
   if (currentExplorerRun == null) return;
-  if (name === "conversations") loadConversationsList();
+  if (name === "messages") loadMessagesList();
   else if (name === "votes") loadVotesList();
   else if (name === "community") loadCommunity();
 }
@@ -1061,112 +1095,115 @@ function setExplorerTab(name) {
 function closeExplorer() {
   currentExplorerRun = null;
   currentExplorerData = null;
-  currentSelectedConv = null;
+  currentSelectedMsg = null;
   currentVotesData = null;
   currentSelectedVote = null;
   document.getElementById("explorer").classList.remove("open");
   loadRuns();
 }
 
-async function loadConversationsList() {
+async function loadMessagesList() {
   const root = document.getElementById("conv-list");
   if (!currentExplorerData) root.innerHTML = "loading…";
   try {
-    const r = await fetch(`/runs/${currentExplorerRun}/conversations?limit=500`);
+    const r = await fetch(`/runs/${currentExplorerRun}/messages?limit=500`);
     if (!r.ok) throw new Error(await r.text());
     currentExplorerData = await r.json();
   } catch (e) {
     root.innerHTML = `<div style="padding:10px; color:#f85149">${escapeHtml(e.message)}</div>`;
     return;
   }
-  renderConvList();
+  renderMessageList();
 }
 
-function renderConvList() {
+function renderMessageList() {
   const root = document.getElementById("conv-list");
   if (!currentExplorerData) { root.innerHTML = ""; return; }
   const filter = document.getElementById("conv-filter").value.trim().toLowerCase();
-  const { conversations, agents } = currentExplorerData;
-  const filtered = conversations.filter(c => {
+  const { messages, agents } = currentExplorerData;
+  const senderName = m => (agents[m.sender_id] || { name: m.sender_id }).name;
+  const filtered = messages.filter(m => {
     if (!filter) return true;
     const hay = [
-      c.type || "",
-      String(c.id),
-      (c.summary || "").toLowerCase(),
-      fmtParticipants(c, agents).toLowerCase(),
-    ].join(" ");
+      senderName(m),
+      fmtRecipients(m, agents),
+      m.content || "",
+    ].join(" ").toLowerCase();
     return hay.includes(filter);
   });
   const header = `
     <div class="conv-list-header">
-      <span>${conversations.length} total · showing ${filtered.length}</span>
+      <span>${messages.length} total · showing ${filtered.length}</span>
       <span>newest first</span>
     </div>`;
   if (!filtered.length) {
     root.innerHTML = header +
-      `<div style="padding:14px" class="muted-text">No conversations match the filter.</div>`;
+      `<div style="padding:14px" class="muted-text">No messages match the filter.</div>`;
     return;
   }
-  root.innerHTML = header + filtered.map(c => `
-    <div class="conv-row ${currentSelectedConv === c.id ? "selected" : ""}"
-         data-conv-id="${c.id}">
+  root.innerHTML = header + filtered.map(m => `
+    <div class="conv-row ${currentSelectedMsg === m.id ? "selected" : ""}"
+         data-msg-id="${m.id}"
+         data-sender="${escapeHtml(m.sender_id)}"
+         data-recipient="${escapeHtml((m.recipients || [])[0] || "")}">
       <div>
-        <span class="pill">#${c.id}</span>
-        <span class="pill">${c.type}</span>
-        <span class="pill">${c.message_count} msg</span>
-        ${c.end_reason ? `<span class="pill">${c.end_reason}</span>` : ""}
+        <span class="pill">tick ${m.tick_no ?? "?"}</span>
+        <b>${escapeHtml(senderName(m))}</b> → ${escapeHtml(fmtRecipients(m, agents))}
       </div>
       <div class="meta">
-        ${fmtParticipants(c, agents)}<br/>
-        started ${fmtTs(c.started_at)}${c.ended_at ? ` · ended ${fmtTs(c.ended_at)}` : " · open"}
+        ${escapeHtml((m.content || "").slice(0, 140))}<br/>
+        ${fmtTs(m.ts)}
       </div>
     </div>
   `).join("");
   root.querySelectorAll(".conv-row").forEach(el =>
-    el.addEventListener("click", () => loadConvDetail(parseInt(el.dataset.convId, 10))));
+    el.addEventListener("click", () => loadMessageThread(
+      parseInt(el.dataset.msgId, 10), el.dataset.sender, el.dataset.recipient)));
 }
 
-async function loadConvDetail(convId) {
-  currentSelectedConv = convId;
-  renderConvList();
+async function loadMessageThread(msgId, a, b) {
+  currentSelectedMsg = msgId;
+  renderMessageList();
   const root = document.getElementById("conv-detail");
+  if (!b) {
+    root.innerHTML = `<span class="muted-text">This message had no recorded recipient.</span>`;
+    return;
+  }
   root.innerHTML = "loading…";
   try {
-    const r = await fetch(`/runs/${currentExplorerRun}/conversations/${convId}`);
+    const r = await fetch(
+      `/runs/${currentExplorerRun}/messages/thread`
+      + `?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`);
     if (!r.ok) throw new Error(await r.text());
-    renderConvDetail(await r.json());
+    renderMessageThread(await r.json());
   } catch (e) {
     root.innerHTML = `<div style="color:#f85149">${e.message}</div>`;
   }
 }
 
-function renderConvDetail(data) {
+function renderMessageThread(data) {
   const root = document.getElementById("conv-detail");
-  const c = data.conversation;
-  const messages = data.messages;
-  const summaryHtml = c.summary
-    ? `<div class="summary-box"><strong>Summary:</strong> ${escapeHtml(c.summary)}</div>`
-    : "";
+  const messages = data.messages || [];
   const headerHtml = `
     <div style="margin-bottom:10px">
-      <div><strong>Conversation #${c.id}</strong>
-           <span class="pill">${c.type}</span>
-           ${c.end_reason ? `<span class="pill">${c.end_reason}</span>` : ""}
+      <div><strong>Thread</strong>
+        <span class="pill">${escapeHtml(data.a_name || data.a)}</span>
+        <span class="muted-text">↔</span>
+        <span class="pill">${escapeHtml(data.b_name || data.b)}</span>
       </div>
       <div class="muted-text" style="font-size:0.8rem; margin-top:2px">
-        Participants: ${(c.participant_names || c.participants).join(", ")}<br/>
-        ${fmtTs(c.started_at)} → ${c.ended_at ? fmtTs(c.ended_at) : "open"}
+        ${messages.length} message${messages.length === 1 ? "" : "s"} · oldest first
       </div>
-    </div>${summaryHtml}`;
+    </div>`;
   const msgsHtml = messages.length
     ? messages.map(m => `
         <div class="msg">
           <span class="sender">${escapeHtml(m.sender_name)}</span>
-          <span class="ts">turn ${m.turn_index} · ${fmtTs(m.ts)}</span>
+          <span class="ts">tick ${m.tick_no ?? "?"} · to ${escapeHtml((m.recipient_names || m.recipients || []).join(", "))} · ${fmtTs(m.ts)}</span>
           <div class="body">${escapeHtml(m.content)}</div>
         </div>
       `).join("")
-    : `<span class="muted-text">No messages yet.</span>`;
+    : `<span class="muted-text">No messages between this pair.</span>`;
   // Preserve scroll position to avoid jumpiness while auto-refreshing.
   const prevScroll = root.scrollTop;
   const wasNearBottom = root.scrollHeight - prevScroll - root.clientHeight < 60;
@@ -1412,7 +1449,7 @@ document.getElementById("btn-close-explorer").addEventListener("click", () => {
   if (viewMode === "past") exitPastView();
   else closeExplorer();
 });
-document.getElementById("conv-filter").addEventListener("input", renderConvList);
+document.getElementById("conv-filter").addEventListener("input", renderMessageList);
 document.getElementById("vote-filter").addEventListener("input", renderVotesList);
 document.getElementById("community-filter").addEventListener("input", renderCommunity);
 document.querySelectorAll(".explorer-tab").forEach(b =>
@@ -1421,17 +1458,11 @@ document.querySelectorAll(".explorer-tab").forEach(b =>
 // Auto-refresh: only refresh whichever tab is visible.
 setInterval(() => {
   if (currentExplorerRun == null) return;
-  if (currentExplorerTab === "conversations") {
-    fetch(`/runs/${currentExplorerRun}/conversations?limit=500`)
+  if (currentExplorerTab === "messages") {
+    fetch(`/runs/${currentExplorerRun}/messages?limit=500`)
       .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d) { currentExplorerData = d; renderConvList(); } })
+      .then(d => { if (d) { currentExplorerData = d; renderMessageList(); } })
       .catch(() => {});
-    if (currentSelectedConv != null) {
-      fetch(`/runs/${currentExplorerRun}/conversations/${currentSelectedConv}`)
-        .then(r => r.ok ? r.json() : null)
-        .then(d => { if (d) renderConvDetail(d); })
-        .catch(() => {});
-    }
   } else if (currentExplorerTab === "votes") {
     fetch(`/runs/${currentExplorerRun}/votes`)
       .then(r => r.ok ? r.json() : null)

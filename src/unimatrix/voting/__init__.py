@@ -1,3 +1,3 @@
-from .module import VotingModule, Proposal
+from .module import ElectionModule, VotingModule, Proposal, ElectionState
 
-__all__ = ["VotingModule", "Proposal"]
+__all__ = ["ElectionModule", "VotingModule", "Proposal", "ElectionState"]

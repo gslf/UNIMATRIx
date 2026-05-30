@@ -55,7 +55,7 @@ def _idle_state(session: SessionManager) -> dict:
         "seconds_since_last_activity": None,
         "agents_per_state": {},
         "agents_per_class": {},
-        "active_conversations": [],
+        "recent_messages": [],
         "active_vote": None,
         "broadcast_queue_length": 0,
         "metrics": {},
@@ -229,8 +229,11 @@ def build_app(
                     "name": a["name"] or a["agent_id"],
                     "role": a.get("role"),
                     "class": a.get("class"),
+                    "office": a.get("office"),
                     "state": a.get("state"),
                     "social_need": a.get("social_need"),
+                    "prestige": a.get("prestige"),
+                    "popularity": a.get("popularity"),
                 }
                 for a in agents
             ]
@@ -275,10 +278,10 @@ def build_app(
 
             decisions = orch.store.agent_decision_history(agent_id, limit=15)
             for d in decisions:
-                if d["kind"] == "started_conversation":
-                    d["participant_names"] = [
+                if d["kind"] == "sent_message":
+                    d["recipient_names"] = [
                         agents_map.get(p, {"name": p})["name"]
-                        for p in d.get("participants", [])
+                        for p in d.get("recipients", [])
                     ]
                 elif d["kind"] == "vote_proposed":
                     d["target_name"] = agents_map.get(
@@ -321,13 +324,15 @@ def build_app(
                 "role_label": role_spec.name if role_spec else role_id,
                 "role_prestige": role_spec.prestige if role_spec else None,
                 "class": a.get("class"),
+                "office": a.get("office"),
                 "personality": personality,
                 "values": values,
                 "backstory": a.get("backstory") or "",
                 "opinions": opinions,
                 "social_need": a.get("social_need"),
+                "prestige": a.get("prestige"),
+                "popularity": a.get("popularity"),
                 "state": a.get("state"),
-                "current_conversation_id": a.get("current_conversation_id"),
                 "bank_account": a.get("bank_account"),
                 "recent_transactions": txs,
                 "memory": {
@@ -427,7 +432,7 @@ def build_app(
                 "seconds_since_last_activity": None,
                 "agents_per_state": per_state,
                 "agents_per_class": per_class,
-                "active_conversations": [],
+                "recent_messages": [],
                 "active_vote": None,
                 "broadcast_queue_length": 0,
                 "community_balance": round(community_balance, 2),
@@ -448,8 +453,11 @@ def build_app(
                         "name": a["name"] or a["agent_id"],
                         "role": a.get("role"),
                         "class": a.get("class"),
+                        "office": a.get("office"),
                         "state": a.get("state"),
                         "social_need": a.get("social_need"),
+                        "prestige": a.get("prestige"),
+                        "popularity": a.get("popularity"),
                     }
                     for a in s.list_agents()
                 ]
@@ -493,10 +501,10 @@ def build_app(
 
                 decisions = s.agent_decision_history(agent_id, limit=15)
                 for d in decisions:
-                    if d["kind"] == "started_conversation":
-                        d["participant_names"] = [
+                    if d["kind"] == "sent_message":
+                        d["recipient_names"] = [
                             agents_map.get(p, {"name": p})["name"]
-                            for p in d.get("participants", [])
+                            for p in d.get("recipients", [])
                         ]
                     elif d["kind"] == "vote_proposed":
                         d["target_name"] = agents_map.get(
@@ -539,13 +547,15 @@ def build_app(
                     "role_label": role_spec.name if role_spec else role_id,
                     "role_prestige": role_spec.prestige if role_spec else None,
                     "class": a.get("class"),
+                    "office": a.get("office"),
                     "personality": personality,
                     "values": values,
                     "backstory": a.get("backstory") or "",
                     "opinions": opinions,
                     "social_need": a.get("social_need"),
+                    "prestige": a.get("prestige"),
+                    "popularity": a.get("popularity"),
                     "state": a.get("state"),
-                    "current_conversation_id": a.get("current_conversation_id"),
                     "bank_account": a.get("bank_account"),
                     "recent_transactions": txs,
                     "memory": {
@@ -596,44 +606,53 @@ def build_app(
 
         return JSONResponse(await asyncio.to_thread(_render_all))
 
-    @app.get("/runs/{run_id}/conversations")
-    async def run_conversations(run_id: int, limit: int = 500) -> JSONResponse:
+    def _decorate_messages(msgs: list[dict], agents: dict[str, dict]) -> None:
+        """Attach sender/recipient display names in place."""
+        for m in msgs:
+            m["sender_name"] = agents.get(
+                m["sender_id"], {"name": m["sender_id"]}
+            )["name"]
+            m["recipient_names"] = [
+                agents.get(r, {"name": r})["name"] for r in m.get("recipients", [])
+            ]
+
+    @app.get("/runs/{run_id}/messages")
+    async def run_messages(
+        run_id: int,
+        limit: int = 500,
+        sender: str | None = None,
+        recipient: str | None = None,
+        text: str | None = None,
+    ) -> JSONResponse:
+        """The async message feed (newest first) with optional filters."""
         def _impl() -> dict:
             with open_run_store(run_id) as s:
-                convs = s.list_conversations(limit=limit)
+                msgs = s.list_messages(
+                    limit=limit, sender=sender, recipient=recipient, text=text
+                )
                 agents = _agents_map(s)
-                # Decorate with display names so the UI doesn't need a join.
-                for c in convs:
-                    c["participant_names"] = [
-                        agents.get(p, {"name": p})["name"] for p in c["participants"]
-                    ]
-                    c["initiator_name"] = agents.get(
-                        c["initiator_id"], {"name": c["initiator_id"]}
-                    )["name"]
-                return {"conversations": convs, "agents": agents}
+                _decorate_messages(msgs, agents)
+                return {"messages": msgs, "agents": agents}
         return JSONResponse(await asyncio.to_thread(_impl))
 
-    @app.get("/runs/{run_id}/conversations/{conv_id}")
-    async def run_conversation_detail(run_id: int, conv_id: int) -> JSONResponse:
+    @app.get("/runs/{run_id}/messages/thread")
+    async def run_message_thread(
+        run_id: int, a: str, b: str, limit: int = 500
+    ) -> JSONResponse:
+        """Pairwise thread between two agents (oldest first)."""
         def _impl() -> dict:
             with open_run_store(run_id) as s:
-                conv = s.get_conversation(conv_id)
-                if conv is None:
-                    raise HTTPException(404, f"conversation {conv_id} not found")
-                try:
-                    conv["participants"] = json.loads(conv["participants"])
-                except (TypeError, json.JSONDecodeError):
-                    conv["participants"] = []
-                msgs = s.get_messages(conv_id)
+                msgs = s.messages_between(a, b, limit=limit)
                 agents = _agents_map(s)
-                for m in msgs:
-                    m["sender_name"] = agents.get(
-                        m["sender_id"], {"name": m["sender_id"]}
-                    )["name"]
-                conv["participant_names"] = [
-                    agents.get(p, {"name": p})["name"] for p in conv["participants"]
-                ]
-                return {"conversation": conv, "messages": msgs}
+                _decorate_messages(msgs, agents)
+                return {
+                    "messages": msgs,
+                    "agents": agents,
+                    "a": a,
+                    "b": b,
+                    "a_name": agents.get(a, {"name": a})["name"],
+                    "b_name": agents.get(b, {"name": b})["name"],
+                }
         return JSONResponse(await asyncio.to_thread(_impl))
 
     @app.get("/runs/{run_id}/events")

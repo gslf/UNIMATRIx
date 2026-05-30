@@ -12,6 +12,8 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+_OFFICE_POWERS = ("legislative", "judicial", "financial")
+
 
 class SimulationConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -29,19 +31,12 @@ class InferenceConfig(BaseModel):
     backend: Literal["vllm", "llama_cpp", "stub"] = "vllm"
     endpoint: str = "http://localhost:8000"
     model: str = "Qwen/Qwen2.5-14B-Instruct-AWQ"
-    # Cap of concurrent in-flight HTTP requests to the backend. vLLM batches
-    # internally, so set this high (32–64). llama.cpp by default has a single
-    # decoding slot — keep this low (4–8) or requests just queue up server-side.
-    max_batch_size: int = Field(8, ge=1)
     max_tokens_per_message: int = Field(200, ge=1)
     temperature: float = Field(0.95, ge=0.0, le=2.0)
     top_p: float = Field(0.95, ge=0.0, le=1.0)
-    # Per-request HTTP timeout. Big models (gpt-oss-120b on partial offload)
-    # easily exceed 60s per generation, and queued requests behind them wait
-    # even longer. 600s is a safe ceiling; lower for fast models.
     request_timeout_seconds: float = Field(600.0, gt=0)
-    # Hard cap on output tokens for short structured outputs (decisions, votes,
-    # summaries). Conversation turns use max_tokens_per_message instead.
+    max_concurrent_requests: int = Field(8, ge=1)
+    slow_request_warn_seconds: float = Field(30.0, gt=0)
     max_tokens_per_decision: int = Field(2000, ge=16)
 
 
@@ -64,72 +59,91 @@ class SocialConfig(BaseModel):
     social_need_critical_threshold: float = 25.0
     silence_detection_seconds: float = Field(20.0, gt=0)
     forced_interaction_count_on_silence: int = Field(2, ge=1)
-    # Cap how many idle agents make a decision per tick. 0 = unlimited (the
-    # spec default). Set to a smaller value (e.g. 8) when running against a
-    # slow / large LLM so the inference backend isn't asked for 50 batched
-    # generations every tick. Lowest social_need agents are picked first.
     max_idle_decisions_per_tick: int = Field(0, ge=0)
 
 
-class ConversationConfig(BaseModel):
+class MessagingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    max_turns_per_conversation: int = Field(30, ge=2)
-    max_group_size: int = Field(6, ge=2)
-    cooldown_seconds_after_end: float = Field(10.0, ge=0)
-    # How many speaker turns to advance for each active conversation per tick.
-    # >1 makes dialogue feel alive even with a slow tick; the inference client
-    # already batches across conversations so cost scales sub-linearly.
-    turns_per_tick: int = Field(2, ge=1)
+
+    reflection_interval_ticks: int = Field(20, ge=1)
+    reflection_min_new_messages: int = Field(1, ge=1)
+    max_recipients_per_message: int = Field(6, ge=1)
+    max_messages_per_tick: int = Field(3, ge=1)
+    message_history_window: int = Field(15, ge=1)
 
 
 class VotingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    # If no vote has been proposed for this many ticks, the orchestrator picks
-    # one idle agent and forces them to propose a vote on the next tick. The
-    # social order doesn't change without proposals, so silence here is itself
-    # a problem — keep this bound tight (≤ 10 ticks) for lively dynamics.
+    election_interval_ticks: int = Field(100, ge=1)
     max_ticks_without_vote: int = Field(10, ge=1)
-    # Startup grace: for the first N ticks no vote (forced or spontaneous) may
-    # happen. Lets society warm up — characters meet, opinions surface, and
-    # the first vote actually comes out of something. Set 0 to disable.
     warmup_ticks: int = Field(4, ge=0)
-    # Number of debate rounds run between voting.open() and collect_and_close.
-    # Each round = one short speech per agent (parallel batch). 0 disables the
-    # debate entirely (legacy fast-path, vote-only).
     debate_rounds: int = Field(1, ge=0)
     max_tokens_per_debate_speech: int = Field(2000, ge=10)
-    # Maximum attempts (including the first) to get a well-formed vote from a
-    # given agent. Anything malformed after the last attempt is recorded as a
-    # 'null' vote that counts neither yes nor no.
     max_vote_attempts: int = Field(3, ge=1)
+    election_ballot_max_tokens: int = Field(2000, ge=16)
+
+
+class ClassThreshold(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    popularity_min: float = Field(0.0, ge=0)
+    balance_min: float = Field(0.0, ge=0)
+
+
+class MobilityConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    class_thresholds: dict[str, ClassThreshold] | None = None
+    influence_step: float = Field(5.0, ge=0)
+    max_influence_targets: int = Field(3, ge=1)
+    prestige_decay_per_tick: float = Field(0.0, ge=0)
+    popularity_decay_per_tick: float = Field(0.0, ge=0)
+
+
+class OfficePowersConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    senator_prestige_power: float = Field(20.0, ge=0)
+    judge_popularity_power: float = Field(20.0, ge=0)
+    judge_fine_fraction: float = Field(0.25, ge=0, le=1)
+    banker_transfer_max: float = Field(200.0, ge=0)
+    max_targets_per_power: int = Field(3, ge=1)
+
+
+class AgentPowersConfig(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    steal_success_prob: float = Field(0.5, ge=0, le=1)
+    steal_max: float = Field(50.0, ge=0)
+    steal_caught_popularity_penalty: float = Field(10.0, ge=0)
+    # gift/bribe: cap on a single voluntary agent->agent transfer.
+    gift_max: float = Field(100.0, ge=0)
+    # sabotage: probability the saboteur blocks the target office's next power
+    # use; the popularity penalty the saboteur pays if caught.
+    sabotage_success_prob: float = Field(0.4, ge=0, le=1)
+    sabotage_caught_popularity_penalty: float = Field(15.0, ge=0)
 
 
 class EconomyConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    # Salary paid per tick to each agent is `role.prestige * salary_per_prestige`.
+
     salary_per_prestige: float = Field(0.5, ge=0)
-    # Flat fraction of the gross salary withheld and kept by the community.
-    # The agent receives (gross * (1 - tax_rate)); the community pays only the
-    # net out — taxes never actually leave the community account.
     tax_rate: float = Field(0.3, ge=0, le=1)
-    # Starting balance for every agent.
     agent_initial_balance: float = Field(100.0, ge=0)
-    # Fixed cost every agent pays each tick (cost of living).
     agent_expense_per_tick: float = Field(5.0, ge=0)
-    # Starting balance for the community treasury.
     community_initial_balance: float = Field(10000.0, ge=0)
-    # Fixed cost the community pays each tick (running the polity).
     community_expense_per_tick: float = Field(50.0, ge=0)
-    # Roles for which the society must always retain at least one holder.
-    # A role-change proposal that would empty one of these is rejected.
+    community_bankruptcy_balance: float = Field(0.0)
+    destitution_exit_balance: float = Field(50.0, ge=0)
     protected_roles: list[str] = Field(
         default_factory=lambda: ["senator", "judge", "banker"]
     )
-    # Hard cap on a single loan request. Agents asking for more get clamped.
     loan_max_per_request: float = Field(200.0, ge=0)
+    loan_interest_rate: float = Field(0.1, ge=0)
+    loan_installments: int = Field(20, ge=1)
 
 
 class RoleSpec(BaseModel):
@@ -171,12 +185,63 @@ class Config(BaseModel):
     inference: InferenceConfig
     memory: MemoryConfig
     social: SocialConfig
-    conversation: ConversationConfig
+    messaging: MessagingConfig = Field(default_factory=MessagingConfig)
     voting: VotingConfig
     economy: EconomyConfig = Field(default_factory=EconomyConfig)
+    mobility: MobilityConfig = Field(default_factory=MobilityConfig)
+    office_powers: OfficePowersConfig = Field(default_factory=OfficePowersConfig)
+    agent_powers: AgentPowersConfig = Field(default_factory=AgentPowersConfig)
+    offices: list[str] | None = None
     classes: list[str]
     roles: list[RoleSpec]
     agents: list[AgentSpec]
+
+    # ----- office / power resolution -----
+
+    def office_ids(self) -> list[str]:
+        """The three elected office role-ids, in canonical (power) order."""
+        return list(self.offices) if self.offices is not None else list(
+            self.economy.protected_roles
+        )
+
+    def power_of_office(self, office_id: str) -> str | None:
+        """Map an office role-id to its power kind, or None if not an office."""
+        ids = self.office_ids()
+        if office_id in ids:
+            i = ids.index(office_id)
+            if i < len(_OFFICE_POWERS):
+                return _OFFICE_POWERS[i]
+        return None
+
+    def office_for_power(self, power: str) -> str | None:
+        """Map a power kind ('legislative'|'judicial'|'financial') to its
+        office role-id, or None."""
+        ids = self.office_ids()
+        try:
+            i = _OFFICE_POWERS.index(power)
+        except ValueError:
+            return None
+        return ids[i] if i < len(ids) else None
+
+    def ordinary_role_ids(self) -> list[str]:
+        """Role ids that are NOT elected offices (the prestige-driven pool)."""
+        offices = set(self.office_ids())
+        return [r.id for r in self.roles if r.id not in offices]
+
+    def resolved_class_thresholds(self) -> dict[str, ClassThreshold]:
+        """class_thresholds as given, or an auto-derived default ladder
+        (balance_min=0 everywhere; popularity_min evenly spaced over the class
+        order, lowest class = 0)."""
+        if self.mobility.class_thresholds:
+            return dict(self.mobility.class_thresholds)
+        n = len(self.classes)
+        out: dict[str, ClassThreshold] = {}
+
+        for i, c in enumerate(self.classes):
+            rank_from_bottom = (n - 1 - i)
+            pop = (100.0 * rank_from_bottom / (n - 1)) if n > 1 else 0.0
+            out[c] = ClassThreshold(popularity_min=pop, balance_min=0.0)
+        return out
 
     @field_validator("classes")
     @classmethod
@@ -220,9 +285,6 @@ class Config(BaseModel):
                 raise ValueError(
                     f"agent {a.id}: class_initial '{a.class_initial}' not in classes list"
                 )
-        # Economy: each protected role must exist and the initial population
-        # must already contain at least one agent holding it — otherwise the
-        # "never zero" constraint is violated from tick 1.
         role_counts: dict[str, int] = {}
         for a in self.agents:
             role_counts[a.role_initial] = role_counts.get(a.role_initial, 0) + 1
@@ -235,6 +297,39 @@ class Config(BaseModel):
                 raise ValueError(
                     f"initial population has no agent with protected role '{pr}'"
                 )
+
+        office_ids = self.office_ids()
+        if len(office_ids) != 3:
+            raise ValueError(
+                "exactly 3 elected offices are required "
+                f"(got {len(office_ids)}: {office_ids}); set economy.protected_roles "
+                "or offices to three role ids"
+            )
+        for oid in office_ids:
+            if oid not in role_ids:
+                raise ValueError(f"office '{oid}' is not in the roles table")
+            if role_counts.get(oid, 0) < 1:
+                raise ValueError(
+                    f"initial population has no agent with office role '{oid}'"
+                )
+        if self.mobility.class_thresholds is not None:
+            tk = set(self.mobility.class_thresholds)
+            if tk != class_ids:
+                raise ValueError(
+                    "mobility.class_thresholds keys must match classes exactly; "
+                    f"got {sorted(tk)} vs classes {sorted(class_ids)}"
+                )
+        step = self.mobility.influence_step
+        if step >= self.office_powers.senator_prestige_power:
+            raise ValueError(
+                "mobility.influence_step must be < office_powers."
+                "senator_prestige_power (ordinary influence smaller than offices)"
+            )
+        if step >= self.office_powers.judge_popularity_power:
+            raise ValueError(
+                "mobility.influence_step must be < office_powers."
+                "judge_popularity_power (ordinary influence smaller than offices)"
+            )
         return self
 
 def load_config(path: str | Path) -> Config:

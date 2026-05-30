@@ -15,9 +15,6 @@ from ..config import AgentSpec, PersonalitySpec
 
 class AgentState(str, Enum):
     IDLE = "idle"
-    IN_1TO1 = "in_1to1"
-    IN_GROUP = "in_group"
-    LISTENING_BROADCAST = "listening_broadcast"
     VOTING = "voting"
 
 
@@ -34,8 +31,12 @@ class Agent:
     opinions: dict[str, str]
     social_need: float = 100.0
     state: AgentState = AgentState.IDLE
-    current_conversation_id: int | None = None
     bank_account: float = 0.0
+    destitute: bool = False
+    prestige: float = 0.0
+    popularity: float = 0.0
+    office: str | None = None
+    power_blocked: bool = False
 
     @classmethod
     def from_spec(
@@ -43,6 +44,9 @@ class Agent:
         spec: AgentSpec,
         social_need_initial: float,
         initial_balance: float = 0.0,
+        prestige_initial: float | None = None,
+        popularity_initial: float | None = None,
+        office: str | None = None,
     ) -> "Agent":
         return cls(
             id=spec.id,
@@ -56,6 +60,9 @@ class Agent:
             opinions=dict(spec.opinions),
             social_need=social_need_initial,
             bank_account=initial_balance,
+            prestige=prestige_initial if prestige_initial is not None else 0.0,
+            popularity=popularity_initial if popularity_initial is not None else 0.0,
+            office=office,
         )
 
     def to_db_row(self) -> dict:
@@ -70,9 +77,12 @@ class Agent:
             "backstory": self.backstory,
             "social_need": self.social_need,
             "state": self.state.value,
-            "current_conversation_id": self.current_conversation_id,
             "bank_account": self.bank_account,
+            "destitute": self.destitute,
+            "prestige": self.prestige,
+            "popularity": self.popularity,
+            "office": self.office,
         }
 
     def is_busy(self) -> bool:
-        return self.state in (AgentState.IN_1TO1, AgentState.IN_GROUP)
+        return False

@@ -12,7 +12,11 @@ CREATE TABLE IF NOT EXISTS agents (
     social_need   REAL,
     state         TEXT,
     current_conversation_id INTEGER,
-    bank_account  REAL DEFAULT 0
+    bank_account  REAL DEFAULT 0,
+    destitute     INTEGER DEFAULT 0,
+    prestige      REAL DEFAULT 0,
+    popularity    REAL DEFAULT 0,
+    office        TEXT
 );
 
 CREATE TABLE IF NOT EXISTS community_account (
@@ -42,6 +46,7 @@ CREATE TABLE IF NOT EXISTS conversations (
     summary       TEXT
 );
 
+
 CREATE TABLE IF NOT EXISTS messages (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
     conversation_id INTEGER,
@@ -50,6 +55,13 @@ CREATE TABLE IF NOT EXISTS messages (
     content         TEXT,
     ts              TEXT,
     FOREIGN KEY (conversation_id) REFERENCES conversations(id)
+);
+
+CREATE TABLE IF NOT EXISTS message_recipients (
+    message_id   INTEGER NOT NULL,
+    recipient_id TEXT    NOT NULL,
+    PRIMARY KEY (message_id, recipient_id),
+    FOREIGN KEY (message_id) REFERENCES messages(id)
 );
 
 CREATE TABLE IF NOT EXISTS vote_proposals (
@@ -117,10 +129,28 @@ CREATE TABLE IF NOT EXISTS checkpoints (
     state TEXT
 );
 
+CREATE TABLE IF NOT EXISTS loans (
+    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
+    borrower_id           TEXT NOT NULL,
+    granted_by            TEXT,
+    principal             REAL NOT NULL,
+    interest_rate         REAL NOT NULL,
+    installment_amount    REAL NOT NULL,
+    installments_total    INTEGER NOT NULL,
+    installments_paid     INTEGER NOT NULL DEFAULT 0,
+    granted_at            TEXT NOT NULL,
+    closed_at             TEXT,
+    -- 'active' | 'repaid' | 'written_off'
+    status                TEXT NOT NULL DEFAULT 'active'
+);
+
 CREATE INDEX IF NOT EXISTS idx_messages_conv     ON messages(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_msgrcpt_recipient ON message_recipients(recipient_id);
 CREATE INDEX IF NOT EXISTS idx_events_ts         ON public_events(ts);
 CREATE INDEX IF NOT EXISTS idx_summaries_agent   ON memory_summaries(agent_id);
 CREATE INDEX IF NOT EXISTS idx_status_agent      ON status_changes(agent_id);
 CREATE INDEX IF NOT EXISTS idx_transactions_ts   ON transactions(ts);
 CREATE INDEX IF NOT EXISTS idx_transactions_to   ON transactions(to_party);
 CREATE INDEX IF NOT EXISTS idx_transactions_from ON transactions(from_party);
+CREATE INDEX IF NOT EXISTS idx_loans_borrower    ON loans(borrower_id);
+CREATE INDEX IF NOT EXISTS idx_loans_status      ON loans(status);

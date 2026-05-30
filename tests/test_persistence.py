@@ -15,23 +15,27 @@ def test_run_store_roundtrip(tmp_path: Path) -> None:
         "personality": {"openness": 70},
         "values": {"loyalty": 50},
         "backstory": "...", "social_need": 100.0, "state": "idle",
-        "current_conversation_id": None,
     })
     got = store.get_agent("a1")
     assert got["name"] == "Alice"
     assert got["state"] == "idle"
 
-    cid = store.open_conversation("1to1", "a1", ["a1", "a2"])
-    store.update_conversation_participants(cid, ["a1", "a2", "a3"])
-    conv = store.get_conversation(cid)
-    assert json.loads(conv["participants"]) == ["a1", "a2", "a3"]
-    store.append_message(cid, 1, "a1", "hello")
-    store.append_message(cid, 2, "a2", "hi back")
-    msgs = store.get_messages(cid)
-    assert [m["sender_id"] for m in msgs] == ["a1", "a2"]
-    store.close_conversation(cid, "natural", "they greeted each other")
-    conv = store.get_conversation(cid)
-    assert conv["end_reason"] == "natural"
+    # Async-messaging roundtrip: one message to two recipients on tick 1.
+    mid = store.add_message("a1", ["a2", "a3"], "hello", tick_no=1)
+    assert mid > 0
+    in_tick = store.messages_in_tick(1)
+    assert len(in_tick) == 1
+    assert in_tick[0]["sender_id"] == "a1"
+    assert sorted(in_tick[0]["recipients"]) == ["a2", "a3"]
+    # a2's inbox sees it; a1 (the sender) does not.
+    assert [m["id"] for m in store.unread_messages_for("a2", 0)] == [mid]
+    assert store.unread_messages_for("a1", 0) == []
+    # Recipient-filtered feed and the sender view both find it.
+    assert [m["id"] for m in store.list_messages(recipient="a3")] == [mid]
+    assert [m["id"] for m in store.messages_by_sender("a1")] == [mid]
+    # Pairwise thread a1↔a2.
+    thread = store.messages_between("a1", "a2")
+    assert [m["content"] for m in thread] == ["hello"]
 
     pid = store.open_proposal("a1", "a2", "role", "worker", "scholar")
     store.record_vote(pid, "a1", "yes", "deserves it")

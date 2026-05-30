@@ -114,7 +114,7 @@ class SessionManager:
         memory = MemoryManager(
             cfg.memory, store, run_id, persist_dir=str(run_subdir / "chroma")
         )
-        inference = InferenceClient(cfg.inference)
+        inference = InferenceClient(cfg.inference, console=self.console)
         orch = Orchestrator(
             cfg=cfg,
             store=store,

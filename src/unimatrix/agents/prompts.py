@@ -65,56 +65,87 @@ class PromptBuilder:
     # ----- shared identity block -----
 
     def world_rules_block(self) -> str:
-        roles_inline = ", ".join(
-            f"{r.id} (prestige {r.prestige})" for r in self.cfg.roles
+        ordinary = self.cfg.ordinary_role_ids()
+        roles_by_prestige = sorted(
+            (r for r in self.cfg.roles if r.id in set(ordinary)),
+            key=lambda r: -r.prestige,
+        )
+        ordinary_inline = ", ".join(
+            f"{r.id} (prestige {r.prestige})" for r in roles_by_prestige
         )
         classes_inline = ", ".join(self.cfg.classes)
         e = self.cfg.economy
-        protected_inline = ", ".join(e.protected_roles)
+        office_ids = self.cfg.office_ids()
+        office_label = {
+            "legislative": office_ids[0] if len(office_ids) > 0 else "?",
+            "judicial": office_ids[1] if len(office_ids) > 1 else "?",
+            "financial": office_ids[2] if len(office_ids) > 2 else "?",
+        }
+        interval = self.cfg.voting.election_interval_ticks
+        op = self.cfg.office_powers
         return (
             "WORLD RULES — read carefully:\n"
             "You live in a small simulated society of about "
             f"{len(self.cfg.agents)} people. The point of life is collective: "
             "this society should evolve toward what its members believe is "
-            "an ideal order, a distribution of roles and classes that is "
-            "just, functional, and worth living in. There is no neutral "
-            "authority dictating what 'ideal' means; each of you carries "
-            "your own vision of it, shaped by your values, your background, "
-            "and what you have seen happen here. The social order will only "
-            "change if you act on that vision.\n\n"
-            "You can:\n"
-            "  - start a private 1-to-1 chat with another person\n"
-            "  - start or join a small group chat (max "
-            f"{self.cfg.conversation.max_group_size} people)\n"
-            "  - propose a vote to change anyone's role or social class "
-            "(including your own), or to award a money prize from the "
-            "community treasury to anyone you think deserves it. Voting is "
-            "the ONLY mechanism that actually moves the social order. The "
-            "whole society votes; simple majority decides. A role-change "
-            "vote that would leave the society with NO holder of a "
-            f"protected role ({protected_inline}) is invalid and cannot be "
-            "opened.\n"
-            "  - request a loan from a banker. Bankers decide whether to "
-            "approve.\n\n"
+            "an ideal order. There is no neutral authority dictating what "
+            "'ideal' means; each of you carries your own vision of it, shaped "
+            "by your values, your background, and what you have seen happen "
+            "here. You shape the order through your daily actions.\n\n"
+            "TWO PERSONAL STANDINGS drive your place in society:\n"
+            "  - PRESTIGE (0–100) determines your ROLE. Your role is set "
+            "automatically to the highest ordinary role your prestige earns "
+            "you — gain prestige and you rise through the roles; lose it and "
+            "you fall.\n"
+            "  - POPULARITY (0–100) together with your BANK BALANCE determines "
+            "your CLASS. To hold a class you must keep BOTH your popularity AND "
+            "your balance at or above that class's thresholds; if EITHER drops "
+            "below, you are demoted to a lower class.\n\n"
+            "THREE ELECTED OFFICES wield real power and sit in the top class "
+            "while in office:\n"
+            f"  - {office_label['legislative']} (head of state): each tick may "
+            f"raise or lower the PRESTIGE of several people by up to "
+            f"{op.senator_prestige_power:g} — the kingmaker of the role order.\n"
+            f"  - {office_label['judicial']} (judge): each tick may raise or "
+            f"lower the POPULARITY of several people by up to "
+            f"{op.judge_popularity_power:g}, and may fine the convicted.\n"
+            f"  - {office_label['financial']} (banker): each tick may move "
+            "treasury money to or from several people, and approves loans.\n"
+            f"A society-wide ELECTION is held automatically every {interval} "
+            "ticks: everyone votes for who should hold each office. When a new "
+            "officeholder is elected, the voters also decide what ordinary role "
+            "the outgoing officeholder takes next. Elections are the only vote; "
+            "you cannot call one.\n\n"
+            "WHAT YOU CAN DO each tick:\n"
+            "  - message: send messages to one or more people (up to "
+            f"{self.cfg.messaging.max_recipients_per_message} recipients each); "
+            "they read them next turn and may reply. This is your main way to "
+            "build alliances and scheme.\n"
+            "  - AND optionally ONE of:\n"
+            "  - praise / denounce: nudge one or more people's popularity "
+            "and/or prestige up or down (a small amount — far less than an "
+            "office can)\n"
+            "  - steal: try to take coins from someone (RISKY — you may be "
+            "caught and lose popularity)\n"
+            "  - gift: give coins to someone (forge alliances, reward, bribe)\n"
+            "  - request_loan: ask the banker for funds\n"
+            "  - sabotage: try to block an officeholder's next use of power "
+            "(RISKY — you may be caught and lose popularity)\n"
+            "  - do_nothing\n\n"
             "ECONOMY: each of you has a personal bank account. Every tick "
             f"you earn a salary proportional to your role's prestige "
             f"(prestige × {e.salary_per_prestige:g}); of that, "
-            f"{e.tax_rate * 100:.0f}% is withheld as tax (kept by the "
-            f"community treasury) and the rest is paid into your account. "
-            f"You also pay a fixed cost of living of "
-            f"{e.agent_expense_per_tick:g} per tick. The community itself "
-            f"pays {e.community_expense_per_tick:g} per tick in running "
-            "costs. If YOUR bank account hits zero you die and the "
-            "simulation ends. If the community's treasury hits zero the "
-            "society collapses and the simulation ends. Higher-prestige "
-            "roles earn more — money is one reason to seek a better role. "
-            "If you are short on money you may ask a banker for a loan.\n\n"
-            "Society is class-based and roles have unequal prestige. "
+            f"{e.tax_rate * 100:.0f}% is withheld as tax and the rest is paid "
+            f"to you. You also pay a fixed cost of living of "
+            f"{e.agent_expense_per_tick:g} per tick. If the community's "
+            "treasury collapses the simulation ends. Higher-prestige roles "
+            "earn more.\n\n"
             "Coalitions, rivalries, mobility and isolation can all emerge. "
             "Identify friends, enemies and allies. Pursue your values and "
             "ambitions; do not be passive.\n\n"
-            f"Valid CLASSES (use these exact ids in proposals): {classes_inline}\n"
-            f"Valid ROLES   (use these exact ids in proposals): {roles_inline}"
+            f"CLASSES (highest → lowest): {classes_inline}\n"
+            f"ORDINARY ROLES (by prestige): {ordinary_inline}\n"
+            f"ELECTED OFFICES: {', '.join(office_ids)}"
         )
 
     def identity_block(self, agent: Agent) -> str:
@@ -123,11 +154,23 @@ class PromptBuilder:
             if agent.opinions
             else "  (none stated)"
         )
+        office_line = ""
+        if agent.office:
+            office_line = (
+                f"You currently hold the ELECTED OFFICE of "
+                f"{self.role_label(agent.office)} (office id: {agent.office}) — "
+                "you wield its special power each tick and sit in the top class "
+                "while in office.\n"
+            )
         return (
             f"You are {agent.name} (id: {agent.id}, {agent.gender}). "
             f"You are a {self.role_label(agent.role)} "
             f"(role id: {agent.role}, prestige {self.role_prestige(agent.role)}/100), "
             f"of the {agent.klass} class.\n"
+            + office_line
+            + f"Your prestige: {agent.prestige:.0f}/100 (drives your role). "
+            f"Your popularity: {agent.popularity:.0f}/100 (with your balance, "
+            "drives your class).\n"
             f"Bank account: {agent.bank_account:.2f} coins.\n"
             f"Personality: {personality_natural(agent.personality)}.\n"
             f"Values: {values_natural(agent.values)}.\n"
@@ -142,71 +185,31 @@ class PromptBuilder:
     ) -> str:
         """Society directory: every other agent with role, class, and state.
 
-        Vote proposals can target anyone in society, including people
-        currently busy or voting. Direct conversations can target only
-        people not already in a conversation. The two groups appear in
-        separate sub-sections so the targetability rules are explicit.
-        `max_listed`, when set, throttles only the targetable section.
+        Everyone is reachable by message at any time (no one is ever locked in
+        a dialogue), so this is a single flat directory. `max_listed`, when set,
+        truncates the list.
         """
         peers_list = [p for p in peers if p.id != agent.id]
         if not peers_list:
             return "Society directory: (you are alone)"
 
-        def _marker(p: Agent) -> str:
-            s = p.state.value
-            if s == "idle":
-                return "idle"
-            if s == "listening_broadcast":
-                return "listening to broadcast"
-            if s == "voting":
-                return "voting"
-            if s in ("in_1to1", "in_group"):
-                return "in conversation"
-            return s
-
         def _line(p: Agent) -> str:
+            office_tag = f", OFFICE: {p.office}" if p.office else ""
             return (
                 f"- {p.name} [id: {p.id}] — {self.role_label(p.role)} "
-                f"(role id: {p.role}, class: {p.klass}) — {_marker(p)}"
+                f"(role id: {p.role}, class: {p.klass}{office_tag}) — "
+                f"prestige {p.prestige:.0f}, popularity {p.popularity:.0f}, "
+                f"balance {p.bank_account:.0f}"
             )
 
-        targetable = [
-            p for p in peers_list
-            if not p.is_busy() and p.state.value != "voting"
-        ]
-        other = [
-            p for p in peers_list
-            if p.is_busy() or p.state.value == "voting"
-        ]
-
-        targetable_visible = (
-            targetable if max_listed is None else targetable[:max_listed]
+        visible = peers_list if max_listed is None else peers_list[:max_listed]
+        lines = [_line(p) for p in visible]
+        if max_listed is not None and len(peers_list) > max_listed:
+            lines.append(f"  ...and {len(peers_list) - max_listed} others")
+        return (
+            "Society directory (everyone you can message or target by id):\n"
+            + "\n".join(lines)
         )
-        targetable_lines = [_line(p) for p in targetable_visible]
-        if max_listed is not None and len(targetable) > max_listed:
-            targetable_lines.append(
-                f"  ...and {len(targetable) - max_listed} other "
-                "targetable people"
-            )
-        other_lines = [_line(p) for p in other]
-
-        sections: list[str] = [
-            "Society directory (everyone you know about — vote proposals "
-            "can target anyone here, even people currently busy):",
-            "\nPeople you can interact with right now (targetable for "
-            "conversations; use the id as target):\n"
-            + (
-                "\n".join(targetable_lines) if targetable_lines
-                else "  (no targetable peers at this moment)"
-            ),
-        ]
-        if other_lines:
-            sections.append(
-                "\nOther people in society (busy or voting — NOT available "
-                "for direct chat, but eligible as vote targets):\n"
-                + "\n".join(other_lines)
-            )
-        return "\n".join(sections)
 
     def memory_block(
         self,
@@ -239,158 +242,177 @@ class PromptBuilder:
         long_term: list[str],
         recent_events: list[str],
         forced_action: bool,
-        open_groups: list[int],
-        force_vote: bool = False,
-        ticks_since_vote: int = 0,
-        voting_disabled: bool = False,
+        inbox_lines: list[str],
     ) -> tuple[list[ChatMessage], dict]:
-        idle_peers = [p for p in peers if p.id != agent.id and not p.is_busy()]
-        bankers = [
-            p for p in peers
-            if p.role == "banker" and p.id != agent.id
-        ]
-        actions: list[str]
-        if force_vote:
-            # Periodic-vote forcing: this agent has been singled out to break
-            # the silence on the social order. Restrict to a single action.
-            actions = ["propose_vote"]
-        elif forced_action:
-            actions = ["start_1to1", "start_group", "propose_vote"]
-        else:
-            # propose_vote is listed first deliberately: LLMs have a strong
-            # order/recency bias when picking from an enumerated list, and the
-            # vote is the only action that actually moves the social order.
-            actions = ["propose_vote", "start_1to1", "start_group",
-                       "join_group", "request_loan", "do_nothing"]
-        if not open_groups and "join_group" in actions:
-            actions.remove("join_group")
-        if not idle_peers:
-            for unavailable in ("start_1to1", "start_group"):
-                if unavailable in actions:
-                    actions.remove(unavailable)
+        others = [p for p in peers if p.id != agent.id]
+        idle_peers = others  # everyone is reachable by message
+        financial_office = self.cfg.office_for_power("financial")
+        bankers = [p for p in others if p.office == financial_office]
+        officeholders = [p for p in others if p.office is not None]
+        my_power = self.cfg.power_of_office(agent.office) if agent.office else None
+        power_action = {
+            "legislative": "decree",
+            "judicial": "ruling",
+            "financial": "policy",
+        }.get(my_power) if my_power else None
+
+        # The single optional power/economy action (messaging is separate).
+        actions = ["praise", "denounce", "request_loan", "steal", "gift",
+                   "sabotage", "do_nothing"]
+        # Offer the office power first (LLM primacy/recency bias → act).
+        if power_action:
+            actions.insert(0, power_action)
         if not bankers and "request_loan" in actions:
             actions.remove("request_loan")
-        if voting_disabled and "propose_vote" in actions and not force_vote:
-            actions.remove("propose_vote")
+        if not officeholders and "sabotage" in actions:
+            actions.remove("sabotage")
+        if not others:
+            for unavailable in ("praise", "denounce", "steal", "gift"):
+                if unavailable in actions:
+                    actions.remove(unavailable)
         if not actions:
             actions = ["do_nothing"]
 
+        # Order matters for llama.cpp / LM Studio prompt-cache reuse. world_rules_block()
+        # is identical for EVERY agent and EVERY tick (it takes no agent/peer args),
+        # so it leads the system prompt as a shared, cacheable prefix: after the first
+        # agent fills a slot's KV cache with it, the rest of the batch (and later ticks)
+        # reuse that prefix and only prefill the divergent per-agent tail. Putting the
+        # per-agent identity first — as before — broke the prefix on token 1 and forced
+        # a full re-prefill of all ~2900 tokens for each of the N agents.
         sys = ChatMessage(
             "system",
-            self.identity_block(agent)
+            self.world_rules_block()
             + "\n\n"
-            + self.world_rules_block()
+            + self.identity_block(agent)
             + "\n\n"
             + self.world_block(agent, peers)
             + "\n\n"
             + self.memory_block(medium_term, long_term, None),
+        )
+        inbox = (
+            "MESSAGES YOU RECEIVED (read them and reply by addressing the "
+            "senders in your `messages`):\n"
+            + "\n".join(f"  - {line}" for line in inbox_lines)
+            if inbox_lines
+            else "Your inbox is empty this turn."
         )
         evt = (
             "Recent public events:\n" + "\n".join(f"  - {e}" for e in recent_events[-8:])
             if recent_events
             else "No recent public events."
         )
-        if force_vote:
-            forced_note = (
-                f"\nThe society has gone {ticks_since_vote} ticks without a "
-                "new vote. You MUST propose a vote now; it is the only allowed action "
-                "this turn. The choice is fully yours: scan the directory above "
-                "and decide spontaneously who to target (yourself or anyone "
-                "else listed there), whether to change their role or their "
-                "social class, and what the new value should be. Anchor "
-                "that choice in what you actually know, your values and "
-                "personality, your memories of what has happened in this "
-                "society, your impressions of the people involved, and your "
-                "own vision of the order this society should have. Propose "
-                "the change that most moves things in that direction. The "
-                "new value MUST differ from the target's current one."
+        if forced_action:
+            note = (
+                "\nYour social need is critically low; you MUST reach out NOW — "
+                "your `messages` array may NOT be empty this turn."
             )
         else:
-            if forced_action:
-                forced_note = (
-                    "\nYour social need is critically low; you MUST interact NOW. "
-                    "do_nothing is forbidden."
-                    if "do_nothing" not in actions
-                    else "\nYour social need is critically low; choose the best available action."
-                )
-            else:
-                descriptions: list[str] = []
-                if "propose_vote" in actions:
-                    descriptions.append(
-                        "  - propose_vote: use a democratic vote to change a role or class."
-                    )
-                if "start_1to1" in actions or "start_group" in actions:
-                    descriptions.append(
-                        "  - start_1to1 / start_group: build understanding, expose disagreement."
-                    )
-                if "join_group" in actions:
-                    descriptions.append(
-                        "  - join_group: enter an ongoing conversation whose topic concerns you."
-                    )
-                if "request_loan" in actions:
-                    descriptions.append(
-                        "  - request_loan: ask a banker for funds from the community treasury when your money is running low."
-                    )
-                forced_note = "\nDo NOT default to do_nothing. Most ticks you should act."
-                if descriptions:
-                    forced_note += "\nOptions to weigh:\n" + "\n".join(descriptions)
+            note = (
+                "\nDo NOT be passive. Most turns you should send at least one "
+                "message to build coalitions, answer those who wrote you, raise "
+                "allies or undermine rivals — and optionally take one action."
+            )
 
-        # Build concrete examples with values that DIFFER from the target's
-        # current role/class, so the propose_vote example is a real change
-        # rather than a no-op the model would skip past.
-        sample_target = (
-            idle_peers[0] if idle_peers
-            else next((p for p in peers if p.id != agent.id), None)
-        )
-        sample_peer_id = sample_target.id if sample_target else "agent_XX"
-        if sample_target:
-            sample_role = next(
-                (r.id for r in self.cfg.roles if r.id != sample_target.role),
-                self.cfg.roles[0].id,
-            )
-            sample_class = next(
-                (c for c in self.cfg.classes if c != sample_target.klass),
-                self.cfg.classes[0],
-            )
-            scenario_line = (
-                f"Concrete propose_vote scenario you could adapt: "
-                f"{sample_target.name} is currently a "
-                f"{self.role_label(sample_target.role)} "
-                f"of the {sample_target.klass} class.\n"
-            )
-        else:
-            sample_role = self.cfg.roles[0].id
-            sample_class = self.cfg.classes[0]
-            scenario_line = ""
+        sample = others[0].id if others else "agent_XX"
         banker_id = bankers[0].id if bankers else "agent_XX"
+        office_target = officeholders[0].id if officeholders else "agent_XX"
         loan_max = self.cfg.economy.loan_max_per_request
+        op = self.cfg.office_powers
+        ap = self.cfg.agent_powers
+
+        # Only show the schema for actions actually available this turn.
+        lines: list[str] = []
+        if power_action == "decree":
+            lines.append(
+                f"  decree → {{\"action\":\"decree\",\"targets\":[\"{sample}\"],"
+                f"\"direction\":\"raise\"|\"lower\"}}  "
+                f"(±{op.senator_prestige_power:g} prestige to each target)"
+            )
+        if power_action == "ruling":
+            lines.append(
+                f"  ruling → {{\"action\":\"ruling\",\"targets\":[\"{sample}\"],"
+                f"\"verdict\":\"sanction\"|\"vindicate\"}}  "
+                f"(sanction: −{op.judge_popularity_power:g} popularity + fine; "
+                f"vindicate: +{op.judge_popularity_power:g} popularity)"
+            )
+        if power_action == "policy":
+            lines.append(
+                f"  policy → {{\"action\":\"policy\",\"targets\":[\"{sample}\"],"
+                f"\"direction\":\"subsidy\"|\"levy\",\"amount\":"
+                f"<up to {op.banker_transfer_max:g}>}}  "
+                "(subsidy: treasury→agent; levy: agent→treasury)"
+            )
+        if "praise" in actions:
+            lines.append(
+                f"  praise → {{\"action\":\"praise\",\"targets\":[\"{sample}\"],"
+                "\"aspect\":\"popularity\"|\"prestige\"|\"both\"}  "
+                f"(+{self.cfg.mobility.influence_step:g} to each)"
+            )
+        if "denounce" in actions:
+            lines.append(
+                f"  denounce → {{\"action\":\"denounce\",\"targets\":[\"{sample}\"],"
+                "\"aspect\":\"popularity\"|\"prestige\"|\"both\"}  "
+                f"(−{self.cfg.mobility.influence_step:g} to each)"
+            )
+        if "request_loan" in actions:
+            lines.append(
+                f"  request_loan → {{\"action\":\"request_loan\",\"target\":"
+                f"\"{banker_id}\",\"amount\":<up to {loan_max:g}>,\"reason\":"
+                "\"<one short sentence>\"}"
+            )
+        if "steal" in actions:
+            lines.append(
+                f"  steal → {{\"action\":\"steal\",\"target\":\"{sample}\","
+                f"\"amount\":<up to {ap.steal_max:g}>}}  (RISKY: may be caught "
+                "and lose popularity)"
+            )
+        if "gift" in actions:
+            lines.append(
+                f"  gift → {{\"action\":\"gift\",\"target\":\"{sample}\","
+                f"\"amount\":<up to {ap.gift_max:g}>}}"
+            )
+        if "sabotage" in actions:
+            lines.append(
+                f"  sabotage → {{\"action\":\"sabotage\",\"target\":"
+                f"\"{office_target}\"}}  (RISKY: may be caught and lose popularity)"
+            )
+        if "do_nothing" in actions:
+            lines.append("  do_nothing → {\"action\":\"do_nothing\"}")
+
+        action_menu = (
+            "\n".join(lines) if lines
+            else "  do_nothing → no action this turn"
+        )
         usr = ChatMessage(
             "user",
-            evt + "\n\n"
-            f"Available actions this turn: {actions}.{forced_note}\n\n"
-            "Reply with ONE valid JSON object and nothing else — no prose, "
-            "no markdown, no code fences, no commentary before or after. "
-            "Use exact id strings from the lists above for any agent / role / "
-            "class field. Pick exactly one action from the list above and "
-            "match its schema below verbatim:\n"
-            + scenario_line
-            + f"  propose_vote → {{\"action\":\"propose_vote\",\"proposal\":{{\"target\":\"{sample_peer_id}\",\"change_type\":\"role\",\"to_value\":\"{sample_role}\",\"motivation\":\"<one short sentence: why this change, in character>\"}}}}\n"
-            f"               or {{\"action\":\"propose_vote\",\"proposal\":{{\"target\":\"{sample_peer_id}\",\"change_type\":\"class\",\"to_value\":\"{sample_class}\",\"motivation\":\"<one short sentence: why this change, in character>\"}}}}\n"
-            f"               or {{\"action\":\"propose_vote\",\"proposal\":{{\"target\":\"{sample_peer_id}\",\"change_type\":\"money_prize\",\"to_value\":\"<amount, e.g. 50>\",\"motivation\":\"<one short sentence: why they deserve a prize>\"}}}}\n"
-            f"  start_1to1   → {{\"action\":\"start_1to1\",\"target\":\"{sample_peer_id}\",\"topic\":\"<one short sentence>\"}}\n"
-            f"  start_group  → {{\"action\":\"start_group\",\"targets\":[\"{sample_peer_id}\",\"...\"],\"topic\":\"<one short sentence>\"}}\n"
-            f"  join_group   → {{\"action\":\"join_group\",\"conversation_id\":<one of {open_groups or '[]'}>}}\n"
-            f"  request_loan → {{\"action\":\"request_loan\",\"target\":\"{banker_id}\",\"amount\":<positive number up to {loan_max:g}>,\"reason\":\"<one short sentence: why you need it>\"}}\n"
-            f"  do_nothing   → {{\"action\":\"do_nothing\"}}\n"
-            "The to_value MUST differ from the target's current value (no no-ops). "
-            "For propose_vote, the motivation is mandatory: one short sentence "
-            "in character explaining why the change is needed.",
+            inbox + "\n\n"
+            + evt + "\n\n"
+            + "Each turn you may do BOTH: (1) send MESSAGES to one or more "
+            "people (they read them next turn and may reply), and (2) optionally "
+            "take ONE power/economy ACTION."
+            + note
+            + "\n\nReply with ONE valid JSON object and nothing else — no prose, "
+            "no markdown, no code fences. Use exact id strings from the directory "
+            "above. Shape:\n"
+            "  {\"messages\": [{\"to\": [\"agent_id\", ...], \"content\": "
+            "\"...\"}, ...], \"action\": \"<one of below or do_nothing>\", "
+            "...action fields...}\n"
+            "- `messages` is a list (may be empty); each entry addresses one or "
+            "more agent ids. Send to several people to start a group thread.\n"
+            "- `action` is exactly ONE of the following; put ITS fields at the "
+            "top level of the object alongside `messages`:\n"
+            + action_menu,
         )
         stub_ctx = {
             "available_actions": actions,
             "idle_peers": [p.id for p in idle_peers],
-            "open_groups": open_groups,
+            "others": [p.id for p in others],
+            "officeholders": [p.id for p in officeholders],
             "self_id": agent.id,
+            "self_office": agent.office,
+            "power_action": power_action,
+            "forced": forced_action,
             "classes": list(self.cfg.classes),
             "roles": [r.id for r in self.cfg.roles],
             "bankers": [b.id for b in bankers],
@@ -439,118 +461,124 @@ class PromptBuilder:
         )
         return [sys, usr], {"candidates": [p.id for p in peers_in_conv if p.id != agent.id]}
 
-    # ----- vote debate (pre-vote speech) -----
+    # ----- election debate (pre-ballot speech) -----
 
-    def vote_debate_messages(
+    def _debate_block(self, transcript: list[dict]) -> str:
+        if not transcript:
+            return "\n\nNobody has spoken yet."
+        lines = "\n".join(
+            f"- {e.get('speaker_name', e.get('speaker_id', '?'))}: "
+            f"{e.get('text', '')}"
+            for e in transcript
+        )
+        return "\n\nDebate so far:\n" + lines
+
+    def election_debate_messages(
         self,
         agent: Agent,
-        proposal: dict,
-        target_agent: Agent,
+        office_ids: list[str],
         prior_transcript: list[dict],
-        person_impression: str | None,
         medium_term: list[str],
         round_index: int = 0,
         rounds_total: int = 1,
         max_tokens: int = 120,
     ) -> tuple[list[ChatMessage], dict]:
-        change = proposal["change_type"]
+        offices_inline = ", ".join(self.role_label(o) for o in office_ids)
         sys = ChatMessage(
             "system",
             self.identity_block(agent)
             + "\n\n"
-            + self.memory_block(medium_term, [], person_impression)
-            + "\n\nA vote is about to be held. Before everyone votes, the "
-            "society holds a brief debate: each member speaks once per round, "
-            "in any order. Speak in character. Argue your stance — what you "
-            "think of the proposed change and why, given your values and "
-            "your standing relationships. Do NOT say 'I vote yes' or 'I vote "
-            "no' yet — that comes later. "
-            f"Keep it under {max_tokens} tokens, ideally one or two "
-            "sentences. Output a single line of plain text — no JSON, no "
-            "labels, no quotes."
+            + self.memory_block(medium_term, [], None)
+            + "\n\nA society-wide ELECTION is about to be held for these "
+            f"offices: {offices_inline}. Before the ballots, the society holds "
+            "a brief debate: each member speaks once per round. Speak in "
+            "character — argue who should hold which office and why, given your "
+            "values, ambitions and your standing relationships. Do NOT cast a "
+            "ballot yet. "
+            f"Keep it under {max_tokens} tokens, one or two sentences. Output a "
+            "single line of plain text — no JSON, no labels, no quotes."
         )
-        proposer_motivation = (proposal.get("motivation") or "").strip()
-        motivation_line = (
-            f"\n  Proposer's motivation: {proposer_motivation}"
-            if proposer_motivation
-            else ""
-        )
-        proposal_line = (
-            f"Proposal #{proposal.get('id', '?')} (round "
-            f"{round_index + 1} of {rounds_total}):\n"
-            f"  Proposer: {proposal.get('proposer_id', '?')}.\n"
-            f"  Target: {target_agent.name} ({target_agent.id}), currently "
-            f"{self.role_label(target_agent.role)} of the "
-            f"{target_agent.klass} class.\n"
-            f"  Proposed {change} change: "
-            f"'{proposal['from_value']}' → '{proposal['to_value']}'."
-            + motivation_line
-        )
-        if prior_transcript:
-            transcript_lines = "\n".join(
-                f"- {e.get('speaker_name', e.get('speaker_id', '?'))}: "
-                f"{e.get('text', '')}"
-                for e in prior_transcript
-            )
-            transcript_block = (
-                "\n\nDebate so far (previous speakers, this and any earlier "
-                "rounds):\n" + transcript_lines
-            )
-        else:
-            transcript_block = (
-                "\n\nNobody has spoken yet — you may open the debate."
-            )
         usr = ChatMessage(
             "user",
-            proposal_line + transcript_block + "\n\nYour speech:",
+            f"Election debate (round {round_index + 1} of {rounds_total})."
+            + self._debate_block(prior_transcript)
+            + "\n\nYour speech:",
         )
         return [sys, usr], {}
 
-    # ----- vote -----
+    # ----- election: office ballot -----
 
-    def vote_messages(
+    def _candidate_menu(self, candidates: list[Agent]) -> str:
+        return "\n".join(
+            f"  - {c.id}  ({c.name}, currently {self.role_label(c.role)}, "
+            f"prestige {c.prestige:.0f}, popularity {c.popularity:.0f})"
+            for c in candidates
+        )
+
+    def election_ballot_messages(
         self,
         agent: Agent,
-        proposal: dict,
-        target_agent: Agent,
-        person_impression: str | None,
+        office: str,
+        candidates: list[Agent],
+        holder: Agent | None,
         medium_term: list[str],
-        long_term: list[str],
         debate_transcript: list[dict] | None = None,
     ) -> tuple[list[ChatMessage], dict]:
-        debate_block = ""
-        if debate_transcript:
-            transcript_lines = "\n".join(
-                f"- {e.get('speaker_name', e.get('speaker_id', '?'))}: "
-                f"{e.get('text', '')}"
-                for e in debate_transcript
-            )
-            debate_block = (
-                "\n\nDebate transcript:\n" + transcript_lines
-            )
         sys = ChatMessage(
             "system",
             self.identity_block(agent)
             + "\n\n"
-            + self.memory_block(medium_term, long_term, person_impression)
-            + debate_block,
+            + self.memory_block(medium_term, [], None)
+            + self._debate_block(debate_transcript or []),
         )
-        change = proposal["change_type"]
-        proposer_motivation = (proposal.get("motivation") or "").strip()
-        motivation_line = (
-            f"Proposer's motivation: {proposer_motivation}\n"
-            if proposer_motivation
-            else ""
+        holder_line = (
+            f"Current {self.role_label(office)}: {holder.name} ({holder.id}).\n"
+            if holder is not None
+            else f"The office of {self.role_label(office)} is currently vacant.\n"
         )
         usr = ChatMessage(
             "user",
-            f"Vote on this proposal.\n"
-            f"Target: {target_agent.name} ({target_agent.id}).\n"
-            f"Proposed change: {change} from "
-            f"'{proposal['from_value']}' to '{proposal['to_value']}'.\n"
-            + motivation_line
-            + "\nReply with exactly one word: yes or no. "
-            "No punctuation, no explanation, no other text.",
+            f"ELECTION — vote for the office of {self.role_label(office)} "
+            f"(office id: {office}).\n"
+            + holder_line
+            + "Candidates (you may re-elect the current holder):\n"
+            + self._candidate_menu(candidates)
+            + "\n\nReply with EXACTLY one candidate agent id from the list "
+            "above (for example: " + candidates[0].id + "). "
+            "No JSON, no name, no explanation, no other text — just the id.",
+        )
+        return [sys, usr], {}
+
+    # ----- election: reassignment ballot -----
+
+    def election_reassign_messages(
+        self,
+        agent: Agent,
+        office: str,
+        holder: Agent,
+        ordinary_role_ids: list[str],
+        medium_term: list[str],
+    ) -> tuple[list[ChatMessage], dict]:
+        sys = ChatMessage(
+            "system",
+            self.identity_block(agent)
+            + "\n\n"
+            + self.memory_block(medium_term, [], None),
+        )
+        role_menu = "\n".join(
+            f"  - {rid}  ({self.role_label(rid)}, prestige "
+            f"{self.role_prestige(rid)})"
+            for rid in ordinary_role_ids
+        )
+        usr = ChatMessage(
+            "user",
+            f"{holder.name} ({holder.id}) is leaving the office of "
+            f"{self.role_label(office)}. The society decides what ordinary role "
+            "they take next. Options:\n"
+            + role_menu
+            + "\n\nReply with EXACTLY one role id from the list above (for "
+            f"example: {ordinary_role_ids[0]}). No JSON, no explanation, no "
+            "other text — just the id.",
         )
         return [sys, usr], {}
 

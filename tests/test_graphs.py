@@ -12,23 +12,21 @@ def test_graph_render_smoke(stub_config: Path, tmp_path: Path) -> None:
     cfg = load_config(stub_config)
     db = tmp_path / "g.db"
     store = RunStore(db)
-    # Seed a couple of agents and one conversation worth of messages.
+    # Seed a couple of agents and a few messages between them.
     for spec in cfg.agents:
         store.upsert_agent({
             "agent_id": spec.id, "name": spec.name, "gender": spec.gender,
             "role": spec.role_initial, "class": spec.class_initial,
             "personality": spec.personality.model_dump(),
             "values": dict(spec.values), "backstory": spec.backstory,
-            "social_need": 80.0, "state": "idle", "current_conversation_id": None,
+            "social_need": 80.0, "state": "idle",
         })
         store.record_status_change(spec.id, "initial", None, spec.role_initial)
         store.record_status_change(spec.id, "initial", None, spec.class_initial)
 
     a, b = cfg.agents[0].id, cfg.agents[1].id
-    cid = store.open_conversation("1to1", a, [a, b])
-    store.append_message(cid, 1, a, "Hello.")
-    store.append_message(cid, 2, b, "Hi.")
-    store.close_conversation(cid, "natural", "Greeting.")
+    store.add_message(a, [b], "Hello.", tick_no=1)
+    store.add_message(b, [a], "Hi.", tick_no=2)
 
     pid = store.open_proposal(a, b, "role", cfg.agents[1].role_initial, "scholar")
     store.record_vote(pid, a, "yes", "yes")

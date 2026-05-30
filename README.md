@@ -1,14 +1,24 @@
-# ::] UNIMATRIx v1.0.1
+# ::] UNIMATRIx v1.1.0
 
 
 A simulated society of LLM-driven agents. Each agent has a personality, a
-role (president, banker, scholar, worker, beggar...), and a social class.
-They talk to each other, form opinions, change their minds, and vote on
-proposals that can move them between classes. The goal is to watch what
-emerges — coalitions, mobility, polarization — without scripting it.
+role (president, banker, scholar, worker, beggar...), a social class, and two
+standings: **prestige** (which sets their role) and **popularity** (which,
+together with their bank balance, sets their class). They talk, form opinions,
+and shape the order through everyday actions — praising and denouncing each
+other, stealing, gifting, and sabotaging — while a **forced election** every
+N ticks elects three powerful offices (a head of state, a judge, and a banker)
+and reassigns the outgoing officeholders. The goal is to watch what emerges —
+coalitions, mobility, polarization — without scripting it.
+
+Mobility is automatic: role follows prestige, and class follows popularity +
+wealth (fall below either threshold and you are demoted). The three offices
+wield outsized power — the head of state moves prestige, the judge moves
+popularity and levies fines, the banker moves treasury money — each over a list
+of targets every tick.
 
 A web control panel runs the show: you start the process, pick a config,
-hit **Start**, watch the conversations / votes / social graphs tick
+hit **Start**, watch the conversations / elections / social graphs tick
 forward, and **Stop** when you've seen enough. Past runs stay browsable
 from the same UI.
 
@@ -115,6 +125,51 @@ Useful CLI flags (all optional):
 The control panel's **Recent events** box mirrors the orchestrator's
 terminal log line-by-line — the same human-readable feed, no JSON dump.
 
+## Performance & troubleshooting (slow ticks / "processing prompt")
+
+Every tick fans out one LLM request per idle agent. On a local backend
+that can stall: requests pile up faster than the server drains them. The
+dashboard now shows an **inference** line (and the terminal logs one per
+tick) so you can see *where* the time goes instead of guessing:
+
+```
+inference: in-flight 4/4 (queued 26) · 30 calls in 48.2s · avg 6.1s/call
+  max 38.0s · prompt ~2900 out ~1500 tok · prefill 9s / decode 41s · peak 4/4
+```
+
+- **`in-flight` / `queued`** (live, updates mid-tick): `in-flight` are POSTs
+  the backend is actively working; `queued` are throttled client-side by
+  `inference.max_concurrent_requests`. Many `queued` → raise the cap (up to
+  your server's parallel-slot count). Few in-flight but each slow → the
+  backend, not the client, is the bottleneck.
+- **`prefill` vs `decode`** (when the backend reports timings, e.g. LM Studio):
+  - *prefill-bound* → the model is re-reading the big prompt. The decision
+    prompt now front-loads its static `world_rules_block` so llama.cpp/LM
+    Studio reuse the cached prefix across agents — keep prompts' shared parts
+    stable. Shrinking the per-agent content (fewer `memory.medium_term_summaries`,
+    a smaller society listing) helps too.
+  - *decode-bound* with a large `out ~N tok` → the model is generating a lot.
+    A **reasoning model** (e.g. `phi-4-reasoning-plus`) spends thousands of
+    tokens "thinking" per decision — that is usually the dominant cost. Switch
+    to a non-reasoning **instruct** model (e.g. `Qwen2.5-14B-Instruct`) or lower
+    `inference.max_tokens_per_decision`. The dashboard warns when average output
+    is very large.
+
+Key knobs (in the config's `inference` / `social` blocks):
+
+| Knob | What it does |
+|------|--------------|
+| `inference.max_concurrent_requests` | In-flight request cap. Set it to your LM Studio / vLLM **parallel-slots** setting; lower it (e.g. 1–4) for a single-stream server to avoid a server-side queue that times out. |
+| `inference.request_timeout_seconds` | Per-request HTTP timeout. Raise for big/slow models; it is *not* a fix for an overloaded server. |
+| `inference.slow_request_warn_seconds` | Logs a warning naming any single call slower than this (default 30s) so a hung request is visible, not silent. |
+| `inference.max_tokens_per_decision` | Output ceiling per decision. Tune it to the real `out ~N tok` you observe. |
+| `social.max_idle_decisions_per_tick` | Cap agents asked per tick (0 = all). Reduces total work at the source. |
+
+On the LM Studio side: load the model with **full GPU offload**, enable
+**flash attention** and **prompt caching**, and give the server enough total
+context for `slots × ~3000 tokens`. A GPU that isn't maxed during generation
+is normal — single-stream decode is memory-bandwidth bound, not compute bound.
+
 ## Optional extras
 
 ```bash
@@ -136,8 +191,8 @@ src/unimatrix/
   inference/      HTTP client (vLLM / llama.cpp / stub)
   agents/         agent runtime, system prompts
   conversations/  1-to-1, group, broadcast
-  voting/         proposals, mandatory votes, tally
-  orchestrator/   main loop, social-need decay, anti-silence trigger
+  voting/         forced elections (office ballots + outgoing reassignment)
+  orchestrator/   main loop, social mobility, social-need decay, anti-silence
   graphs/         matplotlib renderers
   web/            FastAPI control panel + HTML UI
   session.py      simulation lifecycle (start / stop, one orchestrator)

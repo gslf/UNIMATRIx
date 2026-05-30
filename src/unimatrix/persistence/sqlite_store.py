@@ -62,6 +62,31 @@ class RunStore:
             self._conn.execute(
                 "ALTER TABLE agents ADD COLUMN bank_account REAL DEFAULT 0"
             )
+        if "destitute" not in agent_cols:
+            self._conn.execute(
+                "ALTER TABLE agents ADD COLUMN destitute INTEGER DEFAULT 0"
+            )
+        if "prestige" not in agent_cols:
+            self._conn.execute(
+                "ALTER TABLE agents ADD COLUMN prestige REAL DEFAULT 0"
+            )
+        if "popularity" not in agent_cols:
+            self._conn.execute(
+                "ALTER TABLE agents ADD COLUMN popularity REAL DEFAULT 0"
+            )
+        if "office" not in agent_cols:
+            self._conn.execute(
+                "ALTER TABLE agents ADD COLUMN office TEXT"
+            )
+        msg_cols = {
+            r["name"]
+            for r in self._conn.execute("PRAGMA table_info(messages)").fetchall()
+        }
+        if "tick_no" not in msg_cols:
+            self._conn.execute("ALTER TABLE messages ADD COLUMN tick_no INTEGER")
+        self._conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_messages_tick ON messages(tick_no)"
+        )
 
     def close(self) -> None:
         with self._lock:
@@ -87,8 +112,8 @@ class RunStore:
                 INSERT INTO agents
                   (agent_id, name, gender, role, class, personality, values_json,
                    backstory, social_need, state, current_conversation_id,
-                   bank_account)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   bank_account, destitute, prestige, popularity, office)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(agent_id) DO UPDATE SET
                     name = excluded.name,
                     gender = excluded.gender,
@@ -100,7 +125,11 @@ class RunStore:
                     social_need = excluded.social_need,
                     state = excluded.state,
                     current_conversation_id = excluded.current_conversation_id,
-                    bank_account = excluded.bank_account
+                    bank_account = excluded.bank_account,
+                    destitute = excluded.destitute,
+                    prestige = excluded.prestige,
+                    popularity = excluded.popularity,
+                    office = excluded.office
                 """,
                 (
                     agent["agent_id"],
@@ -115,6 +144,10 @@ class RunStore:
                     agent.get("state", "idle"),
                     agent.get("current_conversation_id"),
                     agent.get("bank_account", 0.0),
+                    int(bool(agent.get("destitute", False))),
+                    agent.get("prestige", 0.0),
+                    agent.get("popularity", 0.0),
+                    agent.get("office"),
                 ),
             )
 
@@ -127,6 +160,10 @@ class RunStore:
         role: str | None = None,
         klass: str | None = None,
         bank_account: float | None = None,
+        destitute: bool | None = None,
+        prestige: float | None = None,
+        popularity: float | None = None,
+        office: str | None | object = ...,
     ) -> None:
         sets: list[str] = []
         params: list[Any] = []
@@ -148,6 +185,18 @@ class RunStore:
         if bank_account is not None:
             sets.append("bank_account = ?")
             params.append(bank_account)
+        if destitute is not None:
+            sets.append("destitute = ?")
+            params.append(int(bool(destitute)))
+        if prestige is not None:
+            sets.append("prestige = ?")
+            params.append(prestige)
+        if popularity is not None:
+            sets.append("popularity = ?")
+            params.append(popularity)
+        if office is not ...:
+            sets.append("office = ?")
+            params.append(office)
         if not sets:
             return
         params.append(agent_id)
@@ -272,6 +321,74 @@ class RunStore:
                 ).fetchall()
             return [dict(r) for r in rows]
 
+    # ----- loans -----
+
+    def create_loan(
+        self,
+        borrower_id: str,
+        granted_by: str | None,
+        principal: float,
+        interest_rate: float,
+        installment_amount: float,
+        installments_total: int,
+    ) -> int:
+        """Record a new active loan and return its id.
+
+        The principal transfer itself is recorded separately via
+        `apply_transaction('loan', ...)`; this row tracks the amortization
+        schedule so the economy module can debit installments per tick.
+        """
+        with self._tx() as c:
+            cur = c.execute(
+                """
+                INSERT INTO loans
+                  (borrower_id, granted_by, principal, interest_rate,
+                   installment_amount, installments_total, installments_paid,
+                   granted_at, status)
+                VALUES (?, ?, ?, ?, ?, ?, 0, ?, 'active')
+                """,
+                (
+                    borrower_id,
+                    granted_by,
+                    float(principal),
+                    float(interest_rate),
+                    float(installment_amount),
+                    int(installments_total),
+                    utc_now_iso(),
+                ),
+            )
+            return int(cur.lastrowid or 0)
+
+    def list_active_loans(self) -> list[dict]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM loans WHERE status = 'active' ORDER BY id"
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def record_loan_installment(self, loan_id: int) -> None:
+        """Bump installments_paid; if it now equals installments_total, close
+        the loan as 'repaid'."""
+        with self._tx() as c:
+            c.execute(
+                "UPDATE loans SET installments_paid = installments_paid + 1 "
+                "WHERE id = ?",
+                (loan_id,),
+            )
+            c.execute(
+                "UPDATE loans SET status = 'repaid', closed_at = ? "
+                "WHERE id = ? AND installments_paid >= installments_total",
+                (utc_now_iso(), loan_id),
+            )
+
+    def write_off_loan(self, loan_id: int) -> None:
+        with self._tx() as c:
+            c.execute(
+                "UPDATE loans SET status = 'written_off', closed_at = ? "
+                "WHERE id = ?",
+                (utc_now_iso(), loan_id),
+            )
+
     # ----- conversations -----
 
     def open_conversation(
@@ -353,6 +470,171 @@ class RunStore:
                     d["participants"] = []
                 out.append(d)
             return out
+
+    # ----- messages (tick-based async messaging) -----
+
+    @staticmethod
+    def _msg_row(r: sqlite3.Row) -> dict:
+        """Convert a message row whose recipients were group_concat'd into a
+        dict with a `recipients` list."""
+        d = dict(r)
+        rec = d.pop("recipients", None)
+        d["recipients"] = rec.split(",") if rec else []
+        return d
+
+    def add_message(
+        self,
+        sender_id: str,
+        recipient_ids: Iterable[str],
+        content: str,
+        tick_no: int,
+    ) -> int:
+        """Persist one message + its recipient rows in a single transaction.
+
+        `conversation_id`/`turn_index` are left NULL (legacy columns); the
+        message is keyed by `tick_no` for the async model.
+        """
+        with self._tx() as c:
+            cur = c.execute(
+                "INSERT INTO messages (sender_id, content, ts, tick_no) "
+                "VALUES (?, ?, ?, ?)",
+                (sender_id, content, utc_now_iso(), tick_no),
+            )
+            mid = int(cur.lastrowid or 0)
+            for rid in recipient_ids:
+                c.execute(
+                    "INSERT OR IGNORE INTO message_recipients "
+                    "(message_id, recipient_id) VALUES (?, ?)",
+                    (mid, rid),
+                )
+            return mid
+
+    def messages_in_tick(self, tick_no: int) -> list[dict]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT m.id, m.sender_id, m.content, m.ts, m.tick_no, "
+                "       group_concat(r.recipient_id) AS recipients "
+                "FROM messages m LEFT JOIN message_recipients r "
+                "  ON r.message_id = m.id "
+                "WHERE m.tick_no = ? GROUP BY m.id ORDER BY m.id",
+                (tick_no,),
+            ).fetchall()
+            return [self._msg_row(r) for r in rows]
+
+    def unread_messages_for(self, agent_id: str, after_tick: int) -> list[dict]:
+        """Messages addressed to `agent_id` sent strictly after `after_tick`,
+        each decorated with its full recipient list. Used to re-derive an
+        inbox on resume."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT m.id, m.sender_id, m.content, m.ts, m.tick_no, "
+                "       group_concat(r2.recipient_id) AS recipients "
+                "FROM messages m "
+                "JOIN message_recipients r "
+                "  ON r.message_id = m.id AND r.recipient_id = ? "
+                "LEFT JOIN message_recipients r2 ON r2.message_id = m.id "
+                "WHERE m.tick_no > ? GROUP BY m.id ORDER BY m.id",
+                (agent_id, after_tick),
+            ).fetchall()
+            return [self._msg_row(r) for r in rows]
+
+    def recent_messages_for(self, agent_id: str, limit: int) -> list[dict]:
+        """Latest messages where the agent is sender OR recipient, oldest
+        first (for prompt history + reflection)."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT m.id, m.sender_id, m.content, m.ts, m.tick_no, "
+                "       group_concat(r2.recipient_id) AS recipients "
+                "FROM messages m "
+                "LEFT JOIN message_recipients r2 ON r2.message_id = m.id "
+                "WHERE m.sender_id = ? OR m.id IN "
+                "  (SELECT message_id FROM message_recipients WHERE recipient_id = ?) "
+                "GROUP BY m.id ORDER BY m.id DESC LIMIT ?",
+                (agent_id, agent_id, limit),
+            ).fetchall()
+            return [self._msg_row(r) for r in reversed(rows)]
+
+    def messages_by_sender(self, sender_id: str, limit: int = 20) -> list[dict]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT m.id, m.sender_id, m.content, m.ts, m.tick_no, "
+                "       group_concat(r.recipient_id) AS recipients "
+                "FROM messages m LEFT JOIN message_recipients r "
+                "  ON r.message_id = m.id "
+                "WHERE m.sender_id = ? GROUP BY m.id ORDER BY m.id DESC LIMIT ?",
+                (sender_id, limit),
+            ).fetchall()
+            return [self._msg_row(r) for r in rows]
+
+    def list_messages(
+        self,
+        limit: int = 500,
+        sender: str | None = None,
+        recipient: str | None = None,
+        text: str | None = None,
+    ) -> list[dict]:
+        """Explorer feed: newest-first messages from the async stream
+        (tick_no set), with optional sender/recipient/text filters."""
+        clauses = ["m.tick_no IS NOT NULL"]
+        params: list[Any] = []
+        if sender:
+            clauses.append("m.sender_id = ?")
+            params.append(sender)
+        if recipient:
+            clauses.append(
+                "m.id IN (SELECT message_id FROM message_recipients "
+                "WHERE recipient_id = ?)"
+            )
+            params.append(recipient)
+        if text:
+            clauses.append("m.content LIKE ?")
+            params.append(f"%{text}%")
+        params.append(limit)
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT m.id, m.sender_id, m.content, m.ts, m.tick_no, "
+                "       group_concat(r.recipient_id) AS recipients "
+                "FROM messages m LEFT JOIN message_recipients r "
+                "  ON r.message_id = m.id "
+                "WHERE " + " AND ".join(clauses) +
+                " GROUP BY m.id ORDER BY m.id DESC LIMIT ?",
+                params,
+            ).fetchall()
+            return [self._msg_row(r) for r in rows]
+
+    def messages_between(
+        self, a_id: str, b_id: str, limit: int = 500
+    ) -> list[dict]:
+        """Pairwise thread: messages a→b or b→a, oldest first."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT m.id, m.sender_id, m.content, m.ts, m.tick_no, "
+                "       group_concat(r.recipient_id) AS recipients "
+                "FROM messages m LEFT JOIN message_recipients r "
+                "  ON r.message_id = m.id "
+                "WHERE (m.sender_id = ? AND m.id IN "
+                "        (SELECT message_id FROM message_recipients "
+                "         WHERE recipient_id = ?)) "
+                "   OR (m.sender_id = ? AND m.id IN "
+                "        (SELECT message_id FROM message_recipients "
+                "         WHERE recipient_id = ?)) "
+                "GROUP BY m.id ORDER BY m.id ASC LIMIT ?",
+                (a_id, b_id, b_id, a_id, limit),
+            ).fetchall()
+            return [self._msg_row(r) for r in rows]
+
+    def all_messages_with_recipients(self) -> list[dict]:
+        """Every async message with its recipient list (graph renderer).
+        Inner join excludes legacy conversation rows lacking recipients."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT m.id, m.sender_id, m.ts, m.tick_no, "
+                "       group_concat(r.recipient_id) AS recipients "
+                "FROM messages m JOIN message_recipients r "
+                "  ON r.message_id = m.id "
+                "GROUP BY m.id ORDER BY m.id"
+            ).fetchall()
+            return [self._msg_row(r) for r in rows]
 
     # ----- voting -----
 
@@ -590,35 +872,23 @@ class RunStore:
         """Reconstruct an agent's recent applied decisions.
 
         Sources merged in time order:
-          - conversations where initiator_id = agent (start_1to1 / start_group)
+          - messages sent by this agent (sent_message)
           - public_events of type 'broadcast_agent' from this agent
           - public_events of type 'vote_proposed' by this agent
-        do_nothing and join_group are not represented (they leave no
-        per-agent trace), but the three above cover the decisions a user
-        actually wants to inspect.
+        do_nothing leaves no per-agent trace, but the three above cover the
+        decisions a user actually wants to inspect.
         """
         out: list[dict] = []
+        for m in self.messages_by_sender(agent_id, limit):
+            out.append({
+                "kind": "sent_message",
+                "at": m.get("ts"),
+                "message_id": m.get("id"),
+                "tick_no": m.get("tick_no"),
+                "recipients": m.get("recipients", []),
+                "content": (m.get("content") or "")[:200],
+            })
         with self._lock:
-            convs = self._conn.execute(
-                "SELECT id, type, participants, started_at, summary "
-                "FROM conversations WHERE initiator_id = ? "
-                "ORDER BY id DESC LIMIT ?",
-                (agent_id, limit),
-            ).fetchall()
-            for r in convs:
-                d = dict(r)
-                try:
-                    d["participants"] = json.loads(d["participants"])
-                except (TypeError, json.JSONDecodeError):
-                    d["participants"] = []
-                out.append({
-                    "kind": "started_conversation",
-                    "at": d["started_at"],
-                    "conv_id": d["id"],
-                    "conv_type": d["type"],
-                    "participants": d["participants"],
-                    "summary": d.get("summary"),
-                })
             evs = self._conn.execute(
                 "SELECT event_type, payload, ts FROM public_events "
                 "WHERE event_type IN ('broadcast_agent', 'vote_proposed') "

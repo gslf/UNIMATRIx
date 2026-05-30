@@ -10,12 +10,12 @@
     "backend": "vllm",
     "endpoint": "http://127.0.0.1:1234",
     "model": "phi-4-reasoning-plus",
-    "max_batch_size": 64,
     "max_tokens_per_message": 10000,
     "max_tokens_per_decision": 10000,
     "temperature": 0.95,
     "top_p": 0.95,
-    "request_timeout_seconds": 240
+    "request_timeout_seconds": 1000,
+    "max_concurrent_requests": 4
   },
   "memory": {
     "short_term_turns": 15,
@@ -33,28 +33,63 @@
     "forced_interaction_count_on_silence": 2,
     "max_idle_decisions_per_tick": 0
   },
-  "conversation": {
-    "max_turns_per_conversation": 12,
-    "max_group_size": 6,
-    "cooldown_seconds_after_end": 5.0,
-    "turns_per_tick": 2
+  "messaging": {
+    "reflection_interval_ticks": 20,
+    "reflection_min_new_messages": 1,
+    "max_recipients_per_message": 4,
+    "max_messages_per_tick": 3,
+    "message_history_window": 15
   },
   "voting": {
-    "max_ticks_without_vote": 10,
+    "election_interval_ticks": 100,
+    "max_ticks_without_vote": 100,
     "warmup_ticks": 3,
     "debate_rounds": 1,
     "max_tokens_per_debate_speech": 120,
-    "max_vote_attempts": 3
+    "max_vote_attempts": 3,
+    "election_ballot_max_tokens": 2000
   },
   "economy": {
     "salary_per_prestige": 0.5,
-    "tax_rate": 0.3,
+    "production_per_prestige": 0.4,
+    "tax_rate": 0.35,
     "agent_initial_balance": 100.0,
     "agent_expense_per_tick": 5.0,
     "community_initial_balance": 10000.0,
     "community_expense_per_tick": 50.0,
+    "community_bankruptcy_balance": -10000.0,
+    "destitution_exit_balance": 50.0,
     "protected_roles": ["senator", "judge", "banker"],
-    "loan_max_per_request": 200.0
+    "loan_max_per_request": 200.0,
+    "loan_interest_rate": 0.1,
+    "loan_installments": 20
+  },
+  "mobility": {
+    "influence_step": 5,
+    "max_influence_targets": 3,
+    "prestige_decay_per_tick": 0,
+    "popularity_decay_per_tick": 0,
+    "class_thresholds": {
+      "aristocracy": {"popularity_min": 75, "balance_min": 80},
+      "bourgeoisie": {"popularity_min": 45, "balance_min": 30},
+      "people": {"popularity_min": 15, "balance_min": 0},
+      "marginal": {"popularity_min": 0, "balance_min": 0}
+    }
+  },
+  "office_powers": {
+    "senator_prestige_power": 20,
+    "judge_popularity_power": 20,
+    "judge_fine_fraction": 0.25,
+    "banker_transfer_max": 200,
+    "max_targets_per_power": 3
+  },
+  "agent_powers": {
+    "steal_success_prob": 0.5,
+    "steal_max": 50,
+    "steal_caught_popularity_penalty": 10,
+    "gift_max": 100,
+    "sabotage_success_prob": 0.4,
+    "sabotage_caught_popularity_penalty": 15
   },
   "classes": [
     "aristocracy",

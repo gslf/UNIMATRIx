@@ -1,33 +1,57 @@
-"""Voting module — proposals, mandatory votes, tally, application.
+"""Elections.
+
+A society-wide election is FORCED every `voting.election_interval_ticks` ticks.
+It is resolved ATOMICALLY within a single tick: an optional debate, then, for
+each of the three elected offices (head / judge / banker, in
+`Config.office_ids()` order), a plurality ballot; when a new winner unseats the
+incumbent, a second ballot decides the outgoing holder's new ordinary role.
+
+Design rules (all confirmed):
+  * Ballots are single-token: each voter replies with EXACTLY one candidate
+    agent-id (office ballot) or one ordinary role-id (reassignment). Parsing is
+    by EXACT id only (no fuzzy name matching) — abstain on 0 or >1 matches.
+  * Plurality wins; a tie at the top OR zero resolvable votes retains the
+    incumbent (an office is never left empty).
+  * The winner gets a prestige "mandate" bump (= the office's prestige) and is
+    pinned to the top class; the outgoing holder is reassigned to the voted
+    ordinary role with prestige anchored to it.
+  * Exactly one holder per office is maintained; a defensive repair pass
+    restores the invariant if anything slips.
+
+State/agent-VOTING transitions and conversation suspend/resume are handled by
+the orchestrator around `run_election` (mirroring the old in-tick vote path).
+Money no longer moves through voting (money-prize votes were removed).
 """
 from __future__ import annotations
 
 import asyncio
+import re
+from collections import Counter
 from dataclasses import dataclass, field
 
 from rich.console import Console
 
-from ..agents import Agent, AgentState, PromptBuilder
+from ..agents import Agent, PromptBuilder
 from ..config import Config
 from ..inference import GenerationRequest, InferenceClient
 from ..memory import MemoryManager
 from ..persistence import RunStore
 
+_TOKEN_RE = re.compile(r"[A-Za-z0-9_]+")
+
 
 @dataclass
 class Proposal:
+    """Kept for back-compat (exported). Elections persist their ballots through
+    the same `vote_proposals` table but no longer construct Proposal objects in
+    the hot path."""
     id: int
     proposer_id: str
     target_id: str
-    change_type: str  # 'role' | 'class'
+    change_type: str
     from_value: str
     to_value: str
     motivation: str = ""
-    # Pre-vote debate transcript (in-memory only; speeches are also persisted
-    # as 'vote_debate_speech' public_events). Each entry has keys:
-    # speaker_id, speaker_name, round, text.
-    debate_transcript: list[dict] = field(default_factory=list)
-    debated: bool = False
 
     def to_dict(self) -> dict:
         return {
@@ -41,7 +65,19 @@ class Proposal:
         }
 
 
-class VotingModule:
+@dataclass
+class ElectionState:
+    """Transient marker that an election is in progress (set for the duration of
+    `run_election`, cleared in its finally). Used for snapshots/checkpoints."""
+    tick: int
+    offices: list[str]
+    debate_transcript: list[dict] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return {"election_tick": self.tick, "offices": list(self.offices)}
+
+
+class ElectionModule:
     def __init__(
         self,
         cfg: Config,
@@ -50,6 +86,8 @@ class VotingModule:
         inference: InferenceClient,
         prompts: PromptBuilder,
         agents: dict[str, Agent],
+        rng,
+        mobility,
         console: Console | None = None,
     ) -> None:
         self.cfg = cfg
@@ -58,394 +96,390 @@ class VotingModule:
         self.inference = inference
         self.prompts = prompts
         self.agents = agents
+        self.rng = rng          # seeded Random owned by the orchestrator
+        self.mobility = mobility  # MobilityEngine (role/prestige/class helpers)
         self.console = console or Console()
-        self.active: Proposal | None = None
-        # Wired by the orchestrator after construction so approved money_prize
-        # proposals can transfer funds. Left as None until set.
-        self.economy = None
+        self.active: ElectionState | None = None
 
     def is_active(self) -> bool:
         return self.active is not None
 
-    async def propose(
-        self,
-        proposer_id: str,
-        target_id: str,
-        change_type: str,
-        to_value: str,
-    ) -> tuple[bool, str]:
-        """Validate a proposal. Returns (accepted, reason). Does NOT open it."""
-        if change_type not in ("role", "class", "money_prize"):
-            return False, "change_type must be 'role', 'class' or 'money_prize'"
-        target = self.agents.get(target_id)
-        if target is None:
-            return False, f"unknown target {target_id}"
-        if change_type == "money_prize":
+    # ----- public entry: one atomic election -----
+
+    async def run_election(self, tick_no: int) -> dict:
+        office_ids = self.cfg.office_ids()
+        self.active = ElectionState(tick=tick_no, offices=list(office_ids))
+        # Snapshot incumbents up front for the defensive repair pass.
+        prior_holders: dict[str, str | None] = {}
+        for oid in office_ids:
+            holder = next(
+                (a for a in self.agents.values() if a.office == oid), None
+            )
+            prior_holders[oid] = holder.id if holder else None
+        # Prefetch per-agent medium-term memory once (reused across ballots).
+        medium: dict[str, list[str]] = {}
+        for ag in self.agents.values():
             try:
-                amount = float(to_value)
-            except (TypeError, ValueError):
-                return False, f"money_prize amount unparseable: {to_value!r}"
-            if amount <= 0:
-                return False, "money_prize amount must be positive"
-            if self.active is not None:
-                return False, "another vote is already in progress"
-            return True, ""
-        if change_type == "role":
-            valid = {r.id for r in self.cfg.roles}
-            if to_value not in valid:
-                return False, f"unknown role {to_value}"
-            from_value = target.role
-            # Protected-role constraint: refuse a vote that would empty out
-            # one of the roles the society can't function without.
-            protected = set(self.cfg.economy.protected_roles)
-            if from_value in protected and from_value != to_value:
-                holders = sum(
-                    1 for a in self.agents.values() if a.role == from_value
+                medium[ag.id] = await self.memory.medium_term(ag.id)
+            except Exception:
+                medium[ag.id] = []
+        summary: dict = {"tick": tick_no, "offices": []}
+        try:
+            await self._run_debate(office_ids, medium)
+            for oid in office_ids:
+                res = await self._run_office(oid, tick_no, medium)
+                summary["offices"].append(res)
+            self._repair_invariant(office_ids, prior_holders)
+            await asyncio.to_thread(
+                self.store.record_event, "election_held", summary
+            )
+            self.console.log(
+                f"[bold yellow]ELECTION[/] tick {tick_no}: "
+                + ", ".join(
+                    f"{o['office']}={o['winner']}"
+                    + ("" if not o.get("changed") else f" (was {o['previous']})")
+                    for o in summary["offices"]
                 )
-                if holders <= 1:
-                    return False, f"cannot remove last {from_value}"
-        else:
-            if to_value not in self.cfg.classes:
-                return False, f"unknown class {to_value}"
-            from_value = target.klass
-        if from_value == to_value:
-            return False, "no-op proposal"
-        if self.active is not None:
-            return False, "another vote is already in progress"
-        return True, ""
-
-    async def open(
-        self,
-        proposer_id: str,
-        target_id: str,
-        change_type: str,
-        to_value: str,
-        motivation: str = "",
-    ) -> Proposal | None:
-        ok, reason = await self.propose(proposer_id, target_id, change_type, to_value)
-        if not ok:
-            self.console.log(f"[red]proposal rejected[/]: {reason}")
-            return None
-        target = self.agents[target_id]
-        if change_type == "money_prize":
-            from_value = "community"
-        elif change_type == "role":
-            from_value = target.role
-        else:
-            from_value = target.klass
-        prop_id = await asyncio.to_thread(
-            self.store.open_proposal,
-            proposer_id,
-            target_id,
-            change_type,
-            from_value,
-            to_value,
-            motivation,
-        )
-        proposal = Proposal(
-            id=prop_id,
-            proposer_id=proposer_id,
-            target_id=target_id,
-            change_type=change_type,
-            from_value=from_value,
-            to_value=to_value,
-            motivation=motivation,
-        )
-        self.active = proposal
-        for a in self.agents.values():
-            a.state = AgentState.VOTING
-            await asyncio.to_thread(
-                self.store.update_agent_state, a.id, state=a.state.value
             )
-        await asyncio.to_thread(
-            self.store.record_event, "vote_proposed", proposal.to_dict()
-        )
-        self.console.log(
-            f"[bold yellow]VOTE OPENED[/] #{prop_id}: {change_type} for "
-            f"{target.name} → {to_value}"
-        )
-        return proposal
+        finally:
+            self.active = None
+        return summary
 
-    async def abort_active(self) -> None:
-        """Clear a failed active vote and restore non-conversation state."""
-        self.active = None
-        for a in self.agents.values():
-            a.state = AgentState.IDLE
-            a.current_conversation_id = None
-            await asyncio.to_thread(
-                self.store.update_agent_state,
-                a.id,
-                state=a.state.value,
-                current_conversation_id=None,
-            )
+    # ----- debate (optional) -----
 
-    async def run_debate(self) -> None:
-        """Pre-vote debate: every agent speaks once per round, in parallel.
-        """
-        if self.active is None or self.active.debated:
-            return
+    async def _run_debate(
+        self, office_ids: list[str], medium: dict[str, list[str]]
+    ) -> None:
         rounds = self.cfg.voting.debate_rounds
-        if rounds <= 0:
-            self.active.debated = True
+        if rounds <= 0 or self.active is None:
             return
-        proposal = self.active
-        target = self.agents[proposal.target_id]
-        order: list[Agent] = list(self.agents.values())
+        order = list(self.agents.values())
         max_tokens = self.cfg.voting.max_tokens_per_debate_speech
         for r in range(rounds):
             reqs: list[GenerationRequest] = []
             for ag in order:
-                imp = await self.memory.person_impression(ag.id, target.id)
-                medium = await self.memory.medium_term(ag.id)
-                msgs, _ = self.prompts.vote_debate_messages(
+                msgs, _ = self.prompts.election_debate_messages(
                     ag,
-                    proposal.to_dict() | {"proposer_id": proposal.proposer_id},
-                    target,
-                    list(proposal.debate_transcript),
-                    imp,
-                    medium,
+                    office_ids,
+                    list(self.active.debate_transcript),
+                    medium.get(ag.id, []),
                     round_index=r,
                     rounds_total=rounds,
                     max_tokens=max_tokens,
                 )
                 reqs.append(
                     GenerationRequest(
-                        messages=msgs,
-                        max_tokens=max_tokens,
-                        stub_kind="debate",
+                        messages=msgs, max_tokens=max_tokens, stub_kind="debate"
                     )
                 )
             try:
                 raws = await self.inference.generate_batch(reqs)
             except Exception as exc:
-                self.console.log(
-                    f"[red]debate round {r} failed[/]: {exc}; "
-                    "skipping the rest of the debate"
-                )
+                self.console.log(f"[red]election debate round {r} failed[/]: {exc}")
                 break
             for ag, raw in zip(order, raws):
                 text = (raw or "").strip()
-                if not text:
+                first = next((ln.strip() for ln in text.splitlines() if ln.strip()), "")
+                if not first:
                     continue
-                # Take the first non-empty line.
-                first_line = next(
-                    (ln.strip() for ln in text.splitlines() if ln.strip()),
-                    "",
-                )
-                if not first_line:
-                    continue
-                entry = {
-                    "speaker_id": ag.id,
-                    "speaker_name": ag.name,
-                    "round": r,
-                    "text": first_line,
-                }
-                proposal.debate_transcript.append(entry)
+                entry = {"speaker_id": ag.id, "speaker_name": ag.name,
+                         "round": r, "text": first}
+                self.active.debate_transcript.append(entry)
                 await asyncio.to_thread(
-                    self.store.record_event,
-                    "vote_debate_speech",
-                    {"proposal_id": proposal.id, **entry},
+                    self.store.record_event, "election_debate_speech", entry
                 )
-        self.active.debated = True
-        self.console.log(
-            f"[dim]debate closed[/] for proposal #{proposal.id}: "
-            f"{len(proposal.debate_transcript)} speeches"
-        )
 
-    async def collect_and_close(self) -> dict:
-        """Run the batched vote round and apply the outcome.
-        """
-        assert self.active is not None
-        proposal = self.active
-        target = self.agents[proposal.target_id]
+    # ----- per-office resolution -----
 
-        # Build batched requests for every agent (target included — they vote on themselves).
-        order: list[Agent] = list(self.agents.values())
+    async def _run_office(
+        self, office: str, tick_no: int, medium: dict[str, list[str]]
+    ) -> dict:
+        holder = next((a for a in self.agents.values() if a.office == office), None)
+        # Candidates: anyone NOT holding a *different* office (incumbent + all
+        # non-officeholders). Sequential office processing keeps this current.
+        candidates = [
+            a for a in self.agents.values()
+            if a.office is None or a.office == office
+        ]
+        winner = await self._office_ballot(office, holder, candidates, tick_no, medium)
+
+        if winner is None or (holder is not None and winner.id == holder.id):
+            return {"office": office, "winner": holder.id if holder else None,
+                    "changed": False}
+
+        # New winner unseats the incumbent → reassign the outgoing holder.
+        new_role = await self._reassign_ballot(office, holder, tick_no, medium)
+        await self._apply_change(office, winner, holder, new_role)
+        return {
+            "office": office,
+            "winner": winner.id,
+            "previous": holder.id if holder else None,
+            "outgoing_role": new_role,
+            "changed": True,
+        }
+
+    async def _office_ballot(
+        self,
+        office: str,
+        holder: Agent | None,
+        candidates: list[Agent],
+        tick_no: int,
+        medium: dict[str, list[str]],
+    ) -> Agent | None:
+        order = list(self.agents.values())
+        candidate_ids = {a.id for a in candidates}
         reqs: list[GenerationRequest] = []
         for ag in order:
-            person = await self.memory.person_impression(ag.id, target.id)
-            medium = await self.memory.medium_term(ag.id)
-            long_term = [
-                r.text
-                for r in await self.memory.long_term(
-                    ag.id, f"{proposal.change_type} change for {target.name}"
-                )
-            ]
-            msgs, _ = self.prompts.vote_messages(
-                ag, proposal.to_dict() | {"proposer_id": proposal.proposer_id},
-                target, person, medium, long_term,
-                debate_transcript=list(proposal.debate_transcript),
+            msgs, _ = self.prompts.election_ballot_messages(
+                ag, office, candidates, holder,
+                medium.get(ag.id, []),
+                debate_transcript=list(self.active.debate_transcript)
+                if self.active else [],
             )
             reqs.append(
                 GenerationRequest(
                     messages=msgs,
-                    max_tokens=4,
-                    stub_kind="vote",
+                    max_tokens=self.cfg.voting.election_ballot_max_tokens,
+                    stub_kind="election_ballot",
+                    stub_context={"candidates": sorted(candidate_ids),
+                                  "office": office, "self_id": ag.id},
                 )
             )
+        decided, raws = await self._collect_ballots(order, reqs, candidate_ids)
 
+        # Tally + persist.
+        tally: Counter = Counter()
+        for i in range(len(order)):
+            cid = decided.get(i)
+            if cid:
+                tally[cid] += 1
+        incumbent_id = holder.id if holder else None
+        winner_id = self._pick_winner(tally, incumbent_id)
+
+        prop_id = await asyncio.to_thread(
+            self.store.open_proposal,
+            "ELECTION", winner_id or (incumbent_id or ""),
+            "office", incumbent_id or "", office,
+            f"election tick {tick_no}: {office}",
+        )
+        for i, ag in enumerate(order):
+            cid = decided.get(i)
+            vote_val = cid if cid else "abstain"
+            raw_for_storage = raws.get(i) if cid is None else None
+            await asyncio.to_thread(
+                self.store.record_vote, prop_id, ag.id, vote_val, "", raw_for_storage
+            )
+        winner_votes = tally.get(winner_id, 0) if winner_id else 0
+        runner_up = max((v for k, v in tally.items() if k != winner_id), default=0)
+        await asyncio.to_thread(
+            self.store.close_proposal, prop_id, "elected", winner_votes, runner_up
+        )
+        return self.agents.get(winner_id) if winner_id else holder
+
+    async def _reassign_ballot(
+        self,
+        office: str,
+        holder: Agent,
+        tick_no: int,
+        medium: dict[str, list[str]],
+    ) -> str:
+        ordinary_ids = set(self.cfg.ordinary_role_ids())
+        order = list(self.agents.values())
+        reqs: list[GenerationRequest] = []
+        for ag in order:
+            msgs, _ = self.prompts.election_reassign_messages(
+                ag, office, holder, self.cfg.ordinary_role_ids(),
+                medium.get(ag.id, []),
+            )
+            reqs.append(
+                GenerationRequest(
+                    messages=msgs,
+                    max_tokens=self.cfg.voting.election_ballot_max_tokens,
+                    stub_kind="election_reassign",
+                    stub_context={"roles": sorted(ordinary_ids),
+                                  "target": holder.id},
+                )
+            )
+        decided, raws = await self._collect_ballots(order, reqs, ordinary_ids)
+
+        tally: Counter = Counter()
+        for i in range(len(order)):
+            rid = decided.get(i)
+            if rid:
+                tally[rid] += 1
+        # Plurality among ordinary roles; tie/empty → prestige-derived fallback.
+        fallback = self.mobility.ordinary_role_for_prestige(holder.prestige)
+        new_role = self._pick_role(tally, fallback)
+
+        prop_id = await asyncio.to_thread(
+            self.store.open_proposal,
+            "ELECTION", holder.id, "reassign", office, new_role,
+            f"election tick {tick_no}: reassign outgoing {office}",
+        )
+        for i, ag in enumerate(order):
+            rid = decided.get(i)
+            vote_val = rid if rid else "abstain"
+            raw_for_storage = raws.get(i) if rid is None else None
+            await asyncio.to_thread(
+                self.store.record_vote, prop_id, ag.id, vote_val, "", raw_for_storage
+            )
+        await asyncio.to_thread(
+            self.store.close_proposal, prop_id, "reassigned",
+            tally.get(new_role, 0), 0,
+        )
+        return new_role
+
+    # ----- ballot collection / parsing / tally -----
+
+    async def _collect_ballots(
+        self,
+        order: list[Agent],
+        reqs: list[GenerationRequest],
+        valid_ids: set[str],
+    ) -> tuple[dict[int, str | None], dict[int, str]]:
         max_attempts = max(1, self.cfg.voting.max_vote_attempts)
-        # Per-agent state: index → (final_vote_label, motivation) once decided.
-        decided: dict[int, tuple[str, str]] = {}
-        # Last raw LLM output we saw per still-pending index, so the UI can
-        # show *what* the model actually produced when its vote was malformed.
-        last_raw: dict[int, str] = {}
-        pending: list[int] = list(range(len(order)))
-
+        decided: dict[int, str | None] = {}
+        raws: dict[int, str] = {}
+        pending = list(range(len(order)))
         for attempt in range(1, max_attempts + 1):
             if not pending:
                 break
             retry_reqs = [reqs[i] for i in pending]
             try:
-                raws = await self.inference.generate_batch(retry_reqs)
+                results = await self.inference.generate_batch(retry_reqs)
             except Exception as exc:
-                self.console.log(
-                    f"[red]vote attempt {attempt} failed[/]: {exc}"
-                )
-                # Don't retry the whole batch on a backend hiccup; treat the
-                # remaining as null so the vote still closes.
+                self.console.log(f"[red]ballot attempt {attempt} failed[/]: {exc}")
                 break
-            still_pending: list[int] = []
-            for i, raw in zip(pending, raws):
-                last_raw[i] = raw or ""
-                tokens = (raw or "").strip().lower().split()
-                first = tokens[0].strip(".,!?\"'`*:;)(") if tokens else ""
-                if first in ("yes", "no"):
-                    decided[i] = (first, "")
+            still: list[int] = []
+            for i, raw in zip(pending, results):
+                raws[i] = raw or ""
+                choice = self._resolve_ballot(raw, valid_ids)
+                if choice is not None:
+                    decided[i] = choice
                 else:
-                    still_pending.append(i)
-            if still_pending and attempt < max_attempts:
-                self.console.log(
-                    f"[yellow]vote attempt {attempt}[/]: "
-                    f"{len(still_pending)}/{len(pending)} malformed, retrying"
-                )
-            pending = still_pending
-
-        # Anything still pending after all attempts → null vote.
+                    still.append(i)
+            pending = still
         for i in pending:
-            decided[i] = ("null", "malformed response after all retries")
+            decided[i] = None  # abstain
+        return decided, raws
 
-        # Persist votes and tally.
-        yes = no = null = 0
-        for i, ag in enumerate(order):
-            v, motivation = decided.get(i, ("null", "no response"))
-            raw_for_storage = last_raw.get(i) if v == "null" else None
-            await asyncio.to_thread(
-                self.store.record_vote,
-                proposal.id,
-                ag.id,
-                v,
-                motivation,
-                raw_for_storage,
-            )
-            if v == "yes":
-                yes += 1
-            elif v == "no":
-                no += 1
-            else:
-                null += 1
+    @staticmethod
+    def _resolve_ballot(raw: str, valid_ids: set[str]) -> str | None:
+        """Return the single valid id named in `raw`, or None (abstain) on 0 or
+        >1 distinct matches. Exact-id only — no fuzzy/name matching."""
+        tokens = _TOKEN_RE.findall(raw or "")
+        matches = {t for t in tokens if t in valid_ids}
+        if len(matches) == 1:
+            return next(iter(matches))
+        return None
 
-        # Tally over valid votes only; ties → rejected (existing rule).
-        outcome = "approved" if yes > no else "rejected"
+    def _pick_winner(self, tally: Counter, incumbent_id: str | None) -> str | None:
+        """Unique plurality winner; a tie at the top or zero votes retains the
+        incumbent (offices are never left empty)."""
+        if not tally:
+            return incumbent_id
+        top = max(tally.values())
+        leaders = [k for k, v in tally.items() if v == top]
+        if len(leaders) == 1:
+            return leaders[0]
+        return incumbent_id if incumbent_id is not None else self.rng.choice(
+            sorted(leaders)
+        )
+
+    def _pick_role(self, tally: Counter, fallback: str) -> str:
+        if not tally:
+            return fallback
+        top = max(tally.values())
+        leaders = [k for k, v in tally.items() if v == top]
+        if len(leaders) == 1:
+            return leaders[0]
+        # Deterministic tie-break among equally-voted ordinary roles.
+        return self.rng.choice(sorted(leaders))
+
+    # ----- apply a change of officeholder -----
+
+    async def _apply_change(
+        self, office: str, winner: Agent, holder: Agent | None, new_role: str
+    ) -> None:
+        # Set the winner FIRST so the office is never momentarily empty.
+        old_winner_role = winner.role
+        winner.office = office
+        winner.role = office
+        winner.prestige = float(self.mobility.role_prestige(office))  # mandate
+        winner.klass = self.mobility.top_class                        # top-class pin
         await asyncio.to_thread(
-            self.store.close_proposal, proposal.id, outcome, yes, no
+            self.store.update_agent_state,
+            winner.id, role=winner.role, office=winner.office,
+            prestige=winner.prestige, klass=winner.klass,
         )
-        await asyncio.to_thread(
-            self.store.record_event,
-            "vote_closed",
-            {
-                "proposal_id": proposal.id,
-                "outcome": outcome,
-                "yes": yes,
-                "no": no,
-                "null": null,
-                "target_id": proposal.target_id,
-                "change_type": proposal.change_type,
-                "to_value": proposal.to_value,
-            },
-        )
-        self.console.log(
-            f"[bold]VOTE CLOSED[/] #{proposal.id}: yes={yes} no={no} "
-            f"null={null} → {outcome}"
-        )
-
-        if outcome == "approved":
-            await self._apply(proposal, target)
-
-        # Reset everyone to idle
-        for a in self.agents.values():
-            a.state = AgentState.IDLE
-            a.current_conversation_id = None
-            await asyncio.to_thread(
-                self.store.update_agent_state,
-                a.id,
-                state=a.state.value,
-                current_conversation_id=None,
-            )
-
-        result = {
-            "proposal_id": proposal.id,
-            "outcome": outcome,
-            "yes": yes,
-            "no": no,
-            "null": null,
-        }
-        self.active = None
-        return result
-
-    async def _apply(self, proposal: Proposal, target: Agent) -> None:
-        if proposal.change_type == "money_prize":
-            try:
-                amount = float(proposal.to_value)
-            except (TypeError, ValueError):
-                amount = 0.0
-            paid = 0.0
-            info = "no economy module wired"
-            paid_ok = False
-            if self.economy is not None and amount > 0:
-                paid_ok, paid, info = await self.economy.pay_prize(
-                    target.id, amount, proposal.id
-                )
-            await asyncio.to_thread(
-                self.store.record_event,
-                "prize_paid" if paid_ok else "prize_underfunded",
-                {
-                    "target_id": target.id,
-                    "amount_requested": amount,
-                    "amount_paid": paid,
-                    "proposal_id": proposal.id,
-                    "info": info,
-                },
-            )
-            return
-        if proposal.change_type == "role":
-            old = target.role
-            target.role = proposal.to_value
-            await asyncio.to_thread(
-                self.store.update_agent_state, target.id, role=target.role
-            )
-        else:
-            old = target.klass
-            target.klass = proposal.to_value
-            await asyncio.to_thread(
-                self.store.update_agent_state, target.id, klass=target.klass
-            )
         await asyncio.to_thread(
             self.store.record_status_change,
-            target.id,
-            proposal.change_type,
-            old,
-            proposal.to_value,
-            proposal.id,
+            winner.id, "role", old_winner_role, office, None,
         )
+        if holder is not None:
+            holder.office = None
+            holder.role = new_role
+            holder.prestige = float(self.mobility.role_prestige(new_role))  # anchor
+            await asyncio.to_thread(
+                self.store.update_agent_state,
+                holder.id, role=holder.role, office=None, prestige=holder.prestige,
+            )
+            await asyncio.to_thread(
+                self.store.record_status_change,
+                holder.id, "role", office, new_role, None,
+            )
         await asyncio.to_thread(
             self.store.record_event,
-            "status_change",
-            {
-                "agent_id": target.id,
-                "change_type": proposal.change_type,
-                "from": old,
-                "to": proposal.to_value,
-                "proposal_id": proposal.id,
-            },
+            "office_change",
+            {"office": office, "winner_id": winner.id,
+             "previous_id": holder.id if holder else None,
+             "outgoing_role": new_role},
         )
+
+    # ----- defensive one-holder-per-office invariant -----
+
+    def _repair_invariant(
+        self, office_ids: list[str], prior_holders: dict[str, str | None]
+    ) -> None:
+        for office in office_ids:
+            holders = [a for a in self.agents.values() if a.office == office]
+            if len(holders) == 1:
+                continue
+            if len(holders) == 0:
+                # Restore the prior incumbent if we know them.
+                pid = prior_holders.get(office)
+                restore = self.agents.get(pid) if pid else None
+                if restore is not None:
+                    restore.office = office
+                    restore.role = office
+                    restore.klass = self.mobility.top_class
+                    self.store.update_agent_state(
+                        restore.id, role=office, office=office,
+                        klass=restore.klass,
+                    )
+                    self.console.log(
+                        f"[red]election repair[/]: {office} had no holder; "
+                        f"restored {restore.id}"
+                    )
+                else:
+                    self.console.log(
+                        f"[red]election repair[/]: {office} has NO holder and "
+                        "no prior incumbent to restore"
+                    )
+                continue
+            # >1 holder: keep the first (dict/config order), demote the rest.
+            keep = holders[0]
+            for extra in holders[1:]:
+                extra.office = None
+                extra.role = self.mobility.ordinary_role_for_prestige(extra.prestige)
+                self.store.update_agent_state(
+                    extra.id, role=extra.role, office=None
+                )
+            self.console.log(
+                f"[red]election repair[/]: {office} had {len(holders)} holders; "
+                f"kept {keep.id}"
+            )
+
+
+# Back-compat alias: older imports referenced VotingModule.
+VotingModule = ElectionModule

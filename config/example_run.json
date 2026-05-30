@@ -10,11 +10,11 @@
     "backend": "vllm",
     "endpoint": "http://localhost:8000",
     "model": "Qwen/Qwen2.5-14B-Instruct-AWQ",
-    "max_batch_size": 64,
     "max_tokens_per_message": 200,
     "temperature": 0.85,
     "top_p": 0.95,
-    "request_timeout_seconds": 120
+    "request_timeout_seconds": 120,
+    "max_concurrent_requests": 16
   },
   "memory": {
     "short_term_turns": 15,
@@ -32,11 +32,12 @@
     "forced_interaction_count_on_silence": 2,
     "max_idle_decisions_per_tick": 0
   },
-  "conversation": {
-    "max_turns_per_conversation": 12,
-    "max_group_size": 6,
-    "cooldown_seconds_after_end": 5.0,
-    "turns_per_tick": 2
+  "messaging": {
+    "reflection_interval_ticks": 20,
+    "reflection_min_new_messages": 1,
+    "max_recipients_per_message": 6,
+    "max_messages_per_tick": 3,
+    "message_history_window": 15
   },
   "voting": {
     "max_ticks_without_vote": 10,

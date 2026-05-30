@@ -29,13 +29,18 @@ def stub_config(example_config_path, tmp_path) -> Path:
     # economy override these in the test body.
     cfg["economy"] = {
         "salary_per_prestige": 0.5,
+        "production_per_prestige": 0.0,
         "tax_rate": 0.3,
         "agent_initial_balance": 10000.0,
         "agent_expense_per_tick": 0.0,
         "community_initial_balance": 1_000_000.0,
         "community_expense_per_tick": 0.0,
+        "community_bankruptcy_balance": 0.0,
+        "destitution_exit_balance": 50.0,
         "protected_roles": ["president", "supreme_judge", "banker"],
         "loan_max_per_request": 200.0,
+        "loan_interest_rate": 0.1,
+        "loan_installments": 20,
     }
     p = tmp_path / "config.json"
     p.write_text(json.dumps(cfg), encoding="utf-8")
