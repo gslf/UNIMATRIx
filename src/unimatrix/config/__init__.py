@@ -15,6 +15,7 @@ from .models import (
     AgentSpec,
     Config,
     load_config,
+    strip_removed_legacy_keys,
 )
 
 __all__ = [
@@ -34,4 +35,5 @@ __all__ = [
     "AgentSpec",
     "Config",
     "load_config",
+    "strip_removed_legacy_keys",
 ]

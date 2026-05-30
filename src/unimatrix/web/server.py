@@ -15,7 +15,7 @@ from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 
-from ..config import Config
+from ..config import Config, strip_removed_legacy_keys
 from ..graphs import GRAPH_NAMES, GraphRenderer
 from ..orchestrator import Orchestrator
 from ..persistence import Registry, RunStore, utc_now_iso
@@ -35,7 +35,9 @@ def _config_for_run(registry: Registry, run_id: int) -> Config:
     if info is None:
         raise HTTPException(404, f"run {run_id} not found")
     try:
-        return Config.model_validate(json.loads(info["config_json"]))
+        return Config.model_validate(
+            strip_removed_legacy_keys(json.loads(info["config_json"]))
+        )
     except Exception as exc:
         raise HTTPException(
             500, f"saved config for run {run_id} is invalid: {exc}"

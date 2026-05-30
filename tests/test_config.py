@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from unimatrix.config import load_config
+from unimatrix.config import load_config, strip_removed_legacy_keys
 
 
 def test_loads_example(example_config_path: Path) -> None:
@@ -41,22 +41,17 @@ def test_duplicate_agent_id_fails(example_config_path: Path, tmp_path: Path) -> 
 def test_economy_defaults_applied_when_missing(
     example_config_path: Path, tmp_path: Path
 ) -> None:
-    """A config without an `economy` block should still load with defaults,
-    as long as the default protected roles exist in the role table and the
-    initial population includes at least one of each."""
+    """A config without an `economy` block loads with EconomyConfig defaults,
+    because the default protected roles (senator/judge/banker) exist in the role
+    table and the initial population includes a holder of each."""
     raw = json.loads(example_config_path.read_text(encoding="utf-8"))
     raw.pop("economy", None)
-    # The default protected list (senator/judge/banker) won't exist in this
-    # config (it uses president/supreme_judge/banker). So we must also override.
-    # Instead: ensure the loader picks defaults but validation can find them.
-    # Easier: keep the example_run.json's roles, just confirm the explicit
-    # block round-trips with defaults populated.
     p = tmp_path / "no_economy.json"
     p.write_text(json.dumps(raw))
-    # Loading should fail because default protected_roles don't match this
-    # config's role universe.
-    with pytest.raises(ValidationError):
-        load_config(p)
+    cfg = load_config(p)
+    assert cfg.economy.protected_roles == ["senator", "judge", "banker"]
+    assert cfg.economy.tax_rate == 0.3
+    assert cfg.economy.loan_installments == 20
 
 
 def test_protected_role_must_exist(
@@ -159,3 +154,30 @@ def test_influence_must_be_smaller_than_office(
     p.write_text(json.dumps(raw))
     with pytest.raises(ValidationError):
         load_config(p)
+
+
+def test_strip_removed_legacy_keys_drops_retired_fields() -> None:
+    raw = {
+        "simulation": {"name": "x", "language": "en"},
+        "voting": {"max_ticks_without_vote": 10, "warmup_ticks": 3},
+    }
+    out = strip_removed_legacy_keys(raw)
+    assert "language" not in out["simulation"]
+    assert "max_ticks_without_vote" not in out["voting"]
+    # Untouched keys survive.
+    assert out["voting"]["warmup_ticks"] == 3
+
+
+def test_legacy_config_with_removed_fields_still_loads(
+    example_config_path: Path, tmp_path: Path
+) -> None:
+    """A config saved before `language` / `max_ticks_without_vote` were retired
+    (as the run registry stores them) must still validate under extra='forbid'."""
+    raw = json.loads(example_config_path.read_text(encoding="utf-8"))
+    raw["simulation"]["language"] = "en"
+    raw["voting"]["max_ticks_without_vote"] = 10
+    p = tmp_path / "legacy.json"
+    p.write_text(json.dumps(raw))
+    cfg = load_config(p)  # must not raise
+    assert cfg.simulation.name == "first_run"
+    assert not hasattr(cfg.simulation, "language")

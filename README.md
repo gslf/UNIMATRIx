@@ -2,23 +2,23 @@
 
 
 A simulated society of LLM-driven agents. Each agent has a personality, a
-role (president, banker, scholar, worker, beggar...), a social class, and two
+role (senator, banker, scholar, worker, beggar...), a social class, and two
 standings: **prestige** (which sets their role) and **popularity** (which,
 together with their bank balance, sets their class). They talk, form opinions,
 and shape the order through everyday actions — praising and denouncing each
 other, stealing, gifting, and sabotaging — while a **forced election** every
-N ticks elects three powerful offices (a head of state, a judge, and a banker)
+N ticks elects three powerful offices (a senator, a judge, and a banker)
 and reassigns the outgoing officeholders. The goal is to watch what emerges —
 coalitions, mobility, polarization — without scripting it.
 
 Mobility is automatic: role follows prestige, and class follows popularity +
 wealth (fall below either threshold and you are demoted). The three offices
-wield outsized power — the head of state moves prestige, the judge moves
+wield outsized power — the senator moves prestige, the judge moves
 popularity and levies fines, the banker moves treasury money — each over a list
 of targets every tick.
 
 A web control panel runs the show: you start the process, pick a config,
-hit **Start**, watch the conversations / elections / social graphs tick
+hit **Start**, watch the messages / elections / social graphs tick
 forward, and **Stop** when you've seen enough. Past runs stay browsable
 from the same UI.
 
@@ -109,12 +109,35 @@ directory (default: `config/`). Two starters ship with the repo:
 Copy either one and edit. Any `*.json` file dropped into the configs
 directory shows up in the UI dropdown on the next page refresh.
 
+### Config blocks
+
+A config is a set of top-level blocks. The Pydantic schema in
+`src/unimatrix/config/models.py` is the authoritative spec (it fills in
+defaults for any block you omit and rejects unknown keys); the table below is
+a map of what each block controls.
+
+| Block | Controls | Key fields |
+|-------|----------|------------|
+| `simulation` | Run identity & timing | `name`, `seed`, `tick_interval_seconds`, `auto_checkpoint_minutes` |
+| `inference` | LLM backend & output limits | `backend`, `endpoint`, `model`, `max_tokens_per_decision`, `max_concurrent_requests` |
+| `memory` | Per-agent memory tiers | `short_term_turns`, `medium_term_summaries`, `long_term_retrieval_k`, `embedding_model` |
+| `social` | Social-need pressure & anti-silence | `social_need_decay_per_tick`, `social_need_critical_threshold`, `silence_detection_seconds`, `max_idle_decisions_per_tick` |
+| `messaging` | Agent message exchange & reflection | `max_recipients_per_message`, `max_messages_per_tick`, `reflection_interval_ticks` |
+| `voting` | Forced elections | `election_interval_ticks`, `warmup_ticks`, `debate_rounds`, `election_ballot_max_tokens` |
+| `economy` | Money flows & loans | `salary_per_prestige`, `production_per_prestige`, `tax_rate`, `community_bankruptcy_balance`, `loan_max_per_request` |
+| `mobility` | Class ladder & ordinary influence | `class_thresholds`, `influence_step`, `prestige_decay_per_tick`, `popularity_decay_per_tick` |
+| `office_powers` | Strength of the three elected offices | `senator_prestige_power`, `judge_popularity_power`, `judge_fine_fraction`, `banker_transfer_max` |
+| `agent_powers` | Illicit actions | `steal_success_prob`, `steal_max`, `gift_max`, `sabotage_success_prob` |
+| `classes` | Ordered class ids (highest → lowest) | e.g. `aristocracy, bourgeoisie, people, marginal` |
+| `roles` | Role table (`id`, `name`, `prestige`) | the three `economy.protected_roles` map positionally to legislative / judicial / financial powers (senator / judge / banker) |
+| `agents` | The roster | per agent: `personality`, `values`, `backstory`, `opinions`, `role_initial`, `class_initial` |
+
 Useful CLI flags (all optional):
 
 | Flag | Effect |
 |------|--------|
 | `--configs-dir DIR` | Where to look for config files (default: `config`) |
-| `--backend stub\|vllm` | Override `inference.backend` at start time |
+| `--backend stub\|vllm\|llama_cpp` | Override `inference.backend` at start time |
 | `--endpoint URL` | Override `inference.endpoint` |
 | `--model NAME` | Override the model name sent to the endpoint |
 | `--host 127.0.0.1` | Web UI bind host |
@@ -190,7 +213,7 @@ src/unimatrix/
   memory/         short / medium / long-term + per-person impressions
   inference/      HTTP client (vLLM / llama.cpp / stub)
   agents/         agent runtime, system prompts
-  conversations/  1-to-1, group, broadcast
+  messaging/      agent-to-agent messages (1-to-1, group) + reflections
   voting/         forced elections (office ballots + outgoing reassignment)
   orchestrator/   main loop, social mobility, social-need decay, anti-silence
   graphs/         matplotlib renderers

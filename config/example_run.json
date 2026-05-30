@@ -2,7 +2,6 @@
   "simulation": {
     "name": "first_run",
     "seed": 42,
-    "language": "en",
     "tick_interval_seconds": 3,
     "auto_checkpoint_minutes": 5
   },
@@ -11,10 +10,12 @@
     "endpoint": "http://localhost:8000",
     "model": "Qwen/Qwen2.5-14B-Instruct-AWQ",
     "max_tokens_per_message": 200,
+    "max_tokens_per_decision": 2000,
     "temperature": 0.85,
     "top_p": 0.95,
     "request_timeout_seconds": 120,
-    "max_concurrent_requests": 16
+    "max_concurrent_requests": 16,
+    "slow_request_warn_seconds": 30.0
   },
   "memory": {
     "short_term_turns": 15,
@@ -40,21 +41,54 @@
     "message_history_window": 15
   },
   "voting": {
-    "max_ticks_without_vote": 10,
+    "election_interval_ticks": 100,
     "warmup_ticks": 4,
     "debate_rounds": 1,
     "max_tokens_per_debate_speech": 120,
-    "max_vote_attempts": 3
+    "max_vote_attempts": 3,
+    "election_ballot_max_tokens": 2000
   },
   "economy": {
     "salary_per_prestige": 0.5,
+    "production_per_prestige": 0.4,
     "tax_rate": 0.3,
     "agent_initial_balance": 100.0,
     "agent_expense_per_tick": 5.0,
     "community_initial_balance": 10000.0,
     "community_expense_per_tick": 50.0,
-    "protected_roles": ["president", "supreme_judge", "banker"],
-    "loan_max_per_request": 200.0
+    "community_bankruptcy_balance": -10000.0,
+    "destitution_exit_balance": 50.0,
+    "protected_roles": ["senator", "judge", "banker"],
+    "loan_max_per_request": 200.0,
+    "loan_interest_rate": 0.1,
+    "loan_installments": 20
+  },
+  "mobility": {
+    "influence_step": 5,
+    "max_influence_targets": 3,
+    "prestige_decay_per_tick": 0,
+    "popularity_decay_per_tick": 0,
+    "class_thresholds": {
+      "aristocracy": {"popularity_min": 75, "balance_min": 80},
+      "bourgeoisie": {"popularity_min": 45, "balance_min": 30},
+      "people": {"popularity_min": 15, "balance_min": 0},
+      "marginal": {"popularity_min": 0, "balance_min": 0}
+    }
+  },
+  "office_powers": {
+    "senator_prestige_power": 20,
+    "judge_popularity_power": 20,
+    "judge_fine_fraction": 0.25,
+    "banker_transfer_max": 200,
+    "max_targets_per_power": 3
+  },
+  "agent_powers": {
+    "steal_success_prob": 0.5,
+    "steal_max": 50,
+    "steal_caught_popularity_penalty": 10,
+    "gift_max": 100,
+    "sabotage_success_prob": 0.4,
+    "sabotage_caught_popularity_penalty": 15
   },
   "classes": [
     "aristocracy",
@@ -64,13 +98,13 @@
   ],
   "roles": [
     {
-      "id": "president",
-      "name": "President",
+      "id": "senator",
+      "name": "Senator",
       "prestige": 95
     },
     {
-      "id": "supreme_judge",
-      "name": "Supreme Judge",
+      "id": "judge",
+      "name": "Judge",
       "prestige": 85
     },
     {
@@ -144,7 +178,7 @@
       "id": "agent_01",
       "name": "Eleanor Eberhardt",
       "gender": "f",
-      "role_initial": "president",
+      "role_initial": "senator",
       "class_initial": "aristocracy",
       "personality": {
         "openness": 47,
@@ -170,7 +204,7 @@
       "id": "agent_02",
       "name": "Eleanor Ashcroft",
       "gender": "f",
-      "role_initial": "supreme_judge",
+      "role_initial": "judge",
       "class_initial": "aristocracy",
       "personality": {
         "openness": 43,

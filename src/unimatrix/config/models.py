@@ -20,7 +20,6 @@ class SimulationConfig(BaseModel):
 
     name: str
     seed: int | None = 42
-    language: str = "en"
     tick_interval_seconds: float = Field(5.0, gt=0)
     auto_checkpoint_minutes: float = Field(5.0, gt=0)
 
@@ -54,7 +53,7 @@ class SocialConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     social_need_initial: float = 100.0
-    social_need_decay_per_tick: float = Field(5.0, ge=0.0)
+    social_need_decay_per_tick: float = Field(20.0, ge=0.0)
     social_need_gain_per_turn: float = Field(6.0, ge=0.0)
     social_need_critical_threshold: float = 25.0
     silence_detection_seconds: float = Field(20.0, gt=0)
@@ -77,7 +76,6 @@ class VotingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     election_interval_ticks: int = Field(100, ge=1)
-    max_ticks_without_vote: int = Field(10, ge=1)
     warmup_ticks: int = Field(4, ge=0)
     debate_rounds: int = Field(1, ge=0)
     max_tokens_per_debate_speech: int = Field(2000, ge=10)
@@ -131,6 +129,7 @@ class EconomyConfig(BaseModel):
 
 
     salary_per_prestige: float = Field(0.5, ge=0)
+    production_per_prestige: float = Field(0.4, ge=0)
     tax_rate: float = Field(0.3, ge=0, le=1)
     agent_initial_balance: float = Field(100.0, ge=0)
     agent_expense_per_tick: float = Field(5.0, ge=0)
@@ -332,8 +331,34 @@ class Config(BaseModel):
             )
         return self
 
+# Config keys that used to exist but were retired. Historical run configs saved
+# in the run registry still carry them, and the schema is extra="forbid", so they
+# must be dropped before validation or old runs would fail to load. Add an entry
+# here whenever a field is removed: (block, key).
+_REMOVED_LEGACY_KEYS: tuple[tuple[str, str], ...] = (
+    ("simulation", "language"),
+    ("voting", "max_ticks_without_vote"),
+)
+
+
+def strip_removed_legacy_keys(raw: dict) -> dict:
+    """Drop known-retired config keys from a raw config dict in place.
+
+    Keeps backward compatibility with configs saved before those fields were
+    removed (e.g. the JSON snapshot stored for each past run) without weakening
+    extra="forbid" for genuinely unknown keys. Returns the same dict for chaining.
+    """
+    for block, key in _REMOVED_LEGACY_KEYS:
+        section = raw.get(block)
+        if isinstance(section, dict):
+            section.pop(key, None)
+    return raw
+
+
 def load_config(path: str | Path) -> Config:
     """Read a JSON config file from disk and validate it."""
     p = Path(path)
     raw: Any = json.loads(p.read_text(encoding="utf-8"))
+    if isinstance(raw, dict):
+        strip_removed_legacy_keys(raw)
     return Config.model_validate(raw)

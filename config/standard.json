@@ -2,7 +2,6 @@
   "simulation": {
     "name": "standard",
     "seed": 42,
-    "language": "en",
     "tick_interval_seconds": 3,
     "auto_checkpoint_minutes": 5
   },
@@ -42,7 +41,6 @@
   },
   "voting": {
     "election_interval_ticks": 100,
-    "max_ticks_without_vote": 100,
     "warmup_ticks": 3,
     "debate_rounds": 1,
     "max_tokens_per_debate_speech": 120,

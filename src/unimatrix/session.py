@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .config import Config, load_config
+from .config import Config, load_config, strip_removed_legacy_keys
 from pydantic import ValidationError
 from .inference import InferenceClient
 from .log_console import LoggingConsole
@@ -209,7 +209,7 @@ class SessionManager:
                     "can be resumed",
                 )
             try:
-                cfg_dict = json.loads(info["config_json"])
+                cfg_dict = strip_removed_legacy_keys(json.loads(info["config_json"]))
                 cfg: Config = Config.model_validate(cfg_dict)
             except (ValidationError, ValueError) as exc:
                 raise SessionError(

@@ -37,7 +37,7 @@ def stub_config(example_config_path, tmp_path) -> Path:
         "community_expense_per_tick": 0.0,
         "community_bankruptcy_balance": 0.0,
         "destitution_exit_balance": 50.0,
-        "protected_roles": ["president", "supreme_judge", "banker"],
+        "protected_roles": ["senator", "judge", "banker"],
         "loan_max_per_request": 200.0,
         "loan_interest_rate": 0.1,
         "loan_installments": 20,
