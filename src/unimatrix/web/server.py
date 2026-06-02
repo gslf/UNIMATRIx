@@ -5,8 +5,10 @@ from __future__ import annotations
 import asyncio
 import io
 import json
+import re
 import shutil
 import zipfile
+from collections import Counter
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
@@ -44,10 +46,236 @@ def _config_for_run(registry: Registry, run_id: int) -> Config:
         )
 
 
+def _status_movements(
+    store: RunStore, agent_id: str, roles_by_id: dict, cfg: Config
+) -> dict:
+    """Per-agent role & class movement timelines plus the starting prestige and
+    popularity derived from the agent's initial role/class.
+
+    The `status_changes` table tags each row 'role', 'class' or 'initial'. The
+    'initial' baseline rows carry both a role and a class (indistinguishable by
+    `change_type`), so we split them by whether `to_value` is a known role id or
+    class id. Starting prestige/popularity are the same values the bootstrap
+    seeds from (nominal role prestige; the class's popularity floor).
+    """
+    thresholds = cfg.resolved_class_thresholds()
+    class_ids = set(cfg.classes)
+    role_ids = set(roles_by_id)
+    role_timeline: list[dict] = []
+    class_timeline: list[dict] = []
+    for c in store.list_status_changes_for(agent_id):  # oldest first
+        ct = c["change_type"]
+        to_val = c["to_value"]
+        entry = {"ts": c["ts"], "from": c["from_value"], "to": to_val}
+        if ct == "role" or (ct == "initial" and to_val in role_ids):
+            spec = roles_by_id.get(to_val)
+            entry["to_label"] = spec.name if spec else to_val
+            role_timeline.append(entry)
+        elif ct == "class" or (ct == "initial" and to_val in class_ids):
+            class_timeline.append(entry)
+
+    starting_role = role_timeline[0]["to"] if role_timeline else None
+    starting_class = class_timeline[0]["to"] if class_timeline else None
+    role_spec = roles_by_id.get(starting_role)
+    t = thresholds.get(starting_class)
+    return {
+        "role_timeline": role_timeline,
+        "class_timeline": class_timeline,
+        "starting_role": starting_role,
+        "starting_role_label": role_spec.name if role_spec else starting_role,
+        "starting_class": starting_class,
+        "starting_prestige": float(role_spec.prestige) if role_spec else None,
+        "starting_popularity": float(t.popularity_min) if t else None,
+    }
+
+
+# Elections persist their ballots in `vote_proposals`, one row per office
+# ballot (change_type='office') plus one per reassignment (change_type=
+# 'reassign'). Ballots from the same election share a tick, embedded in the
+# motivation string by ElectionModule, e.g. "election tick 40: head".
+_ELECTION_TICK_RE = re.compile(r"election tick (\d+)")
+
+
+def _proposal_tick(proposal: dict) -> int | None:
+    m = _ELECTION_TICK_RE.search(proposal.get("motivation") or "")
+    return int(m.group(1)) if m else None
+
+
+def _office_summary(p: dict, agents: dict, roles_by_id: dict) -> dict:
+    """Headline of one office ballot: who won, who held it, whether it flipped.
+
+    `from_value` is the incumbent's id, `to_value` the office role-id,
+    `target_id` the winner, and yes/no counts the winner's and runner-up's
+    tallies (see ElectionModule._office_ballot)."""
+    office = p.get("to_value")
+    incumbent_id = p.get("from_value") or None
+    winner_id = p.get("target_id") or None
+    role = roles_by_id.get(office)
+    return {
+        "proposal_id": p.get("id"),
+        "office": office,
+        "office_label": role.name if role else office,
+        "incumbent_id": incumbent_id,
+        "incumbent_name": agents.get(
+            incumbent_id, {"name": incumbent_id}
+        )["name"] if incumbent_id else None,
+        "winner_id": winner_id,
+        "winner_name": agents.get(
+            winner_id, {"name": winner_id}
+        )["name"] if winner_id else None,
+        "changed": bool(winner_id) and winner_id != incumbent_id,
+        "winner_votes": p.get("yes_count"),
+        "runner_up_votes": p.get("no_count"),
+    }
+
+
+def _reassign_summary(p: dict, agents: dict, roles_by_id: dict) -> dict:
+    """Headline of one reassignment ballot: where an unseated officeholder
+    (`target_id`, formerly office `from_value`) lands (`to_value`)."""
+    new_role = p.get("to_value")
+    target_id = p.get("target_id") or None
+    role = roles_by_id.get(new_role)
+    return {
+        "proposal_id": p.get("id"),
+        "office": p.get("from_value"),
+        "target_id": target_id,
+        "target_name": agents.get(
+            target_id, {"name": target_id}
+        )["name"] if target_id else None,
+        "new_role": new_role,
+        "new_role_label": role.name if role else new_role,
+        "role_votes": p.get("yes_count"),
+    }
+
+
+def _ballot_view(votes: list[dict], agents: dict, name_for) -> dict:
+    """Per-candidate tally + sorted individual ballots for one election ballot.
+
+    Each `votes` row carries `vote` = a candidate agent-id / role-id, or
+    "abstain" (also covers malformed responses, whose last raw attempt is kept
+    in `raw_response`). `name_for` resolves a choice id to its display label
+    (agent name for office ballots, role label for reassignments)."""
+    tally: Counter = Counter()
+    abstain = 0
+    rows: list[dict] = []
+    for v in votes:
+        choice = v.get("vote")
+        is_abstain = (not choice) or choice == "abstain"
+        if is_abstain:
+            abstain += 1
+        else:
+            tally[choice] += 1
+        rows.append({
+            "voter_id": v.get("voter_id"),
+            "voter_name": agents.get(
+                v.get("voter_id"), {"name": v.get("voter_id")}
+            )["name"],
+            "choice_id": None if is_abstain else choice,
+            "is_abstain": is_abstain,
+            "raw_response": v.get("raw_response"),
+            "voted_at": v.get("voted_at"),
+        })
+    rank = {cid: i for i, (cid, _) in enumerate(tally.most_common())}
+    for row in rows:
+        row["choice_name"] = (
+            name_for(row["choice_id"]) if row["choice_id"] else None
+        )
+    # Winner's voters first, then runners-up by tally rank, abstains last.
+    rows.sort(key=lambda r: (
+        r["is_abstain"],
+        rank.get(r["choice_id"], 10 ** 9),
+        r["voter_name"] or "",
+    ))
+    tally_list = [
+        {"choice_id": cid, "choice_name": name_for(cid), "count": n}
+        for cid, n in tally.most_common()
+    ]
+    return {"tally": tally_list, "abstain_count": abstain, "votes": rows}
+
+
+def _group_elections(
+    proposals: list[dict],
+    agents: dict,
+    roles_by_id: dict,
+    office_order: dict,
+    debate_counts: dict,
+) -> list[dict]:
+    """Bucket election ballots by tick into election summaries (newest first).
+    Proposals with no election tick (e.g. legacy yes/no proposals) are
+    ignored — the explorer is elections-only under the new architecture."""
+    by_tick: dict[int, list[dict]] = {}
+    for p in proposals:
+        tick = _proposal_tick(p)
+        if tick is None:
+            continue
+        by_tick.setdefault(tick, []).append(p)
+    elections: list[dict] = []
+    for tick, ballots in by_tick.items():
+        offices = [
+            _office_summary(p, agents, roles_by_id)
+            for p in ballots if p.get("change_type") == "office"
+        ]
+        offices.sort(key=lambda o: office_order.get(o["office"], 10 ** 9))
+        reassignments = [
+            _reassign_summary(p, agents, roles_by_id)
+            for p in ballots if p.get("change_type") == "reassign"
+        ]
+        proposed = [p.get("proposed_at") for p in ballots if p.get("proposed_at")]
+        closed = [p.get("closed_at") for p in ballots if p.get("closed_at")]
+        elections.append({
+            "tick": tick,
+            "proposed_at": min(proposed) if proposed else None,
+            "closed_at": max(closed) if closed else None,
+            "debate_count": debate_counts.get(tick, 0),
+            "offices": offices,
+            "reassignments": reassignments,
+            "changed_count": sum(1 for o in offices if o["changed"]),
+        })
+    elections.sort(key=lambda e: e["tick"], reverse=True)
+    return elections
+
+
+def _decorate_recent_votes(
+    votes_raw: list[dict], agents_map: dict, roles_by_id: dict
+) -> list[dict]:
+    """Reshape an agent's recent ballots (get_votes_by_voter join) into the
+    election-aware shape the agent detail panel renders: which office each
+    ballot was for, and who/what the agent picked (or abstain)."""
+    out: list[dict] = []
+    for v in votes_raw:
+        change_type = v.get("change_type")
+        choice = v.get("vote")
+        is_abstain = (not choice) or choice == "abstain"
+        if change_type == "reassign":
+            office = v.get("from_value")
+            role = roles_by_id.get(choice)
+            choice_name = (role.name if role else choice) if not is_abstain else None
+        else:  # office ballot (or legacy)
+            office = v.get("to_value")
+            choice_name = (
+                agents_map.get(choice, {"name": choice})["name"]
+                if not is_abstain else None
+            )
+        office_role = roles_by_id.get(office)
+        out.append({
+            "proposal_id": v["proposal_id"],
+            "kind": change_type,
+            "office": office,
+            "office_label": office_role.name if office_role else office,
+            "choice_id": None if is_abstain else choice,
+            "choice_name": choice_name,
+            "is_abstain": is_abstain,
+            "raw_response": v.get("raw_response"),
+            "voted_at": v.get("voted_at"),
+            "outcome": v.get("outcome"),
+        })
+    return out
+
+
 def _idle_state(session: SessionManager) -> dict:
     """State payload returned when no simulation is currently running."""
     recent_lines = getattr(session.console, "recent_log_lines", None)
-    events = recent_lines(50) if callable(recent_lines) else []
+    events = recent_lines(1000) if callable(recent_lines) else []
     return {
         "running": False,
         "run_id": None,
@@ -163,10 +391,10 @@ def build_app(
         snap["configs"] = session.list_configs()
         recent_lines = getattr(orch.console, "recent_log_lines", None)
         if callable(recent_lines):
-            snap["recent_events"] = recent_lines(50)
+            snap["recent_events"] = recent_lines(1000)
         else:
             snap["recent_events"] = await asyncio.to_thread(
-                orch.store.recent_events, 12
+                orch.store.recent_events, 1000
             )
         return JSONResponse(snap)
 
@@ -290,34 +518,15 @@ def build_app(
                         d.get("target_id"), {"name": d.get("target_id")}
                     )["name"]
 
-            votes_raw = orch.store.get_votes_by_voter(agent_id, limit=10)
-            recent_votes: list[dict] = []
-            for v in votes_raw:
-                motivation = v.get("motivation") or ""
-                status = (
-                    "malformed"
-                    if motivation.startswith("malformed response")
-                    else (v.get("vote") or "unknown")
-                )
-                tgt_id = v.get("target_id")
-                recent_votes.append({
-                    "proposal_id": v["proposal_id"],
-                    "status": status,
-                    "vote": v.get("vote"),
-                    "motivation": motivation,
-                    "raw_response": v.get("raw_response"),
-                    "voted_at": v.get("voted_at"),
-                    "target_id": tgt_id,
-                    "target_name": agents_map.get(
-                        tgt_id, {"name": tgt_id}
-                    )["name"],
-                    "change_type": v.get("change_type"),
-                    "from_value": v.get("from_value"),
-                    "to_value": v.get("to_value"),
-                    "outcome": v.get("outcome"),
-                })
+            recent_votes = _decorate_recent_votes(
+                orch.store.get_votes_by_voter(agent_id, limit=10),
+                agents_map, roles_by_id,
+            )
 
             txs = orch.store.list_transactions(limit=30, agent_id=agent_id)
+            movements = _status_movements(
+                orch.store, agent_id, roles_by_id, orch.cfg
+            )
             return {
                 "id": a["agent_id"],
                 "name": a.get("name") or a["agent_id"],
@@ -337,6 +546,7 @@ def build_app(
                 "state": a.get("state"),
                 "bank_account": a.get("bank_account"),
                 "recent_transactions": txs,
+                "status_movements": movements,
                 "memory": {
                     "summaries": summaries,
                     "impressions": impressions,
@@ -420,7 +630,7 @@ def build_app(
                     recent_transactions = s.list_transactions(limit=20)
                 except Exception:
                     recent_transactions = []
-                events = s.recent_events(50)
+                events = s.recent_events(1000)
             return {
                 "run_id": run_id,
                 "running": False,
@@ -513,34 +723,13 @@ def build_app(
                             d.get("target_id"), {"name": d.get("target_id")}
                         )["name"]
 
-                votes_raw = s.get_votes_by_voter(agent_id, limit=10)
-                recent_votes: list[dict] = []
-                for v in votes_raw:
-                    motivation = v.get("motivation") or ""
-                    status = (
-                        "malformed"
-                        if motivation.startswith("malformed response")
-                        else (v.get("vote") or "unknown")
-                    )
-                    tgt_id = v.get("target_id")
-                    recent_votes.append({
-                        "proposal_id": v["proposal_id"],
-                        "status": status,
-                        "vote": v.get("vote"),
-                        "motivation": motivation,
-                        "raw_response": v.get("raw_response"),
-                        "voted_at": v.get("voted_at"),
-                        "target_id": tgt_id,
-                        "target_name": agents_map.get(
-                            tgt_id, {"name": tgt_id}
-                        )["name"],
-                        "change_type": v.get("change_type"),
-                        "from_value": v.get("from_value"),
-                        "to_value": v.get("to_value"),
-                        "outcome": v.get("outcome"),
-                    })
+                recent_votes = _decorate_recent_votes(
+                    s.get_votes_by_voter(agent_id, limit=10),
+                    agents_map, roles_by_id,
+                )
 
                 txs = s.list_transactions(limit=30, agent_id=agent_id)
+                movements = _status_movements(s, agent_id, roles_by_id, cfg)
                 return {
                     "id": a["agent_id"],
                     "name": a.get("name") or a["agent_id"],
@@ -560,6 +749,7 @@ def build_app(
                     "state": a.get("state"),
                     "bank_account": a.get("bank_account"),
                     "recent_transactions": txs,
+                    "status_movements": movements,
                     "memory": {
                         "summaries": summaries,
                         "impressions": impressions,
@@ -618,6 +808,89 @@ def build_app(
                 agents.get(r, {"name": r})["name"] for r in m.get("recipients", [])
             ]
 
+    # Event types that are conversational (covered by the Messages / Votes
+    # tabs) and therefore excluded from the Actions tab.
+    _NON_ACTION_EVENT_TYPES = [
+        "broadcast_agent", "broadcast_human",
+        "election_debate_speech", "vote_debate_speech",
+        "vote_proposed",
+    ]
+
+    # Map each action event_type to a high-level category shown as its "type".
+    _ACTION_CATEGORY = {
+        "theft": "Crime", "theft_caught": "Crime",
+        "sabotage": "Crime", "sabotage_caught": "Crime",
+        "power_sabotaged": "Crime",
+        "loan_granted": "Economy", "loan_denied": "Economy",
+        "loan_repaid": "Economy", "gift": "Economy", "policy": "Economy",
+        "destitution_entered": "Economy", "destitution_exited": "Economy",
+        "election_held": "Politics", "office_change": "Politics",
+        "decree": "Politics", "ruling": "Politics",
+        "praise": "Influence", "smear": "Influence",
+        "mobility_role_change": "Mobility", "mobility_class_change": "Mobility",
+        "pause": "System", "simulation_failed": "System",
+    }
+
+    def _fmt_action_value(v: object) -> str:
+        if isinstance(v, bool):
+            return "yes" if v else "no"
+        if isinstance(v, float):
+            return f"{v:.2f}".rstrip("0").rstrip(".")
+        return str(v)
+
+    def _decorate_action(event: dict, agents: dict[str, dict]) -> dict:
+        """Build a display-ready action row from a public_event."""
+        kind = event.get("event_type") or "unknown"
+        payload = event.get("payload")
+        if not isinstance(payload, dict):
+            payload = {}
+
+        def name_of(x: object) -> str:
+            if isinstance(x, str) and x in agents:
+                return agents[x]["name"]
+            return _fmt_action_value(x)
+
+        # Collect every agent referenced anywhere in the payload.
+        involved_ids: list[str] = []
+
+        def _scan(v: object) -> None:
+            if isinstance(v, str):
+                if v in agents and v not in involved_ids:
+                    involved_ids.append(v)
+            elif isinstance(v, list):
+                for item in v:
+                    _scan(item)
+            elif isinstance(v, dict):
+                for item in v.values():
+                    _scan(item)
+
+        _scan(payload)
+
+        # Human-readable details: one "key: value" segment per payload field,
+        # with agent ids resolved to names.
+        parts: list[str] = []
+        for k, v in payload.items():
+            if isinstance(v, list):
+                inner = ", ".join(
+                    name_of(x) if not isinstance(x, dict) else "{…}" for x in v
+                )
+                parts.append(f"{k}: [{inner}]")
+            elif isinstance(v, dict):
+                parts.append(f"{k}: {{{len(v)} fields}}")
+            else:
+                parts.append(f"{k}: {name_of(v)}")
+        details = " · ".join(parts)
+
+        return {
+            "id": event.get("id"),
+            "ts": event.get("ts"),
+            "kind": kind,
+            "type": _ACTION_CATEGORY.get(kind, "Other"),
+            "details": details,
+            "agents_involved": [agents[a]["name"] for a in involved_ids],
+            "payload": payload,
+        }
+
     @app.get("/runs/{run_id}/messages")
     async def run_messages(
         run_id: int,
@@ -657,6 +930,22 @@ def build_app(
                 }
         return JSONResponse(await asyncio.to_thread(_impl))
 
+    @app.get("/runs/{run_id}/actions")
+    async def run_actions(run_id: int, limit: int = 1000) -> JSONResponse:
+        """Agent actions during a run (public_events), excluding messages.
+
+        Each action is decorated with a human-facing category (`type`), the
+        raw `kind` (event_type), a short `details` summary, and the list of
+        other agents involved (resolved to names).
+        """
+        def _impl() -> dict:
+            with open_run_store(run_id) as s:
+                events = s.list_events_excluding(_NON_ACTION_EVENT_TYPES, limit=limit)
+                agents = _agents_map(s)
+                actions = [_decorate_action(e, agents) for e in events]
+                return {"actions": actions, "agents": agents}
+        return JSONResponse(await asyncio.to_thread(_impl))
+
     @app.get("/runs/{run_id}/events")
     async def run_events(run_id: int, limit: int = 100) -> JSONResponse:
         def _impl() -> list[dict]:
@@ -664,66 +953,76 @@ def build_app(
                 return s.recent_events(limit)
         return JSONResponse(await asyncio.to_thread(_impl))
 
-    @app.get("/runs/{run_id}/votes")
-    async def run_votes(run_id: int) -> JSONResponse:
-        """List of vote proposals (newest first) decorated with names."""
+    @app.get("/runs/{run_id}/elections")
+    async def run_elections(run_id: int) -> JSONResponse:
+        """Elections grouped by tick (newest first). Each entry summarises its
+        office ballots (winner, incumbent, whether the office flipped, vote
+        counts), any reassignment ballots, and the size of the shared debate."""
         def _impl() -> dict:
+            cfg = _config_for_run(registry, run_id)
+            roles_by_id = {r.id: r for r in cfg.roles}
+            office_order = {oid: i for i, oid in enumerate(cfg.office_ids())}
             with open_run_store(run_id) as s:
                 proposals = s.list_proposals()
-                proposals.sort(key=lambda p: p["id"], reverse=True)
                 agents = _agents_map(s)
-                for p in proposals:
-                    p["proposer_name"] = agents.get(
-                        p.get("proposer_id"), {"name": p.get("proposer_id")}
-                    )["name"]
-                    p["target_name"] = agents.get(
-                        p.get("target_id"), {"name": p.get("target_id")}
-                    )["name"]
-                return {"proposals": proposals, "agents": agents}
+                debate_counts = Counter(
+                    sp["tick"] for sp in s.election_debate_speeches()
+                    if sp.get("tick") is not None
+                )
+            elections = _group_elections(
+                proposals, agents, roles_by_id, office_order, debate_counts
+            )
+            return {"elections": elections, "agents": agents}
         return JSONResponse(await asyncio.to_thread(_impl))
 
-    @app.get("/runs/{run_id}/votes/{proposal_id}")
-    async def run_vote_detail(run_id: int, proposal_id: int) -> JSONResponse:
-        """Proposal + pre-vote debate transcript + individual votes."""
+    @app.get("/runs/{run_id}/elections/{tick}")
+    async def run_election_detail(run_id: int, tick: int) -> JSONResponse:
+        """One election: the shared pre-ballot debate, each office ballot with
+        its per-candidate tally and individual votes, and any reassignment
+        ballots (tallied over ordinary roles)."""
         def _impl() -> dict:
+            cfg = _config_for_run(registry, run_id)
+            roles_by_id = {r.id: r for r in cfg.roles}
+            office_order = {oid: i for i, oid in enumerate(cfg.office_ids())}
             with open_run_store(run_id) as s:
-                proposal = s.get_proposal(proposal_id)
-                if proposal is None:
-                    raise HTTPException(
-                        404, f"proposal {proposal_id} not found"
-                    )
+                ballots = [
+                    p for p in s.list_proposals() if _proposal_tick(p) == tick
+                ]
+                if not ballots:
+                    raise HTTPException(404, f"no election at tick {tick}")
                 agents = _agents_map(s)
-                proposal["proposer_name"] = agents.get(
-                    proposal.get("proposer_id"),
-                    {"name": proposal.get("proposer_id")},
-                )["name"]
-                proposal["target_name"] = agents.get(
-                    proposal.get("target_id"),
-                    {"name": proposal.get("target_id")},
-                )["name"]
-                debate = s.debate_speeches_for(proposal_id)
-                votes = s.get_votes(proposal_id)
-                for v in votes:
-                    v["voter_name"] = agents.get(
-                        v.get("voter_id"), {"name": v.get("voter_id")}
-                    )["name"]
-                    motivation = v.get("motivation") or ""
-                    v["status"] = (
-                        "malformed"
-                        if motivation.startswith("malformed response")
-                        else (v.get("vote") or "unknown")
-                    )
-                votes.sort(key=lambda v: (
-                    0 if v["status"] == "yes"
-                    else 1 if v["status"] == "no"
-                    else 2,
-                    v.get("voter_id") or "",
-                ))
-                return {
-                    "proposal": proposal,
-                    "debate": debate,
-                    "votes": votes,
-                }
+                debate = s.election_debate_speeches(tick)
+
+                def agent_name(cid: str) -> str:
+                    return agents.get(cid, {"name": cid})["name"]
+
+                def role_label(rid: str) -> str:
+                    role = roles_by_id.get(rid)
+                    return role.name if role else rid
+
+                offices: list[dict] = []
+                reassignments: list[dict] = []
+                for p in ballots:
+                    if p.get("change_type") == "office":
+                        summary = _office_summary(p, agents, roles_by_id)
+                        summary.update(
+                            _ballot_view(s.get_votes(p["id"]), agents, agent_name)
+                        )
+                        offices.append(summary)
+                    elif p.get("change_type") == "reassign":
+                        summary = _reassign_summary(p, agents, roles_by_id)
+                        summary.update(
+                            _ballot_view(s.get_votes(p["id"]), agents, role_label)
+                        )
+                        reassignments.append(summary)
+                offices.sort(key=lambda o: office_order.get(o["office"], 10 ** 9))
+            return {
+                "tick": tick,
+                "debate": debate,
+                "offices": offices,
+                "reassignments": reassignments,
+                "agents": agents,
+            }
         return JSONResponse(await asyncio.to_thread(_impl))
 
     @app.get("/runs/{run_id}/community")

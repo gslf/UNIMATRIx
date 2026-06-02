@@ -184,6 +184,7 @@ class SessionManager:
                 str(db_path),
                 json.loads(cfg.model_dump_json()),
             )
+            self.console.clear_log_buffer()
             self.console.log(
                 f"[bold]registered run[/] id={run_id} db={db_path} "
                 f"(config: {config_file})"
@@ -226,6 +227,7 @@ class SessionManager:
             run_subdir = self.runs_dir / db_path.stem
             run_subdir.mkdir(parents=True, exist_ok=True)
 
+            self.console.clear_log_buffer()
             self.console.log(
                 f"[bold]resuming run[/] id={run_id} db={db_path}"
             )

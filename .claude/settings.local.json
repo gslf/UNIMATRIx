@@ -62,7 +62,15 @@
       "WebFetch(domain:lmstudio.ai)",
       "PowerShell(Get-ChildItem -Force \"C:\\\\Users\\\\gioel\\\\DevEnv\\\\UNIMATRIx\" | Where-Object { $_.Name -ne '.venv' } | Select-Object Mode, Name)",
       "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\gioel\\\\DevEnv\\\\UNIMATRIx\" -Directory)",
-      "Bash(Select-Object Name)"
+      "Bash(Select-Object Name)",
+      "Bash(awk '{print $5, $9}')",
+      "Bash(Get-ChildItem -Path \"C:\\\\Users\\\\gioel\\\\DevEnv\\\\UNIMATRIx\" -Recurse -Filter \"*.py\" -ErrorAction SilentlyContinue)",
+      "Bash(Select-Object -First 30)",
+      "Bash(Format-Table -AutoSize)",
+      "Bash(PYTHONPATH=src python -m pytest tests/test_persistence.py tests/test_elections.py tests/test_orchestrator_smoke.py -q)",
+      "Bash(pip show *)",
+      "Bash(sed '1d;$d')",
+      "Bash(node --check /tmp/uni_check.js)"
     ]
   }
 }

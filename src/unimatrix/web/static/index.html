@@ -40,6 +40,11 @@
   .ok { color: #3fb950; }
   .bad { color: #f85149; }
   .muted-text { color: #8b949e; }
+  .pager { display: flex; gap: 6px; align-items: center; justify-content: center;
+           margin-top: 8px; flex-wrap: wrap; }
+  .pager .pg-btn { background: #21262d; color: #c9d1d9; border: 1px solid #30363d;
+                   padding: 4px 10px; font-size: 0.78rem; }
+  .pager .pg-info { color: #8b949e; font-size: 0.78rem; padding: 0 6px; }
   .explorer { grid-column: 1 / -1; display: none; }
   .explorer.open { display: block; }
   /* Fixed height + min-height:0 on children is the trick that lets the inner
@@ -119,10 +124,8 @@
   .agent-detail .kind-badge { display: inline-block; padding: 1px 6px;
     border-radius: 10px; background: #21262d; font-size: 0.72rem;
     margin-right: 4px; }
-  .agent-detail .vote-yes { background: #1b3d2a; color: #3fb950; }
-  .agent-detail .vote-no { background: #3d1410; color: #f85149; }
-  .agent-detail .vote-malformed { background: #2a2a2a; color: #8b949e; }
-  .agent-detail .vote-unknown { background: #2a2a2a; color: #8b949e; }
+  .agent-detail .vote-pick { background: #11304a; color: #58a6ff; }
+  .agent-detail .vote-abstain { background: #2a2a2a; color: #8b949e; }
   .msg { padding: 6px 0; border-bottom: 1px solid #21262d; }
   .msg:last-child { border-bottom: 0; }
   .msg .sender { color: #58a6ff; font-weight: 600; font-size: 0.85rem; }
@@ -143,12 +146,20 @@
   .explorer-tab.active { background: #1f6feb; color: white; border-color: #1f6feb; }
   .explorer-pane { display: none; }
   .explorer-pane.active { display: block; }
-  /* Vote-specific badges (reuse the agent-detail palette) */
-  .v-yes { background: #1b3d2a; color: #3fb950; }
-  .v-no  { background: #3d1410; color: #f85149; }
-  .v-malformed { background: #2a2a2a; color: #8b949e; }
-  .v-unknown { background: #2a2a2a; color: #8b949e; }
-  .v-pending { background: #2a2a2a; color: #d29922; }
+  /* Election-specific badges (reuse the agent-detail palette) */
+  .v-winner { background: #1b3d2a; color: #3fb950; }
+  .v-changed { background: #4a2c0a; color: #d29922; }
+  .v-unchanged { background: #2a2a2a; color: #8b949e; }
+  .v-pick { background: #11304a; color: #58a6ff; }
+  .v-abstain { background: #2a2a2a; color: #8b949e; }
+  .v-reassign { background: #2d234a; color: #b392f0; }
+  /* Per-candidate tally pills inside an election ballot */
+  .tally-pill { display: inline-block; padding: 1px 8px; border-radius: 10px;
+                background: #21262d; font-size: 0.74rem; margin: 0 4px 4px 0; }
+  .tally-pill.top { background: #1b3d2a; color: #3fb950; }
+  .ballot-block { border: 1px solid #21262d; border-radius: 6px;
+                  padding: 8px 10px; margin: 8px 0; }
+  .ballot-block .ballot-head { font-size: 0.9rem; margin-bottom: 4px; }
   .conv-detail .vote-row { padding: 6px 0; border-bottom: 1px solid #21262d;
                             font-size: 0.84rem; line-height: 1.4; }
   .conv-detail .vote-row:last-child { border-bottom: 0; }
@@ -270,7 +281,8 @@
     </h2>
     <div class="explorer-tabs">
       <button class="explorer-tab active" data-tab="messages">Messages</button>
-      <button class="explorer-tab" data-tab="votes">Votes</button>
+      <button class="explorer-tab" data-tab="elections">Elections</button>
+      <button class="explorer-tab" data-tab="actions">Actions</button>
       <button class="explorer-tab" data-tab="community">Community</button>
     </div>
 
@@ -286,16 +298,39 @@
       </div>
     </div>
 
-    <div class="explorer-pane" id="pane-votes">
+    <div class="explorer-pane" id="pane-elections">
       <div class="row">
-        <input id="vote-filter" class="conv-filter" placeholder="Filter by proposer, target, change, or outcome..." />
+        <input id="election-filter" class="conv-filter" placeholder="Filter by tick, office, or winner..." />
       </div>
       <div class="explorer-grid">
-        <div class="conv-list" id="vote-list">loading…</div>
-        <div class="conv-detail" id="vote-detail">
-          <span class="muted-text">Select a vote on the left.</span>
+        <div class="conv-list" id="election-list">loading…</div>
+        <div class="conv-detail" id="election-detail">
+          <span class="muted-text">Select an election on the left.</span>
         </div>
       </div>
+    </div>
+
+    <div class="explorer-pane" id="pane-actions">
+      <div class="row">
+        <input id="action-filter" class="conv-filter"
+               placeholder="Filter by type, kind, details, or agent..." />
+      </div>
+      <div id="actions-summary" class="muted-text" style="margin:6px 0; font-size:0.8rem;"></div>
+      <div style="max-height:64vh; overflow-y:auto; border:1px solid #30363d; border-radius:4px;">
+        <table id="actions-table" style="width:100%; font-size:0.82rem; border-collapse:collapse;">
+          <thead>
+            <tr style="text-align:left; border-bottom:1px solid #30363d;">
+              <th style="padding:6px 8px;">when</th>
+              <th style="padding:6px 8px;">type</th>
+              <th style="padding:6px 8px;">kind</th>
+              <th style="padding:6px 8px;">details</th>
+              <th style="padding:6px 8px;">agents involved</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div id="actions-pagination" class="pager"></div>
     </div>
 
     <div class="explorer-pane" id="pane-community">
@@ -306,6 +341,7 @@
         <input id="community-filter" class="conv-filter" style="flex:1; margin-left:12px"
                placeholder="Filter movements by kind, party, or reason..." />
       </div>
+      <div id="community-summary" class="muted-text" style="margin:6px 0; font-size:0.8rem;"></div>
       <div style="margin-top:8px">
         <table id="community-tx-table" style="width:100%; font-size:0.82rem; border-collapse:collapse;">
           <thead>
@@ -322,6 +358,7 @@
           <tbody></tbody>
         </table>
       </div>
+      <div id="community-pagination" class="pager"></div>
     </div>
   </section>
 
@@ -346,6 +383,11 @@ function buildGraphs() {
   for (const g of GRAPHS) {
     const div = document.createElement("div");
     div.className = "graph";
+    div.id = "graph-" + g;
+    // Hidden until the image actually loads — a graph that isn't available
+    // (no run yet, or backend 409/404) stays hidden instead of showing a
+    // broken-image placeholder.
+    div.style.display = "none";
     // Don't request the image until a simulation is actually running —
     // otherwise we'd burn 7 instant 409s on a fresh page load.
     div.innerHTML = `
@@ -353,8 +395,10 @@ function buildGraphs() {
         <strong>${g}</strong>
         <button class="muted" data-graph="${g}">Refresh</button>
       </div>
-      <img id="img-${g}" alt="${g} (no run yet)"
-           style="min-height:40px; background:#0d1117;" />
+      <img id="img-${g}" alt="${g}"
+           style="min-height:40px; background:#0d1117;"
+           onload="document.getElementById('graph-${g}').style.display = ''"
+           onerror="document.getElementById('graph-${g}').style.display = 'none'" />
     `;
     root.appendChild(div);
   }
@@ -443,7 +487,7 @@ function renderSimControls(s) {
   // Live-only controls: enabled only when an orchestrator is actually ticking.
   const liveOnly = viewMode === "live" && !!s.running;
   for (const id of ["btn-pause", "btn-resume", "btn-checkpoint",
-                     "btn-show-diag", "btn-send"]) {
+                     "btn-show-diag", "btn-send", "btn-stop"]) {
     const el = document.getElementById(id);
     if (el) el.disabled = !liveOnly;
   }
@@ -581,7 +625,7 @@ async function loadState() {
       : "<span class='muted-text'>none</span>";
     sum.innerHTML = `
       <div><strong>tick:</strong> ${s.tick_no}
-        &nbsp;<span class="muted-text">last tick ${s.seconds_since_last_tick ?? "?"}s ago</span>
+        &nbsp;<span class="muted-text">last tick ${s.seconds_since_last_tick != null ? Math.round(s.seconds_since_last_tick) : "?"}s ago</span>
         &nbsp; <strong>paused:</strong> <span class="${s.paused ? 'bad' : 'ok'}">${s.paused}</span>
       </div>
       <div style="margin-top:6px"><strong>by class:</strong> ${perClass}</div>
@@ -592,7 +636,9 @@ async function loadState() {
     `;
     renderMetrics(s.metrics || {});
   }
-  const ev = s.recent_events || [];
+  // Keep only the most recent 1000 events; the feed is a live tail, not an
+  // ever-growing log.
+  const ev = (s.recent_events || []).slice(-1000);
   const evPane = document.getElementById("events");
   if (!ev.length) {
     evPane.textContent = "(no events recorded yet)";
@@ -849,8 +895,20 @@ function fmtDecision(d) {
   return `<span class="muted-text">${escapeHtml(JSON.stringify(d))}</span>`;
 }
 
+// Render a role/class movement history as an arrow chain (oldest → current).
+// Each step's timestamp is exposed via the pill's tooltip.
+function fmtMovements(timeline) {
+  if (!timeline || !timeline.length) return `<span class="muted-text">—</span>`;
+  return timeline.map((c, i) => {
+    const label = escapeHtml(c.to_label || c.to || "?");
+    const arrow = i === 0 ? "" : `<span class="muted-text"> → </span>`;
+    return `${arrow}<span class="pill" title="${escapeHtml(c.ts || "")}">${label}</span>`;
+  }).join("");
+}
+
 function renderAgentDetail(a) {
   const root = document.getElementById("agent-detail");
+  const sm = a.status_movements || {};
   const summaries = (a.memory && a.memory.summaries) || [];
   const impressions = (a.memory && a.memory.impressions) || [];
   const decisions = a.recent_decisions || [];
@@ -896,6 +954,13 @@ function renderAgentDetail(a) {
       <div style="margin-top:6px"><b>Personality:</b> <span class="muted-text">${fmtTraitsObj(a.personality)}</span></div>
       <div><b>Values:</b> <span class="muted-text">${fmtValuesObj(a.values)}</span></div>
       ${opinions ? `<div style="margin-top:6px"><b>Initial opinions:</b><div class="muted-text" style="margin-left:8px">${opinions}</div></div>` : ""}
+    </div>
+    <h3>Status &amp; mobility</h3>
+    <div class="kv">
+      <div><b>Starting prestige:</b> ${sm.starting_prestige != null ? Number(sm.starting_prestige).toFixed(0) : "?"}/100
+        &nbsp; <b>Starting popularity:</b> ${sm.starting_popularity != null ? Number(sm.starting_popularity).toFixed(0) : "?"}/100</div>
+      <div style="margin-top:6px"><b>Role:</b> ${fmtMovements(sm.role_timeline)}</div>
+      <div style="margin-top:4px"><b>Class:</b> ${fmtMovements(sm.class_timeline)}</div>
     </div>
     <h3>Finances</h3>
     <div class="kv">
@@ -958,22 +1023,26 @@ function renderAgentDetail(a) {
           </div>`).join("")
       : `<span class="muted-text">no decisions yet (do_nothing and join_group are not tracked)</span>`}
 
-    <h3>Recent votes (${votes.length})</h3>
+    <h3>Recent ballots (${votes.length})</h3>
     ${votes.length
-      ? votes.map(v => `
+      ? votes.map(v => {
+          const badge = v.is_abstain
+            ? `<span class="kind-badge vote-abstain">abstain</span>`
+            : `<span class="kind-badge vote-pick">${escapeHtml(v.choice_name || v.choice_id || "?")}</span>`;
+          const ctx = v.kind === "reassign"
+            ? `reassign ${escapeHtml(v.office_label || v.office || "?")}`
+            : `${escapeHtml(v.office_label || v.office || "?")} ballot`;
+          return `
           <div class="decision-item">
-            <span class="kind-badge vote-${escapeHtml(v.status)}">${escapeHtml(v.status)}</span>
-            on <b>${escapeHtml(v.target_name || "?")}</b>
-            ${escapeHtml(v.change_type || "?")}
-            ${v.from_value ? `<i>${escapeHtml(v.from_value)}</i> → ` : ""}
-            <i>${escapeHtml(v.to_value || "?")}</i>
+            ${badge}
+            <span class="muted-text">${ctx}</span>
             <div class="ts">
               ${escapeHtml(v.voted_at || "")}
-              · proposal #${v.proposal_id}
               ${v.outcome ? ` · ${escapeHtml(v.outcome)}` : ""}
             </div>
-          </div>`).join("")
-      : `<span class="muted-text">no votes cast yet</span>`}
+          </div>`;
+        }).join("")
+      : `<span class="muted-text">no ballots cast yet</span>`}
   `;
 }
 
@@ -1038,13 +1107,40 @@ async function loadRuns() {
     }));
 }
 
-// ---- run explorer (tabs: messages / votes / community) ----
+// ---- run explorer (tabs: messages / elections / actions / community) ----
 let currentExplorerRun = null;
 let currentExplorerData = null;       // { messages: [...], agents: {...} }
 let currentSelectedMsg = null;        // selected message id
-let currentExplorerTab = "messages";  // 'messages' | 'votes' | 'community'
-let currentVotesData = null;          // { proposals: [...], agents: {...} }
-let currentSelectedVote = null;       // proposal_id
+let currentExplorerTab = "messages";  // 'messages' | 'elections' | 'actions' | 'community'
+let currentElectionsData = null;      // { elections: [...], agents: {...} }
+let currentSelectedElection = null;   // election tick
+let currentActionsData = null;        // { actions: [...], agents: {...} }
+
+// Client-side pagination for the long Actions / Community tables.
+const EXPLORER_PAGE_SIZE = 50;
+let actionsPage = 0;
+let communityPage = 0;
+
+// Render Prev/Next controls into `containerId`. `setPage(n)` should update the
+// owning page-state variable and re-render. Hidden when there's a single page.
+function renderPager(containerId, page, totalPages, setPage) {
+  const el = document.getElementById(containerId);
+  if (!el) return;
+  if (totalPages <= 1) { el.innerHTML = ""; return; }
+  el.innerHTML = `
+    <button class="pg-btn" data-act="first" ${page <= 0 ? "disabled" : ""}>« first</button>
+    <button class="pg-btn" data-act="prev" ${page <= 0 ? "disabled" : ""}>‹ prev</button>
+    <span class="pg-info">page ${page + 1} / ${totalPages}</span>
+    <button class="pg-btn" data-act="next" ${page >= totalPages - 1 ? "disabled" : ""}>next ›</button>
+    <button class="pg-btn" data-act="last" ${page >= totalPages - 1 ? "disabled" : ""}>last »</button>`;
+  el.querySelectorAll(".pg-btn").forEach(b => b.addEventListener("click", () => {
+    const act = b.dataset.act;
+    if (act === "first") setPage(0);
+    else if (act === "prev") setPage(page - 1);
+    else if (act === "next") setPage(page + 1);
+    else if (act === "last") setPage(totalPages - 1);
+  }));
+}
 
 function fmtRecipients(m, agents) {
   const names = (m.recipient_names && m.recipient_names.length)
@@ -1066,14 +1162,17 @@ async function openExplorer(runId, runName) {
     ` — run #${runId} (${runName || ""})`;
   // Reset all panes' selection / data
   currentExplorerData = null;
-  currentVotesData = null;
+  currentElectionsData = null;
   currentCommunityData = null;
+  currentActionsData = null;
   currentSelectedMsg = null;
-  currentSelectedVote = null;
+  currentSelectedElection = null;
+  actionsPage = 0;
+  communityPage = 0;
   document.getElementById("conv-detail").innerHTML =
     `<span class="muted-text">Select a message on the left to see the thread.</span>`;
-  document.getElementById("vote-detail").innerHTML =
-    `<span class="muted-text">Select a vote on the left.</span>`;
+  document.getElementById("election-detail").innerHTML =
+    `<span class="muted-text">Select an election on the left.</span>`;
   // Load whichever tab is currently active.
   setExplorerTab(currentExplorerTab || "messages");
   loadRuns();   // refresh button highlight
@@ -1088,7 +1187,8 @@ function setExplorerTab(name) {
     p.classList.toggle("active", p.id === "pane-" + name));
   if (currentExplorerRun == null) return;
   if (name === "messages") loadMessagesList();
-  else if (name === "votes") loadVotesList();
+  else if (name === "elections") loadElectionsList();
+  else if (name === "actions") loadActionsList();
   else if (name === "community") loadCommunity();
 }
 
@@ -1096,8 +1196,9 @@ function closeExplorer() {
   currentExplorerRun = null;
   currentExplorerData = null;
   currentSelectedMsg = null;
-  currentVotesData = null;
-  currentSelectedVote = null;
+  currentElectionsData = null;
+  currentSelectedElection = null;
+  currentActionsData = null;
   document.getElementById("explorer").classList.remove("open");
   loadRuns();
 }
@@ -1211,130 +1312,139 @@ function renderMessageThread(data) {
   root.scrollTop = wasNearBottom ? root.scrollHeight : prevScroll;
 }
 
-// ---- votes tab ----
-async function loadVotesList() {
-  const root = document.getElementById("vote-list");
-  if (!currentVotesData) root.innerHTML = "loading…";
+// ---- elections tab ----
+// An election (one per tick) bundles the shared debate, a plurality ballot per
+// office (head / judge / banker), and a reassignment ballot for any unseated
+// incumbent. Ballots are persisted in vote_proposals; see ElectionModule.
+async function loadElectionsList() {
+  const root = document.getElementById("election-list");
+  if (!currentElectionsData) root.innerHTML = "loading…";
   try {
-    const r = await fetch(`/runs/${currentExplorerRun}/votes`);
+    const r = await fetch(`/runs/${currentExplorerRun}/elections`);
     if (!r.ok) throw new Error(await r.text());
-    currentVotesData = await r.json();
+    currentElectionsData = await r.json();
   } catch (e) {
     root.innerHTML = `<div style="padding:10px; color:#f85149">${escapeHtml(e.message)}</div>`;
     return;
   }
-  renderVotesList();
+  renderElectionsList();
 }
 
-function renderVotesList() {
-  const root = document.getElementById("vote-list");
-  if (!currentVotesData) { root.innerHTML = ""; return; }
-  const filter = (document.getElementById("vote-filter").value || "").trim().toLowerCase();
-  const { proposals } = currentVotesData;
-  const filtered = proposals.filter(p => {
+function renderElectionsList() {
+  const root = document.getElementById("election-list");
+  if (!currentElectionsData) { root.innerHTML = ""; return; }
+  const filter = (document.getElementById("election-filter").value || "").trim().toLowerCase();
+  const { elections } = currentElectionsData;
+  const filtered = elections.filter(e => {
     if (!filter) return true;
     const hay = [
-      String(p.id),
-      p.proposer_name || "", p.target_name || "",
-      p.change_type || "", p.from_value || "", p.to_value || "",
-      p.outcome || "",
+      "tick " + e.tick,
+      ...(e.offices || []).flatMap(o => [o.office_label, o.office, o.winner_name]),
+      ...(e.reassignments || []).flatMap(r => [r.target_name, r.new_role_label]),
     ].join(" ").toLowerCase();
     return hay.includes(filter);
   });
   const header = `
     <div class="conv-list-header">
-      <span>${proposals.length} total · showing ${filtered.length}</span>
+      <span>${elections.length} total · showing ${filtered.length}</span>
       <span>newest first</span>
     </div>`;
   if (!filtered.length) {
     root.innerHTML = header +
-      `<div style="padding:14px" class="muted-text">No votes match the filter.</div>`;
+      `<div style="padding:14px" class="muted-text">No elections match the filter.</div>`;
     return;
   }
-  root.innerHTML = header + filtered.map(p => {
-    const outcome = p.outcome || "open";
-    const outcomeClass = outcome === "approved" ? "v-yes"
-                       : outcome === "rejected" ? "v-no"
-                       : "v-pending";
+  root.innerHTML = header + filtered.map(e => {
+    const offices = (e.offices || []).map(o => `
+      <span class="pill kind-badge ${o.changed ? "v-changed" : "v-unchanged"}">
+        ${escapeHtml(o.office_label || o.office || "?")} → ${escapeHtml(o.winner_name || "?")}
+      </span>`).join(" ");
     return `
-      <div class="conv-row ${currentSelectedVote === p.id ? "selected" : ""}"
-           data-vote-id="${p.id}">
+      <div class="conv-row ${currentSelectedElection === e.tick ? "selected" : ""}"
+           data-tick="${e.tick}">
         <div>
-          <span class="pill">#${p.id}</span>
-          <span class="pill">${escapeHtml(p.change_type || "?")}</span>
-          <span class="pill kind-badge ${outcomeClass}">${escapeHtml(outcome)}</span>
-          ${p.outcome ? `<span class="pill">${p.yes_count || 0}/${p.no_count || 0}</span>` : ""}
+          <span class="pill">tick ${e.tick}</span>
+          ${e.changed_count ? `<span class="pill kind-badge v-changed">${e.changed_count} changed</span>`
+                            : `<span class="pill kind-badge v-unchanged">no change</span>`}
+          ${e.debate_count ? `<span class="pill">debate ${e.debate_count}</span>` : ""}
+          ${(e.reassignments || []).length ? `<span class="pill kind-badge v-reassign">${e.reassignments.length} reassigned</span>` : ""}
         </div>
         <div class="meta">
-          <b>${escapeHtml(p.proposer_name || "?")}</b> →
-          target <b>${escapeHtml(p.target_name || "?")}</b><br/>
-          <i>${escapeHtml(p.from_value || "?")}</i> → <i>${escapeHtml(p.to_value || "?")}</i><br/>
-          ${fmtTs(p.proposed_at)}${p.closed_at ? ` · closed ${fmtTs(p.closed_at)}` : ""}
+          ${offices || `<span class="muted-text">no offices</span>`}<br/>
+          ${fmtTs(e.proposed_at)}
         </div>
       </div>`;
   }).join("");
   root.querySelectorAll(".conv-row").forEach(el =>
-    el.addEventListener("click", () => loadVoteDetail(parseInt(el.dataset.voteId, 10))));
+    el.addEventListener("click", () => loadElectionDetail(parseInt(el.dataset.tick, 10))));
 }
 
-async function loadVoteDetail(propId) {
-  currentSelectedVote = propId;
-  renderVotesList();
-  const root = document.getElementById("vote-detail");
+async function loadElectionDetail(tick) {
+  currentSelectedElection = tick;
+  renderElectionsList();
+  const root = document.getElementById("election-detail");
   root.innerHTML = "loading…";
   try {
-    const r = await fetch(`/runs/${currentExplorerRun}/votes/${propId}`);
+    const r = await fetch(`/runs/${currentExplorerRun}/elections/${tick}`);
     if (!r.ok) throw new Error(await r.text());
-    renderVoteDetail(await r.json());
+    renderElectionDetail(await r.json());
   } catch (e) {
     root.innerHTML = `<div style="color:#f85149">${escapeHtml(e.message)}</div>`;
   }
 }
 
-function renderVoteDetail(data) {
-  const root = document.getElementById("vote-detail");
-  const p = data.proposal;
+// Render one ballot's per-candidate tally + individual votes. `headHtml` is the
+// ballot's title row (office + winner, or the reassignment summary).
+function renderBallot(ballot, headHtml) {
+  const tally = ballot.tally || [];
+  const votes = ballot.votes || [];
+  const tallyHtml = tally.map((t, i) => `
+    <span class="tally-pill ${i === 0 ? "top" : ""}">
+      ${escapeHtml(t.choice_name || t.choice_id || "?")} · ${t.count}
+    </span>`).join("")
+    + (ballot.abstain_count
+        ? `<span class="tally-pill">abstain · ${ballot.abstain_count}</span>` : "");
+  const votesHtml = votes.map(v => {
+    const showRaw = v.is_abstain && v.raw_response;
+    const badge = v.is_abstain
+      ? `<span class="kind-badge v-abstain">abstain</span>`
+      : `<span class="kind-badge v-pick">${escapeHtml(v.choice_name || v.choice_id || "?")}</span>`;
+    return `
+      <div class="vote-row">
+        <b>${escapeHtml(v.voter_name || v.voter_id || "?")}</b> → ${badge}
+        <span class="ts" style="color:#6e7681; font-size:0.72rem; margin-left:6px">
+          ${escapeHtml(v.voted_at || "")}
+        </span>
+        ${showRaw ? `
+          <div class="raw-response-label">LLM response (last attempt):</div>
+          <pre class="raw-response">${escapeHtml(v.raw_response)}</pre>
+        ` : ""}
+      </div>`;
+  }).join("");
+  return `
+    <div class="ballot-block">
+      <div class="ballot-head">${headHtml}</div>
+      <div style="margin:4px 0 8px 0">${tallyHtml || `<span class="muted-text">no votes</span>`}</div>
+      ${votesHtml}
+    </div>`;
+}
+
+function renderElectionDetail(data) {
+  const root = document.getElementById("election-detail");
   const debate = data.debate || [];
-  const votes = data.votes || [];
-  const yes = votes.filter(v => v.status === "yes").length;
-  const no = votes.filter(v => v.status === "no").length;
-  const malformed = votes.filter(v => v.status === "malformed").length;
-  const outcome = p.outcome || "open";
-  const outcomeClass = outcome === "approved" ? "v-yes"
-                     : outcome === "rejected" ? "v-no"
-                     : "v-pending";
+  const offices = data.offices || [];
+  const reassignments = data.reassignments || [];
   const headerHtml = `
     <div style="margin-bottom:12px">
-      <div>
-        <strong>Vote #${p.id}</strong>
-        <span class="pill">${escapeHtml(p.change_type || "?")}</span>
-        <span class="pill kind-badge ${outcomeClass}">${escapeHtml(outcome)}</span>
-      </div>
-      <div style="margin-top:6px; font-size:0.86rem; line-height:1.5">
-        Proposed by <b>${escapeHtml(p.proposer_name || "?")}</b>
-        on <b>${escapeHtml(p.target_name || "?")}</b><br/>
-        Change <b>${escapeHtml(p.change_type || "?")}</b>:
-        <i>${escapeHtml(p.from_value || "?")}</i> →
-        <i>${escapeHtml(p.to_value || "?")}</i>
-      </div>
-      ${p.motivation ? `
-      <div style="margin-top:6px; font-size:0.86rem; line-height:1.5; font-style:italic; color:#b1b5be">
-        Motivation: ${escapeHtml(p.motivation)}
-      </div>` : ""}
-      <div class="muted-text" style="font-size:0.78rem; margin-top:4px">
-        ${fmtTs(p.proposed_at)}${p.closed_at ? ` → ${fmtTs(p.closed_at)}` : " · still open"}
-      </div>
-      <div style="margin-top:8px; font-size:0.86rem">
-        Tally:
-        <span class="pill kind-badge v-yes">yes ${yes}</span>
-        <span class="pill kind-badge v-no">no ${no}</span>
-        ${malformed ? `<span class="pill kind-badge v-malformed">malformed ${malformed}</span>` : ""}
-        ${p.yes_count != null ? `<span class="muted-text" style="margin-left:6px">(stored: ${p.yes_count}/${p.no_count})</span>` : ""}
+      <div><strong>Election · tick ${data.tick}</strong></div>
+      <div class="muted-text" style="font-size:0.82rem; margin-top:4px">
+        ${offices.length} office${offices.length === 1 ? "" : "s"} contested
+        ${reassignments.length ? ` · ${reassignments.length} reassignment${reassignments.length === 1 ? "" : "s"}` : ""}
       </div>
     </div>`;
   const debateHtml = debate.length
     ? `<h3 style="margin:14px 0 6px 0; font-size:0.92rem; color:#58a6ff">
-         Pre-vote debate (${debate.length} speeches)
+         Debate (${debate.length} speeches)
        </h3>` +
       debate.map(s => `
         <div class="speech-row">
@@ -1344,35 +1454,104 @@ function renderVoteDetail(data) {
           </span>
           <div style="margin-top:3px">${escapeHtml(s.text || "")}</div>
         </div>`).join("")
-    : `<h3 style="margin:14px 0 6px 0; font-size:0.92rem; color:#58a6ff">
-         Pre-vote debate
-       </h3>
-       <span class="muted-text">no debate transcript</span>`;
-  const votesHtml = votes.length
+    : `<h3 style="margin:14px 0 6px 0; font-size:0.92rem; color:#58a6ff">Debate</h3>
+       <span class="muted-text">no debate this election</span>`;
+  const officesHtml = `
+    <h3 style="margin:14px 0 6px 0; font-size:0.92rem; color:#58a6ff">
+      Office ballots (${offices.length})
+    </h3>` +
+    (offices.length
+      ? offices.map(o => {
+          const status = o.changed
+            ? `<span class="kind-badge v-changed">flipped</span>`
+            : `<span class="kind-badge v-unchanged">retained</span>`;
+          const head = `
+            <span class="pill">${escapeHtml(o.office_label || o.office || "?")}</span>
+            ${status}
+            winner <b class="ok">${escapeHtml(o.winner_name || "?")}</b>
+            ${o.changed && o.incumbent_name
+                ? `<span class="muted-text">(was ${escapeHtml(o.incumbent_name)})</span>` : ""}
+            ${o.winner_votes != null
+                ? `<span class="muted-text" style="font-size:0.78rem">· ${o.winner_votes}–${o.runner_up_votes || 0}</span>` : ""}`;
+          return renderBallot(o, head);
+        }).join("")
+      : `<span class="muted-text">no office ballots</span>`);
+  const reassignHtml = reassignments.length
     ? `<h3 style="margin:14px 0 6px 0; font-size:0.92rem; color:#58a6ff">
-         Individual votes (${votes.length})
+         Reassignments (${reassignments.length})
        </h3>` +
-      votes.map(v => {
-        const showRaw = v.status === "malformed" && v.raw_response;
-        return `
-        <div class="vote-row">
-          <span class="kind-badge v-${escapeHtml(v.status)}">${escapeHtml(v.status)}</span>
-          <b>${escapeHtml(v.voter_name || v.voter_id || "?")}</b>
-          ${v.motivation ? `<span class="muted-text"> — ${escapeHtml(v.motivation)}</span>` : ""}
-          <span class="ts" style="color:#6e7681; font-size:0.72rem; margin-left:6px">
-            ${escapeHtml(v.voted_at || "")}
-          </span>
-          ${showRaw ? `
-            <div class="raw-response-label">LLM response (last attempt):</div>
-            <pre class="raw-response">${escapeHtml(v.raw_response)}</pre>
-          ` : ""}
-        </div>`;
+      reassignments.map(r => {
+        const head = `
+          <span class="kind-badge v-reassign">reassign</span>
+          <b>${escapeHtml(r.target_name || "?")}</b>
+          <span class="muted-text">left ${escapeHtml(r.office || "?")}</span> →
+          <b>${escapeHtml(r.new_role_label || r.new_role || "?")}</b>`;
+        return renderBallot(r, head);
       }).join("")
-    : `<span class="muted-text">no individual votes recorded</span>`;
+    : "";
   // Preserve scroll on auto-refresh.
   const prevScroll = root.scrollTop;
-  root.innerHTML = headerHtml + debateHtml + votesHtml;
+  root.innerHTML = headerHtml + debateHtml + officesHtml + reassignHtml;
   root.scrollTop = prevScroll;
+}
+
+// ---- actions tab ----
+async function loadActionsList() {
+  const tb = document.querySelector("#actions-table tbody");
+  if (!currentActionsData && tb)
+    tb.innerHTML = `<tr><td colspan="5" style="padding:10px">loading…</td></tr>`;
+  try {
+    const r = await fetch(`/runs/${currentExplorerRun}/actions?limit=1000`);
+    if (!r.ok) throw new Error(await r.text());
+    currentActionsData = await r.json();
+  } catch (e) {
+    if (tb) tb.innerHTML =
+      `<tr><td colspan="5" style="padding:10px; color:#f85149">${escapeHtml(e.message)}</td></tr>`;
+    return;
+  }
+  renderActionsList();
+}
+
+function renderActionsList() {
+  const tb = document.querySelector("#actions-table tbody");
+  if (!tb || !currentActionsData) return;
+  const filter = (document.getElementById("action-filter").value || "").trim().toLowerCase();
+  const { actions } = currentActionsData;
+  const filtered = actions.filter(a => {
+    if (!filter) return true;
+    const hay = [
+      a.type || "", a.kind || "", a.details || "",
+      (a.agents_involved || []).join(" "),
+    ].join(" ").toLowerCase();
+    return hay.includes(filter);
+  });
+  if (!filtered.length) {
+    document.getElementById("actions-summary").textContent =
+      `${actions.length} total · 0 match · newest first`;
+    tb.innerHTML =
+      `<tr><td colspan="5" class="muted-text" style="padding:12px">No actions match the filter.</td></tr>`;
+    renderPager("actions-pagination", 0, 1, () => {});
+    return;
+  }
+  const totalPages = Math.max(1, Math.ceil(filtered.length / EXPLORER_PAGE_SIZE));
+  if (actionsPage > totalPages - 1) actionsPage = totalPages - 1;
+  if (actionsPage < 0) actionsPage = 0;
+  const start = actionsPage * EXPLORER_PAGE_SIZE;
+  const pageItems = filtered.slice(start, start + EXPLORER_PAGE_SIZE);
+  document.getElementById("actions-summary").textContent =
+    `${actions.length} total · ${filtered.length} match · showing ${start + 1}–${start + pageItems.length} · newest first`;
+  tb.innerHTML = pageItems.map(a => `
+    <tr style="border-bottom:1px solid #21262d; vertical-align:top;">
+      <td style="padding:6px 8px; white-space:nowrap;">${fmtTs(a.ts)}</td>
+      <td style="padding:6px 8px;"><span class="pill">${escapeHtml(a.type)}</span></td>
+      <td style="padding:6px 8px; white-space:nowrap;">${escapeHtml(a.kind)}</td>
+      <td style="padding:6px 8px;">${escapeHtml(a.details || "—")}</td>
+      <td style="padding:6px 8px;">${escapeHtml((a.agents_involved || []).join(", ") || "—")}</td>
+    </tr>
+  `).join("");
+  renderPager("actions-pagination", actionsPage, totalPages, p => {
+    actionsPage = p; renderActionsList();
+  });
 }
 
 // ---- community tab ----
@@ -1414,10 +1593,20 @@ function renderCommunity() {
     return hay.includes(filter);
   });
   if (!filtered.length) {
+    document.getElementById("community-summary").textContent =
+      `${txs.length} movements · 0 match · newest first`;
     body.innerHTML = `<tr><td colspan="7" class="muted-text">no movements${filter ? " match the filter" : " yet"}</td></tr>`;
+    renderPager("community-pagination", 0, 1, () => {});
     return;
   }
-  body.innerHTML = filtered.map(t => {
+  const totalPages = Math.max(1, Math.ceil(filtered.length / EXPLORER_PAGE_SIZE));
+  if (communityPage > totalPages - 1) communityPage = totalPages - 1;
+  if (communityPage < 0) communityPage = 0;
+  const start = communityPage * EXPLORER_PAGE_SIZE;
+  const pageItems = filtered.slice(start, start + EXPLORER_PAGE_SIZE);
+  document.getElementById("community-summary").textContent =
+    `${txs.length} movements · ${filtered.length} match · showing ${start + 1}–${start + pageItems.length} · newest first`;
+  body.innerHTML = pageItems.map(t => {
     const amt = Number(t.amount) || 0;
     let delta = 0;
     if (t.to_party === "community") delta += amt;
@@ -1434,6 +1623,9 @@ function renderCommunity() {
       <td class="muted-text" style="font-size:0.78rem;">${escapeHtml(t.reason || "")}</td>
     </tr>`;
   }).join("");
+  renderPager("community-pagination", communityPage, totalPages, p => {
+    communityPage = p; renderCommunity();
+  });
 }
 
 function escapeHtml(s) {
@@ -1450,8 +1642,13 @@ document.getElementById("btn-close-explorer").addEventListener("click", () => {
   else closeExplorer();
 });
 document.getElementById("conv-filter").addEventListener("input", renderMessageList);
-document.getElementById("vote-filter").addEventListener("input", renderVotesList);
-document.getElementById("community-filter").addEventListener("input", renderCommunity);
+document.getElementById("election-filter").addEventListener("input", renderElectionsList);
+document.getElementById("action-filter").addEventListener("input", () => {
+  actionsPage = 0; renderActionsList();
+});
+document.getElementById("community-filter").addEventListener("input", () => {
+  communityPage = 0; renderCommunity();
+});
 document.querySelectorAll(".explorer-tab").forEach(b =>
   b.addEventListener("click", () => setExplorerTab(b.dataset.tab)));
 
@@ -1463,17 +1660,22 @@ setInterval(() => {
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d) { currentExplorerData = d; renderMessageList(); } })
       .catch(() => {});
-  } else if (currentExplorerTab === "votes") {
-    fetch(`/runs/${currentExplorerRun}/votes`)
+  } else if (currentExplorerTab === "elections") {
+    fetch(`/runs/${currentExplorerRun}/elections`)
       .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d) { currentVotesData = d; renderVotesList(); } })
+      .then(d => { if (d) { currentElectionsData = d; renderElectionsList(); } })
       .catch(() => {});
-    if (currentSelectedVote != null) {
-      fetch(`/runs/${currentExplorerRun}/votes/${currentSelectedVote}`)
+    if (currentSelectedElection != null) {
+      fetch(`/runs/${currentExplorerRun}/elections/${currentSelectedElection}`)
         .then(r => r.ok ? r.json() : null)
-        .then(d => { if (d) renderVoteDetail(d); })
+        .then(d => { if (d) renderElectionDetail(d); })
         .catch(() => {});
     }
+  } else if (currentExplorerTab === "actions") {
+    fetch(`/runs/${currentExplorerRun}/actions?limit=1000`)
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) { currentActionsData = d; renderActionsList(); } })
+      .catch(() => {});
   } else if (currentExplorerTab === "community") {
     fetch(`/runs/${currentExplorerRun}/community?limit=500`)
       .then(r => r.ok ? r.json() : null)
@@ -1495,7 +1697,7 @@ function enterPastView(runId, runName, runStatus) {
   document.getElementById("agent-list").innerHTML = "loading…";
   document.getElementById("agent-detail").innerHTML =
     `<span class="muted-text">Select an agent on the left.</span>`;
-  // Open the run explorer pane so conversations/votes/community follow too.
+  // Open the run explorer pane so conversations/elections/community follow too.
   openExplorer(viewedRunId, runName);
   loadState();
   loadAgentList();
@@ -1508,10 +1710,13 @@ function exitPastView() {
   viewedRunId = null;
   pastRunInfo = null;
   selectedAgentId = null;
-  // Clear images so we don't show stale past-run graphs while idle.
+  // Clear images so we don't show stale past-run graphs while idle, and
+  // re-hide each graph container until a new run makes them available again.
   for (const g of GRAPHS) {
     const img = document.getElementById("img-" + g);
-    if (img) { img.removeAttribute("src"); img.alt = `${g} (no run yet)`; }
+    if (img) { img.removeAttribute("src"); img.alt = g; }
+    const div = document.getElementById("graph-" + g);
+    if (div) { div.style.display = "none"; }
   }
   closeExplorer();
   loadState();

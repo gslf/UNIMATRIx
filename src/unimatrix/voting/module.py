@@ -183,7 +183,7 @@ class ElectionModule:
                 if not first:
                     continue
                 entry = {"speaker_id": ag.id, "speaker_name": ag.name,
-                         "round": r, "text": first}
+                         "round": r, "text": first, "tick": self.active.tick}
                 self.active.debate_transcript.append(entry)
                 await asyncio.to_thread(
                     self.store.record_event, "election_debate_speech", entry

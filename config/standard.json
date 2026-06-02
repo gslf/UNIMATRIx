@@ -8,7 +8,7 @@
   "inference": {
     "backend": "vllm",
     "endpoint": "http://127.0.0.1:1234",
-    "model": "phi-4-reasoning-plus",
+    "model": "liquid/lfm2-24b-a2b",
     "max_tokens_per_message": 10000,
     "max_tokens_per_decision": 10000,
     "temperature": 0.95,

@@ -762,30 +762,67 @@ class RunStore:
                 out.append(d)
             return out
 
-    def debate_speeches_for(self, proposal_id: int) -> list[dict]:
-        """Reassemble the pre-vote debate transcript for a proposal."""
+    def list_events_excluding(
+        self, exclude_types: list[str], limit: int = 1000
+    ) -> list[dict]:
+        """Return public_events whose type is NOT in exclude_types, newest first."""
         with self._lock:
-            rows = self._conn.execute(
-                "SELECT id, payload, ts FROM public_events "
-                "WHERE event_type = 'vote_debate_speech' "
-                "ORDER BY id ASC"
-            ).fetchall()
+            if exclude_types:
+                placeholders = ",".join(["?"] * len(exclude_types))
+                rows = self._conn.execute(
+                    f"SELECT * FROM public_events "
+                    f"WHERE event_type NOT IN ({placeholders}) "
+                    f"ORDER BY id DESC LIMIT ?",
+                    (*exclude_types, limit),
+                ).fetchall()
+            else:
+                rows = self._conn.execute(
+                    "SELECT * FROM public_events ORDER BY id DESC LIMIT ?",
+                    (limit,),
+                ).fetchall()
             out: list[dict] = []
             for r in rows:
+                d = dict(r)
                 try:
-                    payload = json.loads(r["payload"]) if r["payload"] else {}
+                    d["payload"] = json.loads(d["payload"])
                 except (TypeError, json.JSONDecodeError):
-                    continue
-                if payload.get("proposal_id") != proposal_id:
-                    continue
-                out.append({
-                    "round": payload.get("round"),
-                    "speaker_id": payload.get("speaker_id"),
-                    "speaker_name": payload.get("speaker_name"),
-                    "text": payload.get("text"),
-                    "ts": r["ts"],
-                })
+                    d["payload"] = {}
+                out.append(d)
             return out
+
+    def election_debate_speeches(self, tick: int | None = None) -> list[dict]:
+        """Election debate transcript, oldest first.
+
+        The debate runs once per election, before any office ballot, so it is
+        keyed by the election `tick` (stamped into each speech payload) rather
+        than by a single proposal. Pass `tick` to scope to one election; omit it
+        to get every speech (e.g. for per-tick counts). Speeches recorded before
+        per-tick stamping carry no `tick` and are filtered out when one is
+        requested.
+        """
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT payload, ts FROM public_events "
+                "WHERE event_type = 'election_debate_speech' "
+                "ORDER BY id ASC"
+            ).fetchall()
+        out: list[dict] = []
+        for r in rows:
+            try:
+                payload = json.loads(r["payload"]) if r["payload"] else {}
+            except (TypeError, json.JSONDecodeError):
+                continue
+            if tick is not None and payload.get("tick") != tick:
+                continue
+            out.append({
+                "tick": payload.get("tick"),
+                "round": payload.get("round"),
+                "speaker_id": payload.get("speaker_id"),
+                "speaker_name": payload.get("speaker_name"),
+                "text": payload.get("text"),
+                "ts": r["ts"],
+            })
+        return out
 
     # ----- status changes -----
 
@@ -809,6 +846,15 @@ class RunStore:
         with self._lock:
             rows = self._conn.execute(
                 "SELECT * FROM status_changes ORDER BY ts ASC"
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def list_status_changes_for(self, agent_id: str) -> list[dict]:
+        """Role/class movement history for a single agent, oldest first."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM status_changes WHERE agent_id = ? ORDER BY ts ASC",
+                (agent_id,),
             ).fetchall()
             return [dict(r) for r in rows]
 

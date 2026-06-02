@@ -13,7 +13,7 @@ class LoggingConsole(Console):
     """A Rich Console that also captures `log()` output as plain text.
     """
 
-    def __init__(self, *args: Any, buffer_size: int = 200, **kwargs: Any) -> None:
+    def __init__(self, *args: Any, buffer_size: int = 1000, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self._log_buffer: deque[dict] = deque(maxlen=buffer_size)
         self._buf_lock = Lock()
@@ -51,3 +51,13 @@ class LoggingConsole(Console):
         if limit and len(data) > limit:
             return data[-limit:]
         return data
+
+    def clear_log_buffer(self) -> None:
+        """Drop all captured log lines.
+
+        The console instance is reused across simulation runs, so the buffer
+        must be reset when a new run starts; otherwise the "recent events"
+        feed would still show lines left over from the previous run.
+        """
+        with self._buf_lock:
+            self._log_buffer.clear()
