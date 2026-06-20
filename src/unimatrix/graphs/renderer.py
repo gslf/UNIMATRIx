@@ -32,6 +32,10 @@ GRAPH_NAMES = (
 )
 
 
+class GraphUnavailable(Exception):
+    """Raised when a graph has no underlying data to render."""
+
+
 def _parse_iso(ts: str) -> datetime:
     # SQLite stores ISO8601; tolerate trailing Z.
     if ts.endswith("Z"):
@@ -60,7 +64,13 @@ class GraphRenderer:
         return method()
 
     def render_all(self) -> dict[str, Path]:
-        return {n: self.render(n) for n in GRAPH_NAMES}
+        out: dict[str, Path] = {}
+        for n in GRAPH_NAMES:
+            try:
+                out[n] = self.render(n)
+            except GraphUnavailable:
+                continue
+        return out
 
     # ----- 1. class distribution over time -----
 
@@ -74,7 +84,7 @@ class GraphRenderer:
                     continue
                 agent_class[ch["agent_id"]].append((_parse_iso(ch["ts"]), ch["to_value"]))
         if not any(agent_class.values()):
-            return self._empty_plot("class_distribution", "No data")
+            raise GraphUnavailable("class_distribution")
         all_ts = sorted({t for series in agent_class.values() for t, _ in series})
         # bucketize per minute
         start = all_ts[0]
@@ -124,7 +134,7 @@ class GraphRenderer:
                     continue
                 agent_role[ch["agent_id"]].append((_parse_iso(ch["ts"]), ch["to_value"]))
         if not any(agent_role.values()):
-            return self._empty_plot("role_distribution", "No data")
+            raise GraphUnavailable("role_distribution")
         all_ts = sorted({t for series in agent_role.values() for t, _ in series})
         start, end = all_ts[0], all_ts[-1]
         buckets = []
@@ -178,7 +188,7 @@ class GraphRenderer:
         for (u, v), w in edge_weights.items():
             g.add_edge(u, v, weight=w)
         if g.number_of_nodes() == 0:
-            return self._empty_plot("social_network", "No agents")
+            raise GraphUnavailable("social_network")
 
         deg = dict(g.degree())
         pos = nx.spring_layout(g, seed=42, k=0.6)
@@ -205,7 +215,7 @@ class GraphRenderer:
     def _render_voting_timeline(self) -> Path:
         proposals = self.store.list_proposals()
         if not proposals:
-            return self._empty_plot("voting_timeline", "No votes yet")
+            raise GraphUnavailable("voting_timeline")
         fig, ax = plt.subplots(figsize=(10, 5))
         for p in proposals:
             ts = _parse_iso(p["closed_at"] or p["proposed_at"])
@@ -252,6 +262,8 @@ class GraphRenderer:
             fin = final.get(aid, ini)
             if ini in idx and fin in idx:
                 matrix[idx[ini]][idx[fin]] += 1
+        if not any(any(row) for row in matrix):
+            raise GraphUnavailable("mobility_heatmap")
         fig, ax = plt.subplots(figsize=(7, 6))
         im = ax.imshow(matrix, cmap="viridis", aspect="auto")
         ax.set_xticks(range(len(classes)))
@@ -272,7 +284,7 @@ class GraphRenderer:
     def _render_isolation(self) -> Path:
         agents = self.store.list_agents()
         if not agents:
-            return self._empty_plot("isolation", "No agents")
+            raise GraphUnavailable("isolation")
         agents.sort(key=lambda a: (a.get("class") or "", a.get("social_need") or 0.0))
         names = [a["name"] or a["agent_id"] for a in agents]
         values = [float(a.get("social_need") or 0.0) for a in agents]
@@ -293,9 +305,11 @@ class GraphRenderer:
 
     def _render_message_volume(self) -> Path:
         agents = self.store.list_agents()
+        msgs = self.store.all_messages_with_recipients()
+        if not agents or not msgs:
+            raise GraphUnavailable("message_volume")
         agent_class = {a["agent_id"]: a.get("class") for a in agents}
         agent_name = {a["agent_id"]: a["name"] or a["agent_id"] for a in agents}
-        msgs = self.store.all_messages_with_recipients()
         counts: dict[str, int] = {a["agent_id"]: 0 for a in agents}
         for m in msgs:
             sid = m["sender_id"]
@@ -325,7 +339,7 @@ class GraphRenderer:
         txs = list(reversed(self.store.list_transactions(limit=1_000_000)))
         agents = self.store.list_agents()
         if not txs and not agents:
-            return self._empty_plot("balances", "no transactions yet")
+            raise GraphUnavailable("balances")
 
         agent_ids = {a["agent_id"] for a in agents}
         agent_balance: dict[str, float] = {aid: 0.0 for aid in agent_ids}
@@ -391,7 +405,7 @@ class GraphRenderer:
             _record_sample(tx.get("ts"))
 
         if not ts_series:
-            return self._empty_plot("balances", "no transactions yet")
+            raise GraphUnavailable("balances")
 
         fig, ax = plt.subplots(figsize=(10, 4.2))
         ax.plot(ts_series, mean_series, label="mean agent balance",
@@ -408,12 +422,6 @@ class GraphRenderer:
         return self._save(fig, "balances")
 
     # ----- helpers -----
-
-    def _empty_plot(self, name: str, text: str) -> Path:
-        fig, ax = plt.subplots(figsize=(6, 3))
-        ax.text(0.5, 0.5, text, ha="center", va="center", fontsize=12, color="#888")
-        ax.set_axis_off()
-        return self._save(fig, name)
 
     def _save(self, fig, name: str) -> Path:
         path = self.out_dir / f"{name}.png"

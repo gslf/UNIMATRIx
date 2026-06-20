@@ -1655,6 +1655,9 @@ document.querySelectorAll(".explorer-tab").forEach(b =>
 // Auto-refresh: only refresh whichever tab is visible.
 setInterval(() => {
   if (currentExplorerRun == null) return;
+  // Only the live run's data changes. A past run is immutable and was loaded
+  // once when its explorer opened, so re-fetching it on a timer is pure waste.
+  if (viewMode !== "live") return;
   if (currentExplorerTab === "messages") {
     fetch(`/runs/${currentExplorerRun}/messages?limit=500`)
       .then(r => r.ok ? r.json() : null)
@@ -1812,11 +1815,20 @@ buildGraphs();
 loadState();
 loadRuns();
 loadAgentList();
-setInterval(loadState, 1500);
-setInterval(loadRuns, 15000);
+// All recurring backend polling is gated to a live simulation. While idle
+// there is nothing to refresh, and a past run is immutable (loaded once on
+// entry), so polling either would just stream useless calls at the backend.
+// Local actions (start/stop/pause/resume, enter/exit past view, delete) call
+// loadState()/loadRuns() directly, and page load primes everything once.
 setInterval(() => {
-  // Past-run data is immutable so a single load is enough; in idle mode the
-  // panel is empty. Only poll when a live sim is running.
+  if (viewMode !== "live") return;
+  loadState();
+}, 1500);
+setInterval(() => {
+  if (viewMode !== "live") return;
+  loadRuns();
+}, 15000);
+setInterval(() => {
   if (viewMode !== "live" || !isRunning) return;
   loadAgentList();
   if (selectedAgentId) loadAgentDetail(selectedAgentId);

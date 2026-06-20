@@ -18,7 +18,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from pydantic import BaseModel, Field
 
 from ..config import Config, strip_removed_legacy_keys
-from ..graphs import GRAPH_NAMES, GraphRenderer
+from ..graphs import GRAPH_NAMES, GraphRenderer, GraphUnavailable
 from ..orchestrator import Orchestrator
 from ..persistence import Registry, RunStore, utc_now_iso
 from ..session import SessionError, SessionManager
@@ -436,7 +436,10 @@ def build_app(
             raise HTTPException(404, f"unknown graph {name}")
         orch = _require_orch()
         renderer = _renderer_for(orch)
-        path = await asyncio.to_thread(renderer.render, name)
+        try:
+            path = await asyncio.to_thread(renderer.render, name)
+        except GraphUnavailable:
+            raise HTTPException(404, f"graph {name} has no data")
         return FileResponse(path, media_type="image/png")
 
     @app.post("/graphs/refresh")
@@ -777,7 +780,10 @@ def build_app(
                 renderer = GraphRenderer(cfg, s, graph_out)
                 return renderer.render(name)
 
-        path = await asyncio.to_thread(_render)
+        try:
+            path = await asyncio.to_thread(_render)
+        except GraphUnavailable:
+            raise HTTPException(404, f"graph {name} has no data")
         return FileResponse(path, media_type="image/png")
 
     @app.post("/runs/{run_id}/graphs/refresh")

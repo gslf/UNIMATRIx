@@ -36,7 +36,16 @@ def test_graph_render_smoke(stub_config: Path, tmp_path: Path) -> None:
     out = tmp_path / "graphs"
     renderer = GraphRenderer(cfg, store, out)
     rendered = renderer.render_all()
-    for name in GRAPH_NAMES:
-        assert rendered[name].exists()
-        assert rendered[name].stat().st_size > 0
+    # render_all only returns graphs that have data; every returned file must be
+    # a real, non-empty PNG.
+    for name, path in rendered.items():
+        assert name in GRAPH_NAMES
+        assert path.exists()
+        assert path.stat().st_size > 0
+    # The seeded data drives these graphs, so they must be present...
+    for name in ("class_distribution", "message_volume", "voting_timeline"):
+        assert name in rendered
+    # ...while graphs with no underlying data are hidden (no placeholder PNG).
+    # No economy transactions were seeded, so balances is unavailable.
+    assert "balances" not in rendered
     store.close()
