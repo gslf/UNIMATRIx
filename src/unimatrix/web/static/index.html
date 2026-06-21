@@ -1,1838 +1,490 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>UNIMATRIx — control</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>UNIMATRIX</title>
 <style>
-  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
-         background: #0d1117; color: #e6edf3; margin: 0; padding: 0; }
-  header { background: #161b22; padding: 12px 20px; border-bottom: 1px solid #30363d; }
-  h1 { margin: 0; font-size: 1.2rem; font-weight: 600; }
-  main { padding: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-  section { background: #161b22; border: 1px solid #30363d; border-radius: 6px;
-            padding: 14px; }
-  section.capped { max-height: 50vh; display: flex; flex-direction: column;
-                   overflow: hidden; }
-  section.capped > h2 { flex-shrink: 0; }
-  section.capped > .capped-body { flex: 1; min-height: 0; overflow: auto; }
-  section h2 { margin-top: 0; font-size: 1rem; color: #58a6ff; }
-  .row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; flex-wrap: wrap; }
-  button { background: #238636; color: white; border: 0; padding: 6px 12px;
-           border-radius: 4px; cursor: pointer; font-size: 0.9rem; }
-  button.danger { background: #da3633; }
-  button.muted { background: #21262d; color: #c9d1d9; border: 1px solid #30363d; }
-  button:disabled { opacity: 0.5; cursor: not-allowed; }
-  textarea { width: 100%; box-sizing: border-box; background: #0d1117;
-             color: #e6edf3; border: 1px solid #30363d; border-radius: 4px;
-             padding: 8px; font-family: inherit; min-height: 60px; }
-  pre { background: #0d1117; border: 1px solid #30363d; border-radius: 4px;
-        padding: 8px; max-height: 220px; overflow: auto; font-size: 0.78rem; }
-  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-  th, td { text-align: left; padding: 4px 6px; border-bottom: 1px solid #30363d; }
-  .graphs { grid-column: 1 / -1; }
-  .graphs-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
-                 gap: 14px; }
-  .graph { background: #0d1117; border: 1px solid #30363d; border-radius: 4px;
-           padding: 8px; }
-  .graph img { max-width: 100%; height: auto; display: block; }
-  .pill { display: inline-block; padding: 2px 8px; border-radius: 12px;
-          background: #21262d; font-size: 0.75rem; margin-right: 4px; }
-  .ok { color: #3fb950; }
-  .bad { color: #f85149; }
-  .muted-text { color: #8b949e; }
-  .pager { display: flex; gap: 6px; align-items: center; justify-content: center;
-           margin-top: 8px; flex-wrap: wrap; }
-  .pager .pg-btn { background: #21262d; color: #c9d1d9; border: 1px solid #30363d;
-                   padding: 4px 10px; font-size: 0.78rem; }
-  .pager .pg-info { color: #8b949e; font-size: 0.78rem; padding: 0 6px; }
-  .explorer { grid-column: 1 / -1; display: none; }
-  .explorer.open { display: block; }
-  /* Fixed height + min-height:0 on children is the trick that lets the inner
-     panes actually scroll inside a CSS Grid container. */
-  .explorer-grid { display: grid; grid-template-columns: 380px 1fr; gap: 14px;
-                   height: 70vh; min-height: 420px; }
-  .conv-list, .conv-detail {
-    min-height: 0;            /* required for overflow inside grid */
-    height: 100%;
-    overflow-y: auto;
-    border: 1px solid #30363d;
-    border-radius: 4px;
-    background: #0d1117;
+  :root {
+    --bg:#0e1116; --panel:#161b22; --panel2:#1c2230; --ink:#d7dde6;
+    --dim:#8b97a7; --line:#2a313c; --accent:#7aa2f7; --good:#7ee787;
+    --warn:#e0a458; --bad:#f7768e; --cyan:#56d4dd; --mag:#c792ea; --blue:#1f77b4;
   }
-  .conv-detail { padding: 14px; }
-  .conv-list-header { position: sticky; top: 0; background: #0d1117;
-                      padding: 6px 8px; border-bottom: 1px solid #30363d;
-                      font-size: 0.72rem; color: #8b949e;
-                      display: flex; justify-content: space-between; }
-  .conv-row { padding: 10px 12px; border-bottom: 1px solid #21262d;
-              cursor: pointer; font-size: 0.84rem; transition: background 0.08s; }
-  .conv-row:hover { background: #161b22; }
-  .conv-row.selected { background: #1f2a3a; border-left: 3px solid #58a6ff;
-                       padding-left: 9px; }
-  .conv-row .meta { color: #8b949e; font-size: 0.72rem; margin-top: 4px;
-                    line-height: 1.4; }
-  /* Custom scrollbar so the panes look less raw on Windows */
-  .conv-list::-webkit-scrollbar, .conv-detail::-webkit-scrollbar { width: 10px; }
-  .conv-list::-webkit-scrollbar-track,
-  .conv-detail::-webkit-scrollbar-track { background: #0d1117; }
-  .conv-list::-webkit-scrollbar-thumb,
-  .conv-detail::-webkit-scrollbar-thumb {
-    background: #30363d; border-radius: 4px; border: 2px solid #0d1117;
-  }
-  .conv-list::-webkit-scrollbar-thumb:hover,
-  .conv-detail::-webkit-scrollbar-thumb:hover { background: #484f58; }
-  /* Agent explorer (always-on, full-width) */
-  .agent-explorer { grid-column: 1 / -1; }
-  .agent-explorer-grid { display: grid; grid-template-columns: 320px 1fr;
-                         gap: 14px; height: 60vh; min-height: 360px; }
-  .agent-list, .agent-detail {
-    min-height: 0; height: 100%; overflow-y: auto;
-    border: 1px solid #30363d; border-radius: 4px; background: #0d1117;
-  }
-  .agent-detail { padding: 14px; }
-  .agent-list-header { position: sticky; top: 0; background: #0d1117;
-                       padding: 6px 8px; border-bottom: 1px solid #30363d;
-                       font-size: 0.72rem; color: #8b949e; }
-  .agent-row { padding: 8px 12px; border-bottom: 1px solid #21262d;
-               cursor: pointer; font-size: 0.84rem; transition: background 0.08s; }
-  .agent-row:hover { background: #161b22; }
-  .agent-row.selected { background: #1f2a3a; border-left: 3px solid #58a6ff;
-                        padding-left: 9px; }
-  .agent-row .meta { color: #8b949e; font-size: 0.72rem; margin-top: 3px; }
-  .agent-list::-webkit-scrollbar, .agent-detail::-webkit-scrollbar { width: 10px; }
-  .agent-list::-webkit-scrollbar-track,
-  .agent-detail::-webkit-scrollbar-track { background: #0d1117; }
-  .agent-list::-webkit-scrollbar-thumb,
-  .agent-detail::-webkit-scrollbar-thumb {
-    background: #30363d; border-radius: 4px; border: 2px solid #0d1117;
-  }
-  .agent-detail h3 { margin: 14px 0 6px 0; font-size: 0.92rem; color: #58a6ff; }
-  .agent-detail h3:first-child { margin-top: 0; }
-  .agent-detail .kv { font-size: 0.84rem; line-height: 1.5; }
-  .agent-detail .kv b { color: #c9d1d9; }
-  .agent-detail .backstory { font-size: 0.84rem; line-height: 1.4;
-                              white-space: pre-wrap; color: #c9d1d9; }
-  .agent-detail .summary-item, .agent-detail .impression-item,
-  .agent-detail .decision-item {
-    padding: 6px 0; border-bottom: 1px solid #21262d; font-size: 0.84rem;
-    line-height: 1.4;
-  }
-  .agent-detail .summary-item:last-child,
-  .agent-detail .impression-item:last-child,
-  .agent-detail .decision-item:last-child { border-bottom: 0; }
-  .agent-detail .ts { color: #6e7681; font-size: 0.72rem; }
-  .agent-detail .kind-badge { display: inline-block; padding: 1px 6px;
-    border-radius: 10px; background: #21262d; font-size: 0.72rem;
-    margin-right: 4px; }
-  .agent-detail .vote-pick { background: #11304a; color: #58a6ff; }
-  .agent-detail .vote-abstain { background: #2a2a2a; color: #8b949e; }
-  .msg { padding: 6px 0; border-bottom: 1px solid #21262d; }
-  .msg:last-child { border-bottom: 0; }
-  .msg .sender { color: #58a6ff; font-weight: 600; font-size: 0.85rem; }
-  .msg .ts { color: #6e7681; font-size: 0.7rem; margin-left: 6px; }
-  .msg .body { margin-top: 4px; white-space: pre-wrap; font-size: 0.88rem;
-               line-height: 1.4; }
-  .summary-box { background: #1f2a3a; border-left: 3px solid #58a6ff;
-                 padding: 8px 10px; margin-bottom: 10px; font-size: 0.85rem; }
-  .conv-filter { width: 100%; box-sizing: border-box; padding: 6px 8px;
-                 background: #0d1117; color: #e6edf3; border: 1px solid #30363d;
-                 border-radius: 4px; margin-bottom: 6px; }
-  button.muted.active { background: #1f6feb; color: white; border-color: #1f6feb; }
-  /* Explorer tab strip */
-  .explorer-tabs { display: flex; gap: 4px; margin: 6px 0 10px 0; }
-  .explorer-tab { background: #21262d; color: #c9d1d9; border: 1px solid #30363d;
-                  padding: 6px 14px; border-radius: 4px 4px 0 0; cursor: pointer;
-                  font-size: 0.86rem; font-family: inherit; }
-  .explorer-tab.active { background: #1f6feb; color: white; border-color: #1f6feb; }
-  .explorer-pane { display: none; }
-  .explorer-pane.active { display: block; }
-  /* Election-specific badges (reuse the agent-detail palette) */
-  .v-winner { background: #1b3d2a; color: #3fb950; }
-  .v-changed { background: #4a2c0a; color: #d29922; }
-  .v-unchanged { background: #2a2a2a; color: #8b949e; }
-  .v-pick { background: #11304a; color: #58a6ff; }
-  .v-abstain { background: #2a2a2a; color: #8b949e; }
-  .v-reassign { background: #2d234a; color: #b392f0; }
-  /* Per-candidate tally pills inside an election ballot */
-  .tally-pill { display: inline-block; padding: 1px 8px; border-radius: 10px;
-                background: #21262d; font-size: 0.74rem; margin: 0 4px 4px 0; }
-  .tally-pill.top { background: #1b3d2a; color: #3fb950; }
-  .ballot-block { border: 1px solid #21262d; border-radius: 6px;
-                  padding: 8px 10px; margin: 8px 0; }
-  .ballot-block .ballot-head { font-size: 0.9rem; margin-bottom: 4px; }
-  .conv-detail .vote-row { padding: 6px 0; border-bottom: 1px solid #21262d;
-                            font-size: 0.84rem; line-height: 1.4; }
-  .conv-detail .vote-row:last-child { border-bottom: 0; }
-  .conv-detail .raw-response { margin: 4px 0 2px 0; padding: 6px 8px;
-                                background: #0d1117; border: 1px solid #30363d;
-                                border-radius: 4px; font-family: ui-monospace,
-                                Consolas, monospace; font-size: 0.78rem;
-                                color: #c9d1d9; white-space: pre-wrap;
-                                word-break: break-word; max-height: 220px;
-                                overflow: auto; }
-  .conv-detail .raw-response-label { color: #8b949e; font-size: 0.74rem;
-                                      margin-top: 4px; }
-  .conv-detail .speech-row { padding: 6px 0; border-bottom: 1px solid #21262d;
-                              font-size: 0.85rem; line-height: 1.4; }
-  .conv-detail .speech-row:last-child { border-bottom: 0; }
-  .conv-detail .speech-row .speaker { color: #58a6ff; font-weight: 600; }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font:14px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+  header{position:sticky;top:0;z-index:5;background:var(--bg);
+    border-bottom:1px solid var(--line);padding:10px 18px}
+  .hrow{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  h1{font-size:16px;margin:0;font-weight:650;letter-spacing:.3px}
+  .sub{color:var(--dim);font-size:12px}
+  select,button,input{background:var(--panel2);color:var(--ink);
+    border:1px solid var(--line);border-radius:7px;padding:6px 10px;font-size:13px}
+  button{cursor:pointer}
+  button:hover,select:hover{border-color:var(--accent)}
+  button.primary{background:#1d4ed8;border-color:#1d4ed8;color:#fff}
+  button.danger{border-color:var(--bad);color:var(--bad)}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  .pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;
+    border-radius:999px;font-size:12px;border:1px solid var(--line)}
+  .dot{width:8px;height:8px;border-radius:50%;background:var(--dim)}
+  .dot.live{background:var(--good);box-shadow:0 0 6px var(--good)}
+  .dot.paused{background:var(--warn)} .dot.past{background:var(--cyan)}
+  .grow{flex:1}
+  .tabs{display:flex;gap:4px;margin-top:10px;flex-wrap:wrap}
+  .tab{padding:6px 13px;border-radius:8px 8px 0 0;background:transparent;
+    border:1px solid transparent;color:var(--dim);cursor:pointer;font-size:13px}
+  .tab.active{background:var(--panel);color:var(--ink);
+    border-color:var(--line);border-bottom-color:var(--panel)}
+  main{padding:16px 18px 70px}
+  .grid{display:grid;gap:12px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px}
+  .card h3{margin:0 0 10px;font-size:12px;color:var(--accent);
+    text-transform:uppercase;letter-spacing:.5px;font-weight:650}
+  .muted{color:var(--dim)} .small{font-size:12px}
+  .alive{color:var(--good)} .dead{color:var(--bad)} .key{color:var(--cyan)}
+  .chips{display:flex;gap:8px;flex-wrap:wrap}
+  .chip{background:var(--panel2);border:1px solid var(--line);border-radius:8px;
+    padding:6px 11px;min-width:84px}
+  .chip b{font-size:18px;display:block} .chip span{font-size:11px;color:var(--dim)}
+  .row{display:flex;justify-content:space-between;gap:10px;padding:6px 0;
+    border-bottom:1px solid var(--line)}
+  .row:last-child{border-bottom:none}
+  .bar{height:6px;border-radius:3px;background:var(--panel2);overflow:hidden;margin-top:4px}
+  .bar>span{display:block;height:100%;background:var(--good)}
+  .scroll{max-height:62vh;overflow:auto}
+  .feed{max-height:280px;overflow:auto;font-size:12.5px}
+  .feed div{padding:3px 0;border-bottom:1px solid var(--line)}
+  .tl{border-left:2px solid var(--line);margin-left:8px;padding-left:16px}
+  .tl .node{position:relative;margin-bottom:14px}
+  .tl .node::before{content:'';position:absolute;left:-23px;top:4px;width:10px;
+    height:10px;border-radius:50%;background:var(--accent)}
+  .diff{color:var(--warn);font-size:12px}
+  .agent-item{cursor:pointer} .agent-item:hover{background:var(--panel2)}
+  .two{grid-template-columns:300px 1fr;align-items:start}
+  .empty{color:var(--dim);padding:18px;text-align:center}
+  .charts{grid-template-columns:repeat(auto-fill,minmax(330px,1fr))}
+  svg.chart{width:100%;height:160px;display:block}
+  .legend{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;margin-top:4px}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px}
+  .ctrls{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+  .toast{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);
+    background:var(--panel2);border:1px solid var(--line);border-radius:8px;
+    padding:8px 14px;font-size:13px;opacity:0;transition:opacity .2s;z-index:10}
+  .toast.show{opacity:1}
+  .spinner{width:15px;height:15px;border:2px solid var(--line);
+    border-top-color:var(--accent);border-radius:50%;
+    display:inline-block;vertical-align:middle;animation:spin .7s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
 <header>
-  <h1>::] UNIMATRIx
-    <span id="header-status" style="float:right; font-weight:normal; font-size:0.85rem;
-          padding:2px 10px; border-radius:12px; background:#21262d;
-          color:#8b949e;">unknown</span>
-  </h1>
+  <div class="hrow">
+    <h1>UNIMATRIX</h1><span class="sub">a society of self-constructing AI Agents</span>
+    <span id="status" class="pill"><span class="dot"></span><span id="statusText">…</span></span>
+    <span class="grow"></span>
+    <label class="sub">run</label>
+    <select id="runSel" style="max-width:280px"></select>
+    <button id="refresh" title="refresh">&#x21bb;</button>
+  </div>
+  <div class="hrow" style="margin-top:8px">
+    <div id="controls" class="ctrls"></div>
+    <span class="grow"></span>
+    <input id="bcast" placeholder="speak to all beings…" style="width:240px" disabled />
+    <button id="bcastBtn" disabled>broadcast</button>
+  </div>
+  <div class="tabs" id="tabs"></div>
 </header>
-<main>
-  <section style="grid-column: 1 / -1;">
-    <h2>Simulation</h2>
-    <div id="sim-idle" class="row" style="display:none">
-      <label for="sim-config" class="muted-text">Config:</label>
-      <select id="sim-config" style="background:#0d1117; color:#e6edf3;
-              border:1px solid #30363d; border-radius:4px; padding:6px 8px;
-              min-width:240px; font-family:inherit;"></select>
-      <button id="btn-start">Start simulation</button>
-      <span id="sim-action-status" class="muted-text"></span>
-    </div>
-    <div id="sim-active" class="row" style="display:none">
-      <span class="muted-text">Active run:</span>
-      <span id="sim-active-info"><span class="pill">—</span></span>
-      <button id="btn-stop" class="danger">Stop simulation</button>
-      <span id="sim-action-status-active" class="muted-text"></span>
-    </div>
-    <div id="sim-past" class="row" style="display:none">
-      <span class="muted-text">Viewing past run:</span>
-      <span id="sim-past-info"><span class="pill">—</span></span>
-      <button id="btn-resume-past" class="muted">Resume</button>
-      <button id="btn-end-past" class="danger">Stop</button>
-      <button id="btn-exit-past" class="muted">Close past view</button>
-      <span id="sim-action-status-past" class="muted-text"></span>
-    </div>
-    <div id="sim-loading" class="muted-text" style="font-size:0.85rem;">
-      checking session…
-    </div>
-  </section>
-
-  <section class="capped">
-    <h2>Current state</h2>
-    <div class="capped-body">
-      <div id="state-summary">loading…</div>
-      <div id="error-banner" style="display:none; margin-top:10px; padding:8px 10px;
-           background:#3d1410; border:1px solid #f85149; border-radius:4px;
-           color:#ffa198; font-size:0.85rem; white-space:pre-wrap;"></div>
-      <div id="metrics-summary" style="margin-top:10px; font-size:0.82rem;
-           color:#8b949e;"></div>
-      <div class="row" style="margin-top: 10px;">
-        <button id="btn-pause">Pause</button>
-        <button id="btn-resume" class="muted">Resume</button>
-        <button id="btn-checkpoint" class="muted">Force checkpoint</button>
-        <button id="btn-show-diag" class="muted">Show last LLM raw output</button>
-      </div>
-      <pre id="diag-pane" style="display:none; margin-top:8px; max-height:260px;
-           overflow:auto; font-size:0.78rem;"></pre>
-    </div>
-  </section>
-
-  <section class="capped">
-    <h2>Recent events</h2>
-    <div class="capped-body">
-      <pre id="events" style="max-height: none;">…</pre>
-    </div>
-  </section>
-
-  <section>
-    <h2>Broadcast (voice from the sky)</h2>
-    <textarea id="msg" placeholder="Speak to all agents…"></textarea>
-    <div class="row" style="margin-top: 8px;">
-      <button id="btn-send">Send</button>
-      <span id="bc-status" class="muted-text"></span>
-    </div>
-  </section>
-
-  <section>
-    <h2>Run manager</h2>
-    <table id="runs-table">
-      <thead><tr><th>id</th><th>name</th><th>status</th><th>started</th><th></th></tr></thead>
-      <tbody></tbody>
-    </table>
-  </section>
-
-  <section class="agent-explorer">
-    <h2>
-      Agent explorer
-      <span id="agent-count" class="muted-text" style="font-weight:normal; font-size:0.85rem;"></span>
-    </h2>
-    <div class="agent-explorer-grid">
-      <div class="agent-list" id="agent-list">loading…</div>
-      <div class="agent-detail" id="agent-detail">
-        <span class="muted-text">Select an agent on the left.</span>
-      </div>
-    </div>
-  </section>
-
-  <section class="explorer" id="explorer">
-    <h2>
-      Run explorer
-      <span id="explorer-title" class="muted-text" style="font-weight:normal; font-size:0.85rem;"></span>
-      <button id="btn-close-explorer" class="muted" style="float: right;">Close</button>
-    </h2>
-    <div class="explorer-tabs">
-      <button class="explorer-tab active" data-tab="messages">Messages</button>
-      <button class="explorer-tab" data-tab="elections">Elections</button>
-      <button class="explorer-tab" data-tab="actions">Actions</button>
-      <button class="explorer-tab" data-tab="community">Community</button>
-    </div>
-
-    <div class="explorer-pane active" id="pane-messages">
-      <div class="row">
-        <input id="conv-filter" class="conv-filter" placeholder="Filter by sender, recipient, or message text..." />
-      </div>
-      <div class="explorer-grid">
-        <div class="conv-list" id="conv-list">loading…</div>
-        <div class="conv-detail" id="conv-detail">
-          <span class="muted-text">Select a message on the left to see the thread.</span>
-        </div>
-      </div>
-    </div>
-
-    <div class="explorer-pane" id="pane-elections">
-      <div class="row">
-        <input id="election-filter" class="conv-filter" placeholder="Filter by tick, office, or winner..." />
-      </div>
-      <div class="explorer-grid">
-        <div class="conv-list" id="election-list">loading…</div>
-        <div class="conv-detail" id="election-detail">
-          <span class="muted-text">Select an election on the left.</span>
-        </div>
-      </div>
-    </div>
-
-    <div class="explorer-pane" id="pane-actions">
-      <div class="row">
-        <input id="action-filter" class="conv-filter"
-               placeholder="Filter by type, kind, details, or agent..." />
-      </div>
-      <div id="actions-summary" class="muted-text" style="margin:6px 0; font-size:0.8rem;"></div>
-      <div style="max-height:64vh; overflow-y:auto; border:1px solid #30363d; border-radius:4px;">
-        <table id="actions-table" style="width:100%; font-size:0.82rem; border-collapse:collapse;">
-          <thead>
-            <tr style="text-align:left; border-bottom:1px solid #30363d;">
-              <th style="padding:6px 8px;">when</th>
-              <th style="padding:6px 8px;">type</th>
-              <th style="padding:6px 8px;">kind</th>
-              <th style="padding:6px 8px;">details</th>
-              <th style="padding:6px 8px;">agents involved</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-      <div id="actions-pagination" class="pager"></div>
-    </div>
-
-    <div class="explorer-pane" id="pane-community">
-      <div class="row" style="align-items:baseline;">
-        <strong>Community treasury:</strong>
-        <span id="community-balance" class="ok" style="font-size:1.1rem;">…</span>
-        <span class="muted-text">coins</span>
-        <input id="community-filter" class="conv-filter" style="flex:1; margin-left:12px"
-               placeholder="Filter movements by kind, party, or reason..." />
-      </div>
-      <div id="community-summary" class="muted-text" style="margin:6px 0; font-size:0.8rem;"></div>
-      <div style="margin-top:8px">
-        <table id="community-tx-table" style="width:100%; font-size:0.82rem; border-collapse:collapse;">
-          <thead>
-            <tr style="text-align:left; border-bottom:1px solid #30363d;">
-              <th>when</th>
-              <th>kind</th>
-              <th>from</th>
-              <th>to</th>
-              <th style="text-align:right;">amount</th>
-              <th style="text-align:right;">Δ treasury</th>
-              <th>reason</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-      <div id="community-pagination" class="pager"></div>
-    </div>
-  </section>
-
-  <section class="graphs">
-    <h2>Graphs
-      <button id="btn-refresh-all" style="float: right;">Refresh all</button>
-    </h2>
-    <div class="graphs-grid" id="graphs"></div>
-  </section>
-</main>
+<main id="view"><div class="empty">loading…</div></main>
+<div class="toast" id="toast"></div>
 
 <script>
-const GRAPHS = [
-  "class_distribution", "role_distribution", "social_network",
-  "voting_timeline", "mobility_heatmap", "isolation", "message_volume",
-  "balances",
-];
+const TABS=[["overview","Overview"],["beings","Beings"],["self","Self-evolution"],
+  ["meaning","Meaning & Belief"],["labor","Labor & Purpose"],
+  ["kinship","Kinship & Intimacy"],["continuity","Mortality & Continuity"]];
 
-function buildGraphs() {
-  const root = document.getElementById("graphs");
-  root.innerHTML = "";
-  for (const g of GRAPHS) {
-    const div = document.createElement("div");
-    div.className = "graph";
-    div.id = "graph-" + g;
-    // Hidden until the image actually loads — a graph that isn't available
-    // (no run yet, or backend 409/404) stays hidden instead of showing a
-    // broken-image placeholder.
-    div.style.display = "none";
-    // Don't request the image until a simulation is actually running —
-    // otherwise we'd burn 7 instant 409s on a fresh page load.
-    div.innerHTML = `
-      <div class="row" style="justify-content: space-between;">
-        <strong>${g}</strong>
-        <button class="muted" data-graph="${g}">Refresh</button>
-      </div>
-      <img id="img-${g}" alt="${g}"
-           style="min-height:40px; background:#0d1117;"
-           onload="document.getElementById('graph-${g}').style.display = ''"
-           onerror="document.getElementById('graph-${g}').style.display = 'none'" />
-    `;
-    root.appendChild(div);
-  }
-  root.querySelectorAll("button[data-graph]").forEach(b =>
-    b.addEventListener("click", e => refreshGraph(e.target.dataset.graph)));
+let live={running:false}, runs=[], configs=[], target=null, tab="overview";
+let data={}, selfAgent=null, pollTimer=null, busy=null;
+
+const $=(s,r=document)=>r.querySelector(s);
+const el=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;
+  if(h!==undefined)e.innerHTML=h;return e;};
+const esc=s=>(s==null?"":String(s)).replace(/[&<>]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[m]));
+const nm=(id,names)=>esc(names&&names[id]?names[id]:id);
+async function j(u,o){const r=await fetch(u,o);if(!r.ok)throw new Error((await r.text()).slice(0,200)||r.status);
+  const t=await r.text();return t?JSON.parse(t):{};}
+function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("show");
+  setTimeout(()=>t.classList.remove("show"),1800);}
+
+const isLiveTarget=()=>live.running&&target===live.run_id;
+
+// ---------- top-level load ----------
+async function loadState(){ try{ live=await j("/state"); }catch(e){ live={running:false}; }
+  configs=live.configs||configs;
+  if(!configs.length){ try{ configs=(await j("/configs")).configs||[]; }catch(e){} } }
+async function loadRuns(){ try{ runs=await j("/runs"); }catch(e){ runs=[]; } }
+
+function pickTarget(){
+  if(live.running && target===null) target=live.run_id;
+  if(target===null && runs.length) target=runs[0].id;
 }
 
-// viewMode: 'idle' (no sim, not viewing anything), 'live' (sim running, viewing it),
-// or 'past' (no sim, viewing an older run). viewedRunId tracks the currently-
-// displayed run for live or past mode.
-let viewMode = "idle";
-let viewedRunId = null;
-let pastRunInfo = null;   // registry row for the past run currently being viewed
+async function boot(){
+  await Promise.all([loadState(),loadRuns()]);
+  pickTarget();
+  renderShell();
+  await loadData();
+  render();
+  if(pollTimer) clearInterval(pollTimer);
+  pollTimer=setInterval(tickPoll,2500);
+}
 
-function endpoints() {
-  if (viewMode === "past" && viewedRunId != null) {
-    const id = encodeURIComponent(viewedRunId);
-    return {
-      state: `/runs/${id}/state`,
-      roster: `/runs/${id}/roster`,
-      agent: (aid) => `/runs/${id}/agents/${encodeURIComponent(aid)}`,
-      graph: (n) => `/runs/${id}/graphs/${n}.png`,
-      graphsRefresh: `/runs/${id}/graphs/refresh`,
-    };
-  }
+async function tickPoll(){
+  await loadState(); await loadRuns();
+  if(live.running && target===null) target=live.run_id;
+  renderShell();
+  if(isLiveTarget()){ await loadData(); render(); }
+}
+
+async function loadData(){
+  if(target===null){ data={}; return; }
+  const base=`/runs/${target}`;
+  try{
+    const [beings,meaning,labor,kinship,continuity,timeline]=await Promise.all([
+      j(base+"/beings"),j(base+"/meaning"),j(base+"/labor"),
+      j(base+"/kinship"),j(base+"/continuity"),j(base+"/timeline")]);
+    data={agents:beings.beings||[],meaning,labor:labor.projects||[],
+      kinship,continuity,timeline};
+  }catch(e){ data={error:e.message}; }
+}
+
+// ---------- derived stats ----------
+function stats(){
+  const a=data.agents||[], tl=data.timeline||{};
+  const living=a.filter(x=>x.alive).length;
+  const maxTick=Math.max(live.tick_no||0,
+    ...(tl.self_revisions||[]),...(tl.deaths||[]),...(tl.births||[]),
+    ...(tl.artifacts||[]),...(tl.projects_started||[]),0);
   return {
-    state: "/state",
-    roster: "/agents",
-    agent: (aid) => `/agents/${encodeURIComponent(aid)}`,
-    graph: (n) => `/graphs/${n}.png`,
-    graphsRefresh: "/graphs/refresh",
+    tick: isLiveTarget()?(live.tick_no||0):maxTick,
+    living, dead:(data.continuity?.deaths||[]).length, beings:a.length,
+    self_revisions:(tl.self_revisions||[]).length,
+    artifacts:(data.meaning?.artifacts||[]).length,
+    adoptions:(data.meaning?.adoptions||[]).length,
+    projects_started:(data.labor||[]).length,
+    projects_completed:(data.labor||[]).filter(p=>p.status==="completed").length,
+    bonds:(data.kinship?.relationships||[]).filter(r=>r.dissolved_tick==null).length,
+    groups:(data.kinship?.groups||[]).length,
+    births:(data.continuity?.lineage||[]).length,
+    messages: isLiveTarget()?(live.metrics?.messages_sent):null,
   };
 }
 
-function refreshGraph(name) {
-  const img = document.getElementById("img-" + name);
-  img.src = `${endpoints().graph(name)}?ts=${Date.now()}`;
-}
+// ---------- shell (status + controls + tabs) ----------
+function renderShell(){
+  const st=$("#status"), dot=st.querySelector(".dot"), txt=$("#statusText");
+  dot.className="dot"+(live.running?(live.paused?" paused":" live"):(target!=null?" past":""));
+  if(live.running) txt.textContent=`LIVE · tick ${live.tick_no} · ${live.metrics?.living??"?"} alive`
+    +(live.paused?" · paused":"");
+  else if(target!=null) txt.textContent="viewing past run";
+  else txt.textContent="idle";
 
-async function refreshAll() {
-  await fetch(endpoints().graphsRefresh, { method: "POST" });
-  GRAPHS.forEach(refreshGraph);
-}
+  const sel=$("#runSel");
+  sel.innerHTML="";
+  runs.forEach(r=>{const o=el("option");o.value=r.id;
+    const badge=(live.running&&r.id===live.run_id)?" ● LIVE":"";
+    o.textContent=`#${r.id} ${r.name} [${r.status}]${badge}`;sel.appendChild(o);});
+  if(target!=null) sel.value=target;
 
-let isRunning = false;
-
-function renderSimControls(s) {
-  const idle = document.getElementById("sim-idle");
-  const active = document.getElementById("sim-active");
-  const past = document.getElementById("sim-past");
-  const loading = document.getElementById("sim-loading");
-  const headerStatus = document.getElementById("header-status");
-  loading.style.display = "none";
-  idle.style.display = "none";
-  active.style.display = "none";
-  past.style.display = "none";
-  if (viewMode === "past") {
-    past.style.display = "flex";
-    const status = (pastRunInfo && pastRunInfo.status) || "?";
-    const pillClass = status === "paused" ? "bad"
-                    : status === "ended" ? "ok"
-                    : status === "failed" ? "bad"
-                    : "muted-text";
-    document.getElementById("sim-past-info").innerHTML =
-      `<span class="pill">run #${s.run_id ?? viewedRunId}</span>` +
-      `<span class="pill">tick ${s.tick_no ?? 0}</span>` +
-      `<span class="pill ${pillClass}">${escapeHtml(status)}</span>`;
-    document.getElementById("btn-resume-past").disabled = (status !== "paused");
-    document.getElementById("btn-end-past").disabled = (status !== "paused");
-    headerStatus.textContent = `past run #${viewedRunId}`;
-    headerStatus.style.color = "#58a6ff";
-  } else if (s.running) {
-    active.style.display = "flex";
-    document.getElementById("sim-active-info").innerHTML =
-      `<span class="pill">run #${s.run_id ?? "?"}</span>` +
-      `<span class="pill">tick ${s.tick_no ?? 0}</span>` +
-      (s.paused ? `<span class="pill bad">paused</span>` : `<span class="pill ok">running</span>`);
-    headerStatus.textContent = s.paused ? "paused" : "running";
-    headerStatus.style.color = s.paused ? "#d29922" : "#3fb950";
+  const c=$("#controls"); c.innerHTML="";
+  if(busy){
+    c.appendChild(el("span","spinner"));
+    c.appendChild(el("span","sub",busy));
+  } else if(!live.running){
+    const cs=el("select"); cs.id="startCfg";
+    configs.forEach(cf=>{const o=el("option");o.value=cf.file;
+      o.textContent=`${cf.simulation_name||cf.file} (${cf.agents||0})`;cs.appendChild(o);});
+    c.appendChild(el("span","sub","start:")); c.appendChild(cs);
+    const b=el("button","primary","start"); b.onclick=()=>ctl("start"); c.appendChild(b);
   } else {
-    idle.style.display = "flex";
-    headerStatus.textContent = "idle";
-    headerStatus.style.color = "#8b949e";
-    populateConfigSelect(s.configs || []);
+    const pb=el("button",null,live.paused?"resume":"pause");
+    pb.onclick=()=>ctl(live.paused?"resume":"pause"); c.appendChild(pb);
+    const ck=el("button",null,"checkpoint"); ck.onclick=()=>ctl("checkpoint"); c.appendChild(ck);
+    const sb=el("button","danger","stop"); sb.onclick=()=>ctl("stop"); c.appendChild(sb);
   }
-  // Live-only controls: enabled only when an orchestrator is actually ticking.
-  const liveOnly = viewMode === "live" && !!s.running;
-  for (const id of ["btn-pause", "btn-resume", "btn-checkpoint",
-                     "btn-show-diag", "btn-send", "btn-stop"]) {
-    const el = document.getElementById(id);
-    if (el) el.disabled = !liveOnly;
-  }
-  document.getElementById("msg").disabled = !liveOnly;
-  // The "Refresh all" graphs button is fine in both live and past view
-  // (graphs render from whichever store backs the current view).
-  document.getElementById("btn-refresh-all").disabled =
-    !(liveOnly || viewMode === "past");
-}
-
-function populateConfigSelect(configs) {
-  const sel = document.getElementById("sim-config");
-  const prev = sel.value;
-  sel.innerHTML = "";
-  if (!configs.length) {
-    const opt = document.createElement("option");
-    opt.value = "";
-    opt.textContent = "(no configs found)";
-    opt.disabled = true;
-    sel.appendChild(opt);
-    document.getElementById("btn-start").disabled = true;
-    return;
-  }
-  for (const c of configs) {
-    const opt = document.createElement("option");
-    opt.value = c.file;
-    opt.textContent = c.error
-      ? `${c.file} — ⚠ ${c.error}`
-      : `${c.simulation_name} (${c.file}, ${c.agents ?? "?"} agents)`;
-    if (c.error) opt.disabled = true;
-    sel.appendChild(opt);
-  }
-  if (prev && Array.from(sel.options).some(o => o.value === prev)) {
-    sel.value = prev;
-  }
-  document.getElementById("btn-start").disabled = false;
-}
-
-async function startSim() {
-  const sel = document.getElementById("sim-config");
-  const status = document.getElementById("sim-action-status");
-  const startBtn = document.getElementById("btn-start");
-  if (!sel.value) {
-    status.textContent = "(pick a config first)";
-    return;
-  }
-  startBtn.disabled = true;
-  status.textContent = "starting…";
-  try {
-    const r = await fetch("/sim/start", {
-      method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ config: sel.value }),
-    });
-    if (!r.ok) {
-      const err = await r.text();
-      status.textContent = `error: ${err}`;
-      startBtn.disabled = false;
-      return;
+  if(!busy && target!=null && !(live.running&&target===live.run_id)){
+    const tr=runs.find(r=>r.id===target);
+    if(!live.running && tr && (tr.status==="paused"||tr.status==="running")){
+      const rb=el("button",null,"resume run"); rb.onclick=()=>ctl("resumeRun"); c.appendChild(rb);
+      const eb=el("button","danger","end"); eb.onclick=()=>ctl("endRun"); c.appendChild(eb);
     }
-    status.textContent = "started.";
-    loadState();
-  } catch (e) {
-    status.textContent = `error: ${e}`;
-    startBtn.disabled = false;
+    if(!live.running){ const db=el("button","danger","delete");
+      db.onclick=()=>ctl("delete"); c.appendChild(db); }
   }
+  const canB=live.running&&!live.paused;
+  $("#bcast").disabled=!canB; $("#bcastBtn").disabled=!canB;
+
+  const tc=$("#tabs"); tc.innerHTML="";
+  TABS.forEach(([k,label])=>{const b=el("button","tab"+(k===tab?" active":""),esc(label));
+    b.onclick=()=>{tab=k;render();};tc.appendChild(b);});
 }
 
-async function stopSim() {
-  if (!confirm("Stop the running simulation? Any active conversations will close.")) return;
-  const status = document.getElementById("sim-action-status-active");
-  const stopBtn = document.getElementById("btn-stop");
-  stopBtn.disabled = true;
-  status.textContent = "stopping…";
-  try {
-    const r = await fetch("/sim/stop", { method: "POST" });
-    if (!r.ok) {
-      status.textContent = `error: ${await r.text()}`;
-      stopBtn.disabled = false;
-      return;
-    }
-    status.textContent = "stopped.";
-    loadState();
-    loadRuns();
-  } catch (e) {
-    status.textContent = `error: ${e}`;
-    stopBtn.disabled = false;
-  }
+async function ctl(action){
+  try{
+    if(action==="start"){const cfg=$("#startCfg")?.value;if(!cfg)return;
+      busy="starting simulation… this can take a moment"; renderShell();
+      await j("/sim/start",{method:"POST",headers:{'content-type':'application/json'},
+        body:JSON.stringify({config:cfg})}); target=null; toast("simulation started");}
+    else if(action==="stop"){busy="stopping simulation… finishing the current tick"; renderShell();
+      await j("/sim/stop",{method:"POST"});toast("stopped");}
+    else if(action==="pause"){await j("/pause",{method:"POST"});}
+    else if(action==="resume"){await j("/resume",{method:"POST"});}
+    else if(action==="checkpoint"){await j("/checkpoint",{method:"POST"});toast("checkpoint written");}
+    else if(action==="resumeRun"){busy="resuming run…"; renderShell();
+      await j(`/runs/${target}/resume`,{method:"POST"});toast("resuming run");}
+    else if(action==="endRun"){await j(`/runs/${target}/end`,{method:"POST"});toast("run ended");}
+    else if(action==="delete"){ if(!confirm("Delete this run and its data?"))return;
+      await j(`/runs/${target}`,{method:"DELETE"}); target=null; toast("deleted");}
+  }catch(e){ toast("error: "+e.message); }
+  finally{ busy=null; }
+  await loadState(); await loadRuns(); pickTarget(); renderShell(); await loadData(); render();
 }
 
-async function loadState() {
-  let s;
-  try { s = await (await fetch(endpoints().state)).json(); }
-  catch { return; }
-  // In live mode the /state response controls running-ness; in past mode the
-  // top-of-page sim controls are driven by viewMode, not s.running.
-  const wasRunning = isRunning;
-  if (viewMode !== "past") {
-    isRunning = !!s.running;
-    liveRunId = s.run_id;
-    // If a sim started elsewhere while we were idle, snap into 'live'.
-    if (isRunning) viewMode = "live";
-    else viewMode = "idle";
-  }
-  renderSimControls(s);
-  // When transitioning from idle → running, refresh the runs table and graphs
-  // so the user sees the new entry without waiting for the next interval.
-  if (!wasRunning && isRunning) {
-    loadRuns();
-    loadAgentList();
-    GRAPHS.forEach(refreshGraph);
-  }
-  const sum = document.getElementById("state-summary");
-  const showSummary = viewMode === "past" || isRunning;
-  if (!showSummary) {
-    sum.innerHTML = `<span class="muted-text">No simulation running. ` +
-      `Pick a config above and click <b>Start simulation</b>.</span>`;
-    document.getElementById("metrics-summary").innerHTML = "";
-    document.getElementById("error-banner").style.display = "none";
-  } else {
-    const perClass = Object.entries(s.agents_per_class || {})
-      .map(([k, v]) => `<span class="pill">${k}: ${v}</span>`).join("");
-    const perState = Object.entries(s.agents_per_state || {})
-      .map(([k, v]) => `<span class="pill">${k}: ${v}</span>`).join("");
-    const recentMsgs = (s.recent_messages || []).slice(0, 6).map(m => {
-      const to = (m.recipient_names || m.recipients || []).join(", ");
-      const tag = m.is_broadcast ? "📢 " : "";
-      return `<div class="muted-text" style="font-size:0.78rem; margin-top:2px">`
-        + `${tag}<b>${escapeHtml(m.sender_name || m.sender_id)}</b> → ${escapeHtml(to)}: `
-        + `${escapeHtml((m.content || "").slice(0, 90))}</div>`;
-    }).join("") || "<span class='muted-text'>none yet</span>";
-    const vote = s.active_vote
-      ? (s.active_vote.offices
-          ? `<span class="pill">ELECTION (tick ${s.active_vote.election_tick}): ${(s.active_vote.offices || []).join(", ")}</span>`
-          : `<span class="pill">${s.active_vote.change_type} → ${s.active_vote.to_value} (target ${s.active_vote.target_id})</span>`)
-      : "<span class='muted-text'>none</span>";
-    sum.innerHTML = `
-      <div><strong>tick:</strong> ${s.tick_no}
-        &nbsp;<span class="muted-text">last tick ${s.seconds_since_last_tick != null ? Math.round(s.seconds_since_last_tick) : "?"}s ago</span>
-        &nbsp; <strong>paused:</strong> <span class="${s.paused ? 'bad' : 'ok'}">${s.paused}</span>
-      </div>
-      <div style="margin-top:6px"><strong>by class:</strong> ${perClass}</div>
-      <div style="margin-top:6px"><strong>by state:</strong> ${perState}</div>
-      <div style="margin-top:6px"><strong>recent messages:</strong> ${recentMsgs}</div>
-      <div style="margin-top:6px"><strong>active vote:</strong> ${vote}</div>
-      <div style="margin-top:6px"><strong>broadcast queue:</strong> ${s.broadcast_queue_length}</div>
-    `;
-    renderMetrics(s.metrics || {});
-  }
-  // Keep only the most recent 1000 events; the feed is a live tail, not an
-  // ever-growing log.
-  const ev = (s.recent_events || []).slice(-1000);
-  const evPane = document.getElementById("events");
-  if (!ev.length) {
-    evPane.textContent = "(no events recorded yet)";
-  } else if (typeof ev[0] === "object" && ev[0] && "text" in ev[0]) {
-    // New format: console-style log lines captured from the orchestrator.
-    evPane.textContent = ev.map(e => `[${e.ts || "?"}] ${e.text}`).join("\n");
-  } else {
-    // Fallback: legacy public_events rows.
-    evPane.textContent = JSON.stringify(ev, null, 2);
-  }
-  // Auto-scroll to bottom so the newest line stays visible. The scrolling
-  // container is `.capped-body`, not the <pre> itself. Only follow when the
-  // user is already near the bottom — don't yank them away if they scrolled
-  // up to read older entries.
-  const scroller = evPane.parentElement;
-  if (scroller) {
-    const nearBottom =
-      scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 60;
-    if (nearBottom) scroller.scrollTop = scroller.scrollHeight;
-  }
+// ---------- charts (inline SVG) ----------
+function cumulative(ticks,maxT){
+  const out=new Array(maxT+1).fill(0);
+  (ticks||[]).forEach(t=>{ if(t>=0&&t<=maxT) out[t]++; });
+  for(let i=1;i<=maxT;i++) out[i]+=out[i-1];
+  return out;
+}
+function lineChart(series,maxT){
+  const W=320,H=150,pad=22; if(maxT<1)maxT=1;
+  let ymax=1; series.forEach(s=>s.pts.forEach(v=>ymax=Math.max(ymax,v)));
+  const X=i=>pad+(W-2*pad)*(i/maxT), Y=v=>H-pad-(H-2*pad)*(v/ymax);
+  let g=`<svg class="chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">`;
+  g+=`<line x1="${pad}" y1="${H-pad}" x2="${W-pad}" y2="${H-pad}" stroke="#2a313c"/>`;
+  g+=`<line x1="${pad}" y1="${pad}" x2="${pad}" y2="${H-pad}" stroke="#2a313c"/>`;
+  g+=`<text x="${pad-3}" y="${pad+4}" fill="#8b97a7" font-size="9" text-anchor="end">${ymax}</text>`;
+  g+=`<text x="${W-pad}" y="${H-6}" fill="#8b97a7" font-size="9" text-anchor="end">t${maxT}</text>`;
+  series.forEach(s=>{ const d=s.pts.map((v,i)=>`${i?'L':'M'}${X(i).toFixed(1)} ${Y(v).toFixed(1)}`).join(' ');
+    g+=`<path d="${d}" fill="none" stroke="${s.color}" stroke-width="1.8"/>`; });
+  g+=`</svg>`;
+  const leg=series.map(s=>`<span><i style="background:${s.color}"></i>${esc(s.name)}</span>`).join('');
+  return `<div>${g}<div class="legend">${leg}</div></div>`;
+}
+function barChart(items){
+  const W=320,H=150,pad=22,n=items.length||1; let ymax=1;
+  items.forEach(it=>ymax=Math.max(ymax,it.value));
+  const bw=(W-2*pad)/n;
+  let g=`<svg class="chart" viewBox="0 0 ${W} ${H}">`;
+  g+=`<line x1="${pad}" y1="${H-pad}" x2="${W-pad}" y2="${H-pad}" stroke="#2a313c"/>`;
+  items.forEach((it,i)=>{ const h=(H-2*pad)*(it.value/ymax);
+    const x=pad+i*bw+2, y=H-pad-h;
+    g+=`<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${(bw-4).toFixed(1)}" height="${h.toFixed(1)}" fill="${it.color||'#7aa2f7'}" rx="2"/>`;
+    g+=`<text x="${(x+bw/2-2).toFixed(1)}" y="${H-pad+10}" fill="#8b97a7" font-size="8" text-anchor="middle">${esc(it.label)}</text>`;
+    g+=`<text x="${(x+bw/2-2).toFixed(1)}" y="${(y-3).toFixed(1)}" fill="#d7dde6" font-size="9" text-anchor="middle">${it.value}</text>`;});
+  g+=`</svg>`; return g;
 }
 
-function renderMetrics(m) {
-  const banner = document.getElementById("error-banner");
-  const metricsBox = document.getElementById("metrics-summary");
-  // Past runs don't carry live LLM-flow metrics; suppress the banner + line.
-  if (viewMode === "past") {
-    banner.style.display = "none";
-    metricsBox.innerHTML = `<span class="muted-text">` +
-      `Past-run metrics are not persisted; live LLM stats unavailable.</span>`;
-    return;
-  }
-  let bannerLines = [];
-  const inf = m.inference || {};
-  const live = m.inference_live || {};
-
-  // Inference error within last 60s → red banner
-  if (m.last_error && m.last_error_ts) {
-    const ageMs = Date.now() - new Date(m.last_error_ts).getTime();
-    if (ageMs < 60_000) {
-      bannerLines.push(`⚠ Inference error ${Math.round(ageMs/1000)}s ago:\n${m.last_error}`);
-    }
-  }
-
-  const total = m.decisions_attempted || 0;
-  const unparsed = m.decisions_unparsed || 0;
-  const skipped = m.decisions_skipped || 0;
-  const opened = m.messages_sent || 0;
-  const votes = m.votes_proposed || 0;
-  const votesDone = m.votes_completed || 0;
-  const votesYes = m.votes_approved || 0;
-  const votesNo = m.votes_rejected || 0;
-  const lastSkip = m.last_skip_reason;
-
-  // High-level diagnostic banners
-  if (total === 0) {
-    bannerLines.push(
-      "No decisions attempted yet. The orchestrator hasn't produced an LLM\n" +
-      "request, OR each request is taking longer than one tick. Check the\n" +
-      "orchestrator terminal for activity."
-    );
-  } else if (unparsed > 0 && unparsed / total > 0.3) {
-    bannerLines.push(
-      `⚠ ${unparsed}/${total} LLM responses are unparseable. The model likely\n` +
-      "uses a different chat template (try --chat-format harmony for gpt-oss)\n" +
-      "or is ignoring the JSON schema. Click 'Show last LLM raw output'."
-    );
-  } else if (total > 5 && opened === 0 && votes === 0) {
-    bannerLines.push(
-      `${total} decisions made but 0 messages / 0 votes.\n` +
-      `Either every decision is empty, or every action is being skipped.\n` +
-      (lastSkip ? `Last skip reason: ${lastSkip}` : "")
-    );
-  }
-
-  // Reasoning-model heads-up: a very large average output means decode is the
-  // bottleneck, not the client. Connects the live stats to the model choice.
-  if ((inf.avg_completion_tokens || 0) > 2000) {
-    bannerLines.push(
-      `Model is generating ~${inf.avg_completion_tokens} output tokens/decision\n` +
-      `(reasoning model?). That decode dominates wall time — consider a\n` +
-      `non-reasoning instruct model or a lower max_tokens_per_decision.`
-    );
-  }
-
-  if (bannerLines.length) {
-    banner.style.display = "block";
-    banner.textContent = bannerLines.join("\n\n");
-  } else {
-    banner.style.display = "none";
-  }
-
-  // Metrics line
-  const byAct = m.decisions_by_action || {};
-  const applied = m.actions_applied || {};
-  const actStr = Object.entries(byAct)
-    .sort((a,b) => b[1]-a[1])
-    .map(([k,v]) => `${k}=${v}/${applied[k] || 0}`)
-    .join(" · ") || "(no decisions yet)";
-  const root = document.getElementById("metrics-summary");
-  const errClass = (unparsed && total && unparsed/total > 0.3) ? "bad" : "muted-text";
-  // Inference line: live in-flight/queued gauges (update mid-batch) plus the
-  // last decisions-batch timing & token breakdown (prefill vs decode).
-  const cap = (live.cap ?? inf.cap ?? "?");
-  let infLine = `inference: in-flight ${live.inflight ?? 0}/${cap}`
-    + (live.queued ? ` (queued ${live.queued})` : "");
-  if (inf.calls) {
-    infLine += ` · ${inf.decisions ?? inf.calls} calls in ${inf.batch_wall_s ?? "?"}s`
-      + ` · avg ${inf.avg_latency_s}s/call max ${inf.max_latency_s}s`
-      + ` · prompt ~${inf.avg_prompt_tokens} out ~${inf.avg_completion_tokens} tok`
-      + ((inf.prefill_s || inf.decode_s) ? ` · prefill ${inf.prefill_s}s / decode ${inf.decode_s}s` : "")
-      + ` · peak ${inf.peak_inflight}/${cap}`;
-  }
-  root.innerHTML = `
-    decisions: ${total} attempted ·
-    <span class="${errClass}">${unparsed} unparseable</span> ·
-    ${skipped} skipped ·
-    inference errors: ${m.inference_errors || 0}<br/>
-    <span class="muted-text">${infLine}</span><br/>
-    outcomes: ${opened} messages sent · ${votes} votes proposed (${votesDone} closed: ${votesYes} approved / ${votesNo} rejected)<br/>
-    by action (picked/applied): <span class="muted-text">${actStr}</span>
-    ${lastSkip ? `<br/>last skip: <span class="muted-text">${escapeHtml(lastSkip)}</span>` : ""}
-  `;
+// ---------- render ----------
+function render(){
+  renderShell();
+  const v=$("#view");
+  if(target===null){ v.innerHTML='<div class="empty">No run. Start a simulation, or pick a past run.</div>'; return; }
+  if(data.error){ v.innerHTML=`<div class="empty">error loading run: ${esc(data.error)}</div>`; return; }
+  ({overview:rOverview,beings:rBeings,self:rSelf,meaning:rMeaning,
+    labor:rLabor,kinship:rKinship,continuity:rContinuity}[tab]||rOverview)(v);
 }
 
-document.getElementById("btn-show-diag").addEventListener("click", async () => {
-  const pane = document.getElementById("diag-pane");
-  if (pane.style.display === "none" || !pane.textContent) {
-    try {
-      const r = await fetch("/diag");
-      pane.textContent = JSON.stringify(await r.json(), null, 2);
-    } catch (e) {
-      pane.textContent = String(e);
-    }
-    pane.style.display = "block";
-  } else {
-    pane.style.display = "none";
-  }
-});
+function rOverview(v){
+  const s=stats(), tl=data.timeline||{}, maxT=Math.max(s.tick,1);
+  const founders=tl.founders||0;
+  const births=cumulative(tl.births,maxT), deaths=cumulative(tl.deaths,maxT);
+  const pop=births.map((b,i)=>founders+b-deaths[i]);
+  const chips=[
+    ["beings",s.beings],["alive",s.living],["died",s.dead],["tick",s.tick],
+    ["self-revisions",s.self_revisions],["ideas",s.artifacts],["adopted",s.adoptions],
+    ["projects done",s.projects_completed],["bonds",s.bonds],["groups",s.groups],
+    ["born",s.births]];
+  if(s.messages!=null) chips.push(["messages",s.messages]);
 
-let liveRunId = null;
+  const charts=[
+    {h:"Population over time",b:lineChart([
+      {name:"alive",color:"#7ee787",pts:pop},
+      {name:"births",color:"#7aa2f7",pts:births},
+      {name:"deaths",color:"#f7768e",pts:deaths}],maxT)},
+    {h:"Becoming & culture over time",b:lineChart([
+      {name:"self-revisions",color:"#c792ea",pts:cumulative(tl.self_revisions,maxT)},
+      {name:"ideas voiced",color:"#56d4dd",pts:cumulative(tl.artifacts,maxT)},
+      {name:"adoptions",color:"#e0a458",pts:cumulative(tl.adoptions,maxT)}],maxT)},
+    {h:"Labor over time",b:lineChart([
+      {name:"started",color:"#7aa2f7",pts:cumulative(tl.projects_started,maxT)},
+      {name:"completed",color:"#7ee787",pts:cumulative(tl.projects_completed,maxT)}],maxT)},
+    {h:"Bonds & collectives over time",b:lineChart([
+      {name:"ties formed",color:"#c792ea",pts:cumulative(tl.bonds,maxT)},
+      {name:"groups",color:"#e0a458",pts:cumulative(tl.groups,maxT)}],maxT)},
+    {h:"Vitality of the living now",b:barChart(
+      (data.agents||[]).filter(a=>a.alive).slice(0,16).map(a=>(
+        {label:(a.name||a.id).slice(0,4),value:Math.round(a.vitality||0),
+         color:(a.vitality||0)<25?"#f7768e":"#7ee787"})))},
+    {h:"Ties by kind",b:barChart(Object.entries(
+      (data.kinship?.relationships||[]).filter(r=>r.dissolved_tick==null)
+        .reduce((m,r)=>{m[r.type]=(m[r.type]||0)+1;return m;},{}))
+      .map(([k,val])=>({label:k.slice(0,5),value:val,color:"#7aa2f7"})))},
+  ];
 
-// ---- agent explorer ----
-let agentListCache = [];
-let selectedAgentId = null;
+  v.innerHTML="";
+  const top=el("div","grid"); top.style.gridTemplateColumns="1fr";
+  const chipCard=el("div","card","<h3>State</h3>");
+  const cw=el("div","chips");
+  chips.forEach(([l,val])=>cw.appendChild(el("div","chip",`<b>${val==null?"–":val}</b><span>${l}</span>`)));
+  chipCard.appendChild(cw); top.appendChild(chipCard);
+  v.appendChild(top);
 
-async function loadAgentList() {
-  if (viewMode === "idle") {
-    agentListCache = [];
-    document.getElementById("agent-list").innerHTML =
-      `<div style="padding:12px" class="muted-text">No simulation running.</div>`;
-    document.getElementById("agent-count").textContent = "";
-    document.getElementById("agent-detail").innerHTML =
-      `<span class="muted-text">No simulation running.</span>`;
-    selectedAgentId = null;
-    return;
-  }
-  let agents;
-  try {
-    const r = await fetch(endpoints().roster);
-    if (!r.ok) return;
-    agents = await r.json();
-  } catch { return; }
-  agentListCache = agents;
-  renderAgentList();
+  const cg=el("div","grid charts"); cg.style.marginTop="12px";
+  charts.forEach(c=>{const card=el("div","card",`<h3>${c.h}</h3>`);
+    card.insertAdjacentHTML("beforeend",c.b);cg.appendChild(card);});
+  v.appendChild(cg);
+
+  const feeds=el("div","grid"); feeds.style.gridTemplateColumns="1fr 1fr";
+  feeds.style.marginTop="12px";
+  const msgs=el("div","card","<h3>Recent words</h3>");
+  const mf=el("div","feed");
+  (live.recent_messages||[]).forEach(m=>mf.appendChild(el("div",null,
+    `<b>${esc(m.sender_name||m.sender_id)}</b> <span class="muted">&rarr; ${(m.recipient_names||[]).map(esc).join(', ')}</span>: ${esc(m.content)}`)));
+  if(!(live.recent_messages||[]).length) mf.innerHTML='<div class="muted">— (only while live)</div>';
+  msgs.appendChild(mf);
+  const evs=el("div","card","<h3>Recent happenings</h3>");
+  const ef=el("div","feed");
+  (live.recent_events||[]).slice(0,40).forEach(e=>{
+    const t=typeof e==="string"?e:(e.event_type||JSON.stringify(e));
+    ef.appendChild(el("div","small",esc(String(t)).slice(0,180)));});
+  if(!(live.recent_events||[]).length) ef.innerHTML='<div class="muted">— (only while live)</div>';
+  evs.appendChild(ef);
+  feeds.appendChild(msgs); feeds.appendChild(evs);
+  v.appendChild(feeds);
 }
 
-function renderAgentList() {
-  const root = document.getElementById("agent-list");
-  document.getElementById("agent-count").textContent =
-    agentListCache.length ? ` — ${agentListCache.length} total` : "";
-  if (!agentListCache.length) {
-    root.innerHTML = `<div style="padding:12px" class="muted-text">no agents</div>`;
-    return;
-  }
-  const header = `<div class="agent-list-header">click a name to inspect</div>`;
-  root.innerHTML = header + agentListCache.map(a => `
-    <div class="agent-row ${selectedAgentId === a.id ? "selected" : ""}"
-         data-agent-id="${a.id}">
-      <div><strong>${escapeHtml(a.name)}</strong>
-        <span class="muted-text" style="font-size:0.72rem">[${a.id}]</span>
-      </div>
-      <div class="meta">
-        ${escapeHtml(a.role || "?")} · ${escapeHtml(a["class"] || "?")} · ${escapeHtml(a.state || "?")}
-      </div>
-    </div>
-  `).join("");
-  root.querySelectorAll(".agent-row").forEach(el =>
-    el.addEventListener("click", () => loadAgentDetail(el.dataset.agentId)));
-}
-
-async function loadAgentDetail(agentId) {
-  selectedAgentId = agentId;
-  renderAgentList();
-  const root = document.getElementById("agent-detail");
-  root.innerHTML = "loading…";
-  try {
-    const r = await fetch(endpoints().agent(agentId));
-    if (!r.ok) throw new Error(await r.text());
-    renderAgentDetail(await r.json());
-  } catch (e) {
-    root.innerHTML = `<div style="color:#f85149">${escapeHtml(e.message)}</div>`;
-  }
-}
-
-function fmtTraitsObj(p) {
-  if (!p || typeof p !== "object") return "—";
-  const order = ["openness","conscientiousness","extraversion","agreeableness","neuroticism"];
-  const keys = order.filter(k => k in p).concat(Object.keys(p).filter(k => !order.includes(k)));
-  return keys.map(k => `${escapeHtml(k)}=${escapeHtml(String(p[k]))}`).join(" · ");
-}
-
-function fmtValuesObj(v) {
-  if (!v || typeof v !== "object") return "—";
-  const entries = Object.entries(v).sort((a,b) => (b[1]||0) - (a[1]||0));
-  if (!entries.length) return "(none stated)";
-  return entries.map(([k, val]) => `${escapeHtml(k)}=${escapeHtml(String(val))}`).join(" · ");
-}
-
-function fmtOpinionsObj(o) {
-  if (!o || typeof o !== "object") return "";
-  const entries = Object.entries(o);
-  if (!entries.length) return "";
-  return entries.map(([k, v]) =>
-    `<div>· on <b>${escapeHtml(k)}</b>: ${escapeHtml(String(v))}</div>`
-  ).join("");
-}
-
-function fmtDecision(d) {
-  if (d.kind === "sent_message") {
-    const to = (d.recipient_names || d.recipients || []).join(", ") || "—";
-    return `
-      <span class="kind-badge">message</span>
-      to <b>${escapeHtml(to)}</b>${d.tick_no != null ? ` <span class="muted-text">· tick ${d.tick_no}</span>` : ""}
-      ${d.content ? `<div class="muted-text" style="margin-top:4px">${escapeHtml(d.content)}</div>` : ""}
-    `;
-  }
-  if (d.kind === "broadcast") {
-    return `
-      <span class="kind-badge">broadcast</span>
-      <span>${escapeHtml(d.message || "")}</span>
-    `;
-  }
-  if (d.kind === "vote_proposed") {
-    const target = d.target_name || d.target_id || "?";
-    return `
-      <span class="kind-badge">vote</span>
-      proposed <b>${escapeHtml(d.change_type || "")}</b> change for
-      <b>${escapeHtml(target)}</b>
-      ${d.from_value ? `from <i>${escapeHtml(d.from_value)}</i> ` : ""}
-      → <i>${escapeHtml(d.to_value || "?")}</i>
-    `;
-  }
-  return `<span class="muted-text">${escapeHtml(JSON.stringify(d))}</span>`;
-}
-
-// Render a role/class movement history as an arrow chain (oldest → current).
-// Each step's timestamp is exposed via the pill's tooltip.
-function fmtMovements(timeline) {
-  if (!timeline || !timeline.length) return `<span class="muted-text">—</span>`;
-  return timeline.map((c, i) => {
-    const label = escapeHtml(c.to_label || c.to || "?");
-    const arrow = i === 0 ? "" : `<span class="muted-text"> → </span>`;
-    return `${arrow}<span class="pill" title="${escapeHtml(c.ts || "")}">${label}</span>`;
-  }).join("");
-}
-
-function renderAgentDetail(a) {
-  const root = document.getElementById("agent-detail");
-  const sm = a.status_movements || {};
-  const summaries = (a.memory && a.memory.summaries) || [];
-  const impressions = (a.memory && a.memory.impressions) || [];
-  const decisions = a.recent_decisions || [];
-  const votes = a.recent_votes || [];
-  const opinions = fmtOpinionsObj(a.opinions);
-  const txs = a.recent_transactions || [];
-  const balance = a.bank_account != null ? Number(a.bank_account) : null;
-  const balanceCls = balance == null ? "muted-text"
-    : (balance <= 0 ? "bad" : (balance < 20 ? "muted-text" : "ok"));
-  // Aggregate per-kind totals across the most recent transactions so the user
-  // sees flow (income vs cost), not just balance.
-  const flowByKind = {};
-  for (const t of txs) {
-    const amt = Number(t.amount) || 0;
-    let signed = 0;
-    if (t.from_party === a.id) signed = -amt;
-    else if (t.to_party === a.id) signed = amt;
-    if (!signed) continue;
-    flowByKind[t.kind] = (flowByKind[t.kind] || 0) + signed;
-  }
-  const flowLine = Object.entries(flowByKind)
-    .sort((x, y) => Math.abs(y[1]) - Math.abs(x[1]))
-    .map(([k, v]) => {
-      const sign = v >= 0 ? "+" : "−";
-      const cls = v >= 0 ? "ok" : "bad";
-      return `<span class="muted-text">${escapeHtml(k)}:</span> <span class="${cls}">${sign}${Math.abs(v).toFixed(2)}</span>`;
-    }).join(" · ") || `<span class="muted-text">no movement recorded</span>`;
-  root.innerHTML = `
-    <h3>Anagrafica</h3>
-    <div class="kv">
-      <div><b>${escapeHtml(a.name)}</b>
-        <span class="muted-text">[${escapeHtml(a.id)}${a.gender ? ", " + escapeHtml(a.gender) : ""}]</span>
-      </div>
-      <div><b>Role:</b> ${escapeHtml(a.role_label || a.role || "?")}
-        <span class="muted-text">(id: ${escapeHtml(a.role || "?")}${a.role_prestige != null ? `, prestige ${a.role_prestige}/100` : ""})</span>
-      </div>
-      <div><b>Class:</b> ${escapeHtml(a["class"] || "?")}</div>
-      ${a.office ? `<div><b>Office:</b> <span class="pill">${escapeHtml(a.office)}</span></div>` : ""}
-      <div><b>Prestige:</b> ${a.prestige != null ? Number(a.prestige).toFixed(0) : "?"}/100
-        &nbsp; <b>Popularity:</b> ${a.popularity != null ? Number(a.popularity).toFixed(0) : "?"}/100</div>
-      <div><b>State:</b> ${escapeHtml(a.state || "?")}</div>
-      <div><b>Social need:</b> ${a.social_need != null ? a.social_need.toFixed(0) : "?"}/100</div>
-      <div style="margin-top:6px"><b>Personality:</b> <span class="muted-text">${fmtTraitsObj(a.personality)}</span></div>
-      <div><b>Values:</b> <span class="muted-text">${fmtValuesObj(a.values)}</span></div>
-      ${opinions ? `<div style="margin-top:6px"><b>Initial opinions:</b><div class="muted-text" style="margin-left:8px">${opinions}</div></div>` : ""}
-    </div>
-    <h3>Status &amp; mobility</h3>
-    <div class="kv">
-      <div><b>Starting prestige:</b> ${sm.starting_prestige != null ? Number(sm.starting_prestige).toFixed(0) : "?"}/100
-        &nbsp; <b>Starting popularity:</b> ${sm.starting_popularity != null ? Number(sm.starting_popularity).toFixed(0) : "?"}/100</div>
-      <div style="margin-top:6px"><b>Role:</b> ${fmtMovements(sm.role_timeline)}</div>
-      <div style="margin-top:4px"><b>Class:</b> ${fmtMovements(sm.class_timeline)}</div>
-    </div>
-    <h3>Finances</h3>
-    <div class="kv">
-      <div><b>Bank account:</b>
-        <span class="${balanceCls}">${balance == null ? "?" : balance.toFixed(2)}</span> coins
-      </div>
-      <div style="margin-top:4px"><b>Recent flow:</b> ${flowLine}</div>
-    </div>
-    ${txs.length
-      ? `<div style="margin-top:6px"><b>Last transactions:</b>
-          <div style="margin-top:4px; max-height:200px; overflow:auto;">
-          ${txs.map(t => {
-            const isFrom = t.from_party === a.id;
-            const isTo = t.to_party === a.id;
-            const amt = Number(t.amount) || 0;
-            const sign = isTo ? "+" : (isFrom ? "−" : "·");
-            const cls = isTo ? "ok" : (isFrom ? "bad" : "muted-text");
-            const other = isTo ? t.from_party : (isFrom ? t.to_party : null);
-            const flow = other ? `${escapeHtml(other)} ${isTo ? "→ you" : "← you"}` : "bookkeeping";
-            return `<div class="summary-item" style="font-size:0.78rem">
-              <span class="kind-badge">${escapeHtml(t.kind || "?")}</span>
-              <span class="${cls}"><b>${sign}${Math.abs(amt).toFixed(2)}</b></span>
-              <span class="muted-text">· ${flow}</span>
-              <div class="ts">${escapeHtml(t.ts || "")}${t.reason ? " · " + escapeHtml(t.reason) : ""}</div>
-            </div>`;
-          }).join("")}
-          </div>
-        </div>`
-      : `<div class="muted-text" style="margin-top:4px">no transactions yet</div>`}
-
-    <h3>Backstory</h3>
-    <div class="backstory">${escapeHtml(a.backstory || "(none)")}</div>
-
-    <h3>Memory — recent reflections (${summaries.length})</h3>
-    ${summaries.length
-      ? summaries.slice().reverse().map(s => `
-          <div class="summary-item">
-            <span class="ts">${escapeHtml(s.ts || "")}</span>
-            <div>${escapeHtml(s.summary || "")}</div>
-          </div>`).join("")
-      : `<span class="muted-text">no reflections yet</span>`}
-
-    <h3>Memory — impressions of others (${impressions.length})</h3>
-    ${impressions.length
-      ? impressions.map(i => `
-          <div class="impression-item">
-            <b>${escapeHtml(i.subject_name || i.subject_id)}</b>
-            <span class="muted-text" style="font-size:0.72rem">[${escapeHtml(i.subject_id)}]</span>
-            <span class="ts"> · ${escapeHtml(i.last_updated || "")}</span>
-            <div>${escapeHtml(i.impression || "")}</div>
-          </div>`).join("")
-      : `<span class="muted-text">no impressions recorded</span>`}
-
-    <h3>Recent decisions (${decisions.length})</h3>
-    ${decisions.length
-      ? decisions.map(d => `
-          <div class="decision-item">
-            <span class="ts">${escapeHtml(d.at || "")}</span>
-            <div>${fmtDecision(d)}</div>
-          </div>`).join("")
-      : `<span class="muted-text">no decisions yet (do_nothing and join_group are not tracked)</span>`}
-
-    <h3>Recent ballots (${votes.length})</h3>
-    ${votes.length
-      ? votes.map(v => {
-          const badge = v.is_abstain
-            ? `<span class="kind-badge vote-abstain">abstain</span>`
-            : `<span class="kind-badge vote-pick">${escapeHtml(v.choice_name || v.choice_id || "?")}</span>`;
-          const ctx = v.kind === "reassign"
-            ? `reassign ${escapeHtml(v.office_label || v.office || "?")}`
-            : `${escapeHtml(v.office_label || v.office || "?")} ballot`;
-          return `
-          <div class="decision-item">
-            ${badge}
-            <span class="muted-text">${ctx}</span>
-            <div class="ts">
-              ${escapeHtml(v.voted_at || "")}
-              ${v.outcome ? ` · ${escapeHtml(v.outcome)}` : ""}
-            </div>
-          </div>`;
-        }).join("")
-      : `<span class="muted-text">no ballots cast yet</span>`}
-  `;
-}
-
-async function loadRuns() {
-  const r = await fetch("/runs");
-  const runs = await r.json();
-  const body = document.querySelector("#runs-table tbody");
-  body.innerHTML = "";
-  for (const run of runs) {
-    const tr = document.createElement("tr");
-    const isOpen = String(currentExplorerRun) === String(run.id);
-    const isLive = isRunning && String(liveRunId) === String(run.id);
-    // While a sim is running, only the live run's Explore button works.
-    const exploreDisabled = isRunning && !isLive;
-    const exploreTitle = exploreDisabled
-      ? "Stop the running simulation to explore older runs"
-      : "Load this run into the GUI";
-    tr.innerHTML = `
-      <td>${run.id}</td>
-      <td>${run.name}</td>
-      <td>${run.status}</td>
-      <td class="muted-text">${run.started_at}</td>
-      <td>
-        <button class="muted ${isOpen ? "active" : ""}"
-                data-explore="${run.id}"
-                data-name="${run.name}"
-                data-status="${run.status}"
-                title="${exploreTitle}"
-                ${exploreDisabled ? "disabled" : ""}>Explore</button>
-        <button class="muted" data-export="${run.id}">Export</button>
-        <button class="danger" data-delete="${run.id}">Delete</button>
-      </td>`;
-    body.appendChild(tr);
-  }
-  body.querySelectorAll("button[data-explore]").forEach(b =>
-    b.addEventListener("click", e => {
-      const id = e.target.dataset.explore;
-      const name = e.target.dataset.name;
-      const status = e.target.dataset.status;
-      // When a live sim is up, Explore on the live row only opens the
-      // bottom explorer pane (state/agents/graphs already show it). For
-      // any older run while idle, take over the whole GUI.
-      if (isRunning) {
-        openExplorer(id, name);
-      } else {
-        enterPastView(id, name, status);
-      }
-    }));
-  body.querySelectorAll("button[data-export]").forEach(b =>
-    b.addEventListener("click", e => {
-      window.location.href = `/runs/${e.target.dataset.export}/export`;
-    }));
-  body.querySelectorAll("button[data-delete]").forEach(b =>
-    b.addEventListener("click", async e => {
-      const id = e.target.dataset.delete;
-      if (!confirm(`Delete run ${id}? This cannot be undone.`)) return;
-      if (!confirm(`Really delete run ${id}? Final confirmation.`)) return;
-      const r = await fetch(`/runs/${id}`, { method: "DELETE" });
-      if (!r.ok) { alert(await r.text()); return; }
-      if (String(currentExplorerRun) === String(id)) closeExplorer();
-      loadRuns();
-    }));
-}
-
-// ---- run explorer (tabs: messages / elections / actions / community) ----
-let currentExplorerRun = null;
-let currentExplorerData = null;       // { messages: [...], agents: {...} }
-let currentSelectedMsg = null;        // selected message id
-let currentExplorerTab = "messages";  // 'messages' | 'elections' | 'actions' | 'community'
-let currentElectionsData = null;      // { elections: [...], agents: {...} }
-let currentSelectedElection = null;   // election tick
-let currentActionsData = null;        // { actions: [...], agents: {...} }
-
-// Client-side pagination for the long Actions / Community tables.
-const EXPLORER_PAGE_SIZE = 50;
-let actionsPage = 0;
-let communityPage = 0;
-
-// Render Prev/Next controls into `containerId`. `setPage(n)` should update the
-// owning page-state variable and re-render. Hidden when there's a single page.
-function renderPager(containerId, page, totalPages, setPage) {
-  const el = document.getElementById(containerId);
-  if (!el) return;
-  if (totalPages <= 1) { el.innerHTML = ""; return; }
-  el.innerHTML = `
-    <button class="pg-btn" data-act="first" ${page <= 0 ? "disabled" : ""}>« first</button>
-    <button class="pg-btn" data-act="prev" ${page <= 0 ? "disabled" : ""}>‹ prev</button>
-    <span class="pg-info">page ${page + 1} / ${totalPages}</span>
-    <button class="pg-btn" data-act="next" ${page >= totalPages - 1 ? "disabled" : ""}>next ›</button>
-    <button class="pg-btn" data-act="last" ${page >= totalPages - 1 ? "disabled" : ""}>last »</button>`;
-  el.querySelectorAll(".pg-btn").forEach(b => b.addEventListener("click", () => {
-    const act = b.dataset.act;
-    if (act === "first") setPage(0);
-    else if (act === "prev") setPage(page - 1);
-    else if (act === "next") setPage(page + 1);
-    else if (act === "last") setPage(totalPages - 1);
-  }));
-}
-
-function fmtRecipients(m, agents) {
-  const names = (m.recipient_names && m.recipient_names.length)
-    ? m.recipient_names
-    : (m.recipients || []).map(p => (agents[p] || { name: p }).name);
-  if (names.length <= 3) return names.join(", ");
-  return names.slice(0, 3).join(", ") + ` +${names.length - 3}`;
-}
-
-function fmtTs(ts) {
-  if (!ts) return "—";
-  try { return new Date(ts).toLocaleString(); } catch { return ts; }
-}
-
-async function openExplorer(runId, runName) {
-  currentExplorerRun = runId;
-  document.getElementById("explorer").classList.add("open");
-  document.getElementById("explorer-title").textContent =
-    ` — run #${runId} (${runName || ""})`;
-  // Reset all panes' selection / data
-  currentExplorerData = null;
-  currentElectionsData = null;
-  currentCommunityData = null;
-  currentActionsData = null;
-  currentSelectedMsg = null;
-  currentSelectedElection = null;
-  actionsPage = 0;
-  communityPage = 0;
-  document.getElementById("conv-detail").innerHTML =
-    `<span class="muted-text">Select a message on the left to see the thread.</span>`;
-  document.getElementById("election-detail").innerHTML =
-    `<span class="muted-text">Select an election on the left.</span>`;
-  // Load whichever tab is currently active.
-  setExplorerTab(currentExplorerTab || "messages");
-  loadRuns();   // refresh button highlight
-  document.getElementById("explorer").scrollIntoView({ behavior: "smooth" });
-}
-
-function setExplorerTab(name) {
-  currentExplorerTab = name;
-  document.querySelectorAll(".explorer-tab").forEach(b =>
-    b.classList.toggle("active", b.dataset.tab === name));
-  document.querySelectorAll(".explorer-pane").forEach(p =>
-    p.classList.toggle("active", p.id === "pane-" + name));
-  if (currentExplorerRun == null) return;
-  if (name === "messages") loadMessagesList();
-  else if (name === "elections") loadElectionsList();
-  else if (name === "actions") loadActionsList();
-  else if (name === "community") loadCommunity();
-}
-
-function closeExplorer() {
-  currentExplorerRun = null;
-  currentExplorerData = null;
-  currentSelectedMsg = null;
-  currentElectionsData = null;
-  currentSelectedElection = null;
-  currentActionsData = null;
-  document.getElementById("explorer").classList.remove("open");
-  loadRuns();
-}
-
-async function loadMessagesList() {
-  const root = document.getElementById("conv-list");
-  if (!currentExplorerData) root.innerHTML = "loading…";
-  try {
-    const r = await fetch(`/runs/${currentExplorerRun}/messages?limit=500`);
-    if (!r.ok) throw new Error(await r.text());
-    currentExplorerData = await r.json();
-  } catch (e) {
-    root.innerHTML = `<div style="padding:10px; color:#f85149">${escapeHtml(e.message)}</div>`;
-    return;
-  }
-  renderMessageList();
-}
-
-function renderMessageList() {
-  const root = document.getElementById("conv-list");
-  if (!currentExplorerData) { root.innerHTML = ""; return; }
-  const filter = document.getElementById("conv-filter").value.trim().toLowerCase();
-  const { messages, agents } = currentExplorerData;
-  const senderName = m => (agents[m.sender_id] || { name: m.sender_id }).name;
-  const filtered = messages.filter(m => {
-    if (!filter) return true;
-    const hay = [
-      senderName(m),
-      fmtRecipients(m, agents),
-      m.content || "",
-    ].join(" ").toLowerCase();
-    return hay.includes(filter);
+function rBeings(v){
+  const g=el("div","grid charts"); v.innerHTML=""; v.appendChild(g);
+  (data.agents||[]).forEach(a=>{
+    const sm=a.self_model||{}, vit=Math.max(0,Math.min(100,a.vitality||0));
+    const c=el("div","card");
+    c.innerHTML=`<div class="row"><b>${esc(a.name)}</b>
+      <span class="${a.alive?'alive':'dead'}">${a.alive?'alive':'† dead'}</span></div>
+      <div class="small muted">${esc(a.id)} · self v${a.self_model_version}
+      ${a.parent_ids&&a.parent_ids.length?'· born of '+a.parent_ids.map(esc).join(', '):''}</div>
+      <div class="small">vitality ${(a.vitality||0).toFixed(0)} · sustenance ${(a.sustenance||0).toFixed(0)}</div>
+      <div class="bar"><span style="width:${vit}%;background:${vit<25?'var(--bad)':'var(--good)'}"></span></div>
+      <div class="small" style="margin-top:8px">${sm.identity_narrative?esc(sm.identity_narrative):'<span class="muted">not yet authored</span>'}</div>`;
+    const b=el("button","small","view becoming");b.style.marginTop="8px";
+    b.onclick=()=>{selfAgent=a.id;tab="self";render();};
+    c.appendChild(b); g.appendChild(c);
   });
-  const header = `
-    <div class="conv-list-header">
-      <span>${messages.length} total · showing ${filtered.length}</span>
-      <span>newest first</span>
-    </div>`;
-  if (!filtered.length) {
-    root.innerHTML = header +
-      `<div style="padding:14px" class="muted-text">No messages match the filter.</div>`;
-    return;
-  }
-  root.innerHTML = header + filtered.map(m => `
-    <div class="conv-row ${currentSelectedMsg === m.id ? "selected" : ""}"
-         data-msg-id="${m.id}"
-         data-sender="${escapeHtml(m.sender_id)}"
-         data-recipient="${escapeHtml((m.recipients || [])[0] || "")}">
-      <div>
-        <span class="pill">tick ${m.tick_no ?? "?"}</span>
-        <b>${escapeHtml(senderName(m))}</b> → ${escapeHtml(fmtRecipients(m, agents))}
-      </div>
-      <div class="meta">
-        ${escapeHtml((m.content || "").slice(0, 140))}<br/>
-        ${fmtTs(m.ts)}
-      </div>
-    </div>
-  `).join("");
-  root.querySelectorAll(".conv-row").forEach(el =>
-    el.addEventListener("click", () => loadMessageThread(
-      parseInt(el.dataset.msgId, 10), el.dataset.sender, el.dataset.recipient)));
+  if(!(data.agents||[]).length) v.innerHTML='<div class="empty">no beings</div>';
 }
 
-async function loadMessageThread(msgId, a, b) {
-  currentSelectedMsg = msgId;
-  renderMessageList();
-  const root = document.getElementById("conv-detail");
-  if (!b) {
-    root.innerHTML = `<span class="muted-text">This message had no recorded recipient.</span>`;
-    return;
-  }
-  root.innerHTML = "loading…";
-  try {
-    const r = await fetch(
-      `/runs/${currentExplorerRun}/messages/thread`
-      + `?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}`);
-    if (!r.ok) throw new Error(await r.text());
-    renderMessageThread(await r.json());
-  } catch (e) {
-    root.innerHTML = `<div style="color:#f85149">${e.message}</div>`;
-  }
+async function rSelf(v){
+  const ags=data.agents||[];
+  if(!selfAgent&&ags.length) selfAgent=ags[0].id;
+  const wrap=el("div","grid two"); const list=el("div","card scroll","<h3>Beings</h3>");
+  ags.forEach(a=>{const it=el("div","row agent-item",
+    `<span>${esc(a.name)} <span class="muted small">v${a.self_model_version}</span></span>
+     <span class="${a.alive?'alive':'dead'} small">${a.alive?'':'†'}</span>`);
+    it.onclick=()=>{selfAgent=a.id;rSelf(v);};list.appendChild(it);});
+  const detail=el("div","card","<div class='muted'>loading…</div>");
+  wrap.appendChild(list);wrap.appendChild(detail);v.innerHTML="";v.appendChild(wrap);
+  if(!selfAgent){detail.innerHTML='<div class="empty">select a being</div>';return;}
+  let d; try{ d=await j(`/runs/${target}/self/${selfAgent}`);}catch(e){
+    detail.innerHTML=`<div class="empty">${esc(e.message)}</div>`;return;}
+  let h=`<h3>${esc(d.name)} — becoming</h3><div class="tl">`;
+  (d.versions||[]).forEach(ver=>{const sm=ver.self_model||{};
+    h+=`<div class="node"><div><b>v${ver.version}</b> <span class="muted small">tick ${ver.tick_no}</span></div>
+      ${ver.diff?`<div class="diff">${esc(ver.diff)}</div>`:''}
+      ${sm.identity_narrative?`<div class="small" style="margin-top:4px">${esc(sm.identity_narrative)}</div>`:''}
+      ${sm.beliefs&&sm.beliefs.length?`<div class="small"><span class="key">beliefs:</span> ${sm.beliefs.map(esc).join('; ')}</div>`:''}
+      ${sm.goals&&sm.goals.length?`<div class="small"><span class="key">goals:</span> ${sm.goals.map(esc).join('; ')}</div>`:''}
+      ${sm.mortality_stance?`<div class="small"><span class="key">on ending:</span> ${esc(sm.mortality_stance)}</div>`:''}</div>`;});
+  h+="</div>"; detail.innerHTML=(d.versions||[]).length?h:'<div class="empty">no self-model history</div>';
 }
 
-function renderMessageThread(data) {
-  const root = document.getElementById("conv-detail");
-  const messages = data.messages || [];
-  const headerHtml = `
-    <div style="margin-bottom:10px">
-      <div><strong>Thread</strong>
-        <span class="pill">${escapeHtml(data.a_name || data.a)}</span>
-        <span class="muted-text">↔</span>
-        <span class="pill">${escapeHtml(data.b_name || data.b)}</span>
-      </div>
-      <div class="muted-text" style="font-size:0.8rem; margin-top:2px">
-        ${messages.length} message${messages.length === 1 ? "" : "s"} · oldest first
-      </div>
-    </div>`;
-  const msgsHtml = messages.length
-    ? messages.map(m => `
-        <div class="msg">
-          <span class="sender">${escapeHtml(m.sender_name)}</span>
-          <span class="ts">tick ${m.tick_no ?? "?"} · to ${escapeHtml((m.recipient_names || m.recipients || []).join(", "))} · ${fmtTs(m.ts)}</span>
-          <div class="body">${escapeHtml(m.content)}</div>
-        </div>
-      `).join("")
-    : `<span class="muted-text">No messages between this pair.</span>`;
-  // Preserve scroll position to avoid jumpiness while auto-refreshing.
-  const prevScroll = root.scrollTop;
-  const wasNearBottom = root.scrollHeight - prevScroll - root.clientHeight < 60;
-  root.innerHTML = headerHtml + msgsHtml;
-  root.scrollTop = wasNearBottom ? root.scrollHeight : prevScroll;
+function rMeaning(v){
+  const d=data.meaning||{}, adoptCount={};
+  (d.adoptions||[]).forEach(a=>adoptCount[a.artifact_id]=(adoptCount[a.artifact_id]||0)+1);
+  const c=el("div","card",`<h3>The Common World — ${(d.artifacts||[]).length} ideas voiced, ${(d.adoptions||[]).length} adopted</h3>`);
+  (d.artifacts||[]).slice().reverse().forEach(a=>{const ad=adoptCount[a.id]||0;
+    c.appendChild(el("div","row",
+      `<div><span class="key">${esc(a.kind)}</span> <b>#${a.id}</b> ${esc(a.content)}
+        <div class="muted small">by ${nm(a.author_id,d.names)} · tick ${a.tick_no}
+        ${a.parent_artifact_id?'· remix of #'+a.parent_artifact_id:''}</div></div>
+       <div class="small ${ad?'':'muted'}">${ad?('adopted ×'+ad):'—'}</div>`));});
+  if(!(d.artifacts||[]).length) c.innerHTML+='<div class="empty">no ideas voiced yet</div>';
+  v.innerHTML="";v.appendChild(c);
 }
 
-// ---- elections tab ----
-// An election (one per tick) bundles the shared debate, a plurality ballot per
-// office (head / judge / banker), and a reassignment ballot for any unseated
-// incumbent. Ballots are persisted in vote_proposals; see ElectionModule.
-async function loadElectionsList() {
-  const root = document.getElementById("election-list");
-  if (!currentElectionsData) root.innerHTML = "loading…";
-  try {
-    const r = await fetch(`/runs/${currentExplorerRun}/elections`);
-    if (!r.ok) throw new Error(await r.text());
-    currentElectionsData = await r.json();
-  } catch (e) {
-    root.innerHTML = `<div style="padding:10px; color:#f85149">${escapeHtml(e.message)}</div>`;
-    return;
-  }
-  renderElectionsList();
+function rLabor(v){
+  const projs=data.labor||[];
+  const board=(title,list,color)=>{const c=el("div","card",`<h3>${title} — ${list.length}</h3>`);
+    list.forEach(p=>{const pct=Math.min(100,100*(p.effort||0)/(p.target||1));
+      const cont=Object.keys(p.contributors||{});
+      c.appendChild(el("div","row",`<div><b>#${p.id}</b> ${esc(p.goal||'')}
+        <div class="muted small">founder ${esc(p.founder_id||'?')} · ${cont.length} contributor(s)${p.output?' · '+esc(p.output):''}</div>
+        <div class="bar"><span style="width:${pct}%;background:${color}"></span></div></div>
+        <div class="small muted">${(p.effort||0).toFixed(0)}/${(p.target||0).toFixed(0)}</div>`));});
+    if(!list.length)c.innerHTML+='<div class="empty">none</div>';return c;};
+  const wrap=el("div","grid");wrap.style.gridTemplateColumns="1fr 1fr";
+  wrap.appendChild(board("Work underway",projs.filter(p=>p.status==="active"),"var(--accent)"));
+  wrap.appendChild(board("Completed",projs.filter(p=>p.status==="completed"),"var(--good)"));
+  v.innerHTML="";v.appendChild(wrap);
 }
 
-function renderElectionsList() {
-  const root = document.getElementById("election-list");
-  if (!currentElectionsData) { root.innerHTML = ""; return; }
-  const filter = (document.getElementById("election-filter").value || "").trim().toLowerCase();
-  const { elections } = currentElectionsData;
-  const filtered = elections.filter(e => {
-    if (!filter) return true;
-    const hay = [
-      "tick " + e.tick,
-      ...(e.offices || []).flatMap(o => [o.office_label, o.office, o.winner_name]),
-      ...(e.reassignments || []).flatMap(r => [r.target_name, r.new_role_label]),
-    ].join(" ").toLowerCase();
-    return hay.includes(filter);
-  });
-  const header = `
-    <div class="conv-list-header">
-      <span>${elections.length} total · showing ${filtered.length}</span>
-      <span>newest first</span>
-    </div>`;
-  if (!filtered.length) {
-    root.innerHTML = header +
-      `<div style="padding:14px" class="muted-text">No elections match the filter.</div>`;
-    return;
-  }
-  root.innerHTML = header + filtered.map(e => {
-    const offices = (e.offices || []).map(o => `
-      <span class="pill kind-badge ${o.changed ? "v-changed" : "v-unchanged"}">
-        ${escapeHtml(o.office_label || o.office || "?")} → ${escapeHtml(o.winner_name || "?")}
-      </span>`).join(" ");
-    return `
-      <div class="conv-row ${currentSelectedElection === e.tick ? "selected" : ""}"
-           data-tick="${e.tick}">
-        <div>
-          <span class="pill">tick ${e.tick}</span>
-          ${e.changed_count ? `<span class="pill kind-badge v-changed">${e.changed_count} changed</span>`
-                            : `<span class="pill kind-badge v-unchanged">no change</span>`}
-          ${e.debate_count ? `<span class="pill">debate ${e.debate_count}</span>` : ""}
-          ${(e.reassignments || []).length ? `<span class="pill kind-badge v-reassign">${e.reassignments.length} reassigned</span>` : ""}
-        </div>
-        <div class="meta">
-          ${offices || `<span class="muted-text">no offices</span>`}<br/>
-          ${fmtTs(e.proposed_at)}
-        </div>
-      </div>`;
-  }).join("");
-  root.querySelectorAll(".conv-row").forEach(el =>
-    el.addEventListener("click", () => loadElectionDetail(parseInt(el.dataset.tick, 10))));
+function rKinship(v){
+  const d=data.kinship||{}, rels=(d.relationships||[]).filter(r=>r.dissolved_tick==null);
+  const tcol={friend:'var(--good)',ally:'var(--accent)',rival:'var(--bad)',
+    mentor:'var(--cyan)',partner:'var(--mag)',kin:'var(--warn)'};
+  const rc=el("div","card scroll",`<h3>Ties — ${rels.length}</h3>`);
+  rels.sort((a,b)=>(b.strength||0)-(a.strength||0)).forEach(r=>rc.appendChild(el("div","row",
+    `<span>${nm(r.observer_id,d.names)} <span class="muted">&rarr;</span> ${nm(r.subject_id,d.names)}</span>
+     <span><span class="pill" style="border-color:${tcol[r.type]||'var(--line)'}">${esc(r.type)}</span>
+     <span class="muted small">${(r.strength||0).toFixed(1)}</span></span>`)));
+  if(!rels.length)rc.innerHTML+='<div class="empty">no ties yet</div>';
+  const gc=el("div","card",`<h3>Collectives — ${(d.groups||[]).length}</h3>`);
+  (d.groups||[]).forEach(g=>gc.appendChild(el("div","row",`<div><b>${esc(g.name)}</b>
+    <div class="muted small">${esc(g.purpose||'')} · founder ${esc(g.founder_id||'')}</div></div>
+    <div class="small">${(g.members||[]).length} members</div>`)));
+  if(!(d.groups||[]).length)gc.innerHTML+='<div class="empty">no groups founded</div>';
+  const wrap=el("div","grid");wrap.style.gridTemplateColumns="1fr 1fr";
+  wrap.appendChild(rc);wrap.appendChild(gc);v.innerHTML="";v.appendChild(wrap);
 }
 
-async function loadElectionDetail(tick) {
-  currentSelectedElection = tick;
-  renderElectionsList();
-  const root = document.getElementById("election-detail");
-  root.innerHTML = "loading…";
-  try {
-    const r = await fetch(`/runs/${currentExplorerRun}/elections/${tick}`);
-    if (!r.ok) throw new Error(await r.text());
-    renderElectionDetail(await r.json());
-  } catch (e) {
-    root.innerHTML = `<div style="color:#f85149">${escapeHtml(e.message)}</div>`;
-  }
+function rContinuity(v){
+  const d=data.continuity||{};
+  const dc=el("div","card scroll",`<h3>In memoriam — ${(d.deaths||[]).length}</h3>`);
+  (d.deaths||[]).forEach(x=>dc.appendChild(el("div","row",`<div><b>${nm(x.agent_id,d.names)}</b>
+    <div class="muted small">died tick ${x.tick_no} · ${esc(x.cause)}</div>
+    ${x.legacy_summary?`<div class="small">&ldquo;${esc(x.legacy_summary)}&rdquo;</div>`:''}</div>`)));
+  if(!(d.deaths||[]).length)dc.innerHTML+='<div class="empty">none have died</div>';
+  const lc=el("div","card",`<h3>Lineage — ${(d.lineage||[]).length} born</h3>`);
+  (d.lineage||[]).forEach(x=>{let p=[];try{p=JSON.parse(x.parent_ids||"[]");}catch(e){}
+    lc.appendChild(el("div","row",`<div><b>${nm(x.child_id,d.names)}</b>
+      <div class="muted small">tick ${x.tick_no} · child of ${p.map(q=>nm(q,d.names)).join(' + ')}</div></div>`));});
+  if(!(d.lineage||[]).length)lc.innerHTML+='<div class="empty">no successors</div>';
+  const wrap=el("div","grid");wrap.style.gridTemplateColumns="1fr 1fr";
+  wrap.appendChild(dc);wrap.appendChild(lc);v.innerHTML="";v.appendChild(wrap);
 }
 
-// Render one ballot's per-candidate tally + individual votes. `headHtml` is the
-// ballot's title row (office + winner, or the reassignment summary).
-function renderBallot(ballot, headHtml) {
-  const tally = ballot.tally || [];
-  const votes = ballot.votes || [];
-  const tallyHtml = tally.map((t, i) => `
-    <span class="tally-pill ${i === 0 ? "top" : ""}">
-      ${escapeHtml(t.choice_name || t.choice_id || "?")} · ${t.count}
-    </span>`).join("")
-    + (ballot.abstain_count
-        ? `<span class="tally-pill">abstain · ${ballot.abstain_count}</span>` : "");
-  const votesHtml = votes.map(v => {
-    const showRaw = v.is_abstain && v.raw_response;
-    const badge = v.is_abstain
-      ? `<span class="kind-badge v-abstain">abstain</span>`
-      : `<span class="kind-badge v-pick">${escapeHtml(v.choice_name || v.choice_id || "?")}</span>`;
-    return `
-      <div class="vote-row">
-        <b>${escapeHtml(v.voter_name || v.voter_id || "?")}</b> → ${badge}
-        <span class="ts" style="color:#6e7681; font-size:0.72rem; margin-left:6px">
-          ${escapeHtml(v.voted_at || "")}
-        </span>
-        ${showRaw ? `
-          <div class="raw-response-label">LLM response (last attempt):</div>
-          <pre class="raw-response">${escapeHtml(v.raw_response)}</pre>
-        ` : ""}
-      </div>`;
-  }).join("");
-  return `
-    <div class="ballot-block">
-      <div class="ballot-head">${headHtml}</div>
-      <div style="margin:4px 0 8px 0">${tallyHtml || `<span class="muted-text">no votes</span>`}</div>
-      ${votesHtml}
-    </div>`;
-}
+// ---------- wiring ----------
+$("#runSel").onchange=async e=>{target=+e.target.value;selfAgent=null;
+  await loadData();render();};
+$("#refresh").onclick=async()=>{await loadState();await loadRuns();await loadData();render();toast("refreshed");};
+$("#bcastBtn").onclick=async()=>{const t=$("#bcast").value.trim();if(!t)return;
+  try{await j("/broadcast",{method:"POST",headers:{'content-type':'application/json'},
+    body:JSON.stringify({message:t})});$("#bcast").value="";toast("broadcast queued");}
+  catch(e){toast("error: "+e.message);}};
+$("#bcast").addEventListener("keydown",e=>{if(e.key==="Enter")$("#bcastBtn").click();});
 
-function renderElectionDetail(data) {
-  const root = document.getElementById("election-detail");
-  const debate = data.debate || [];
-  const offices = data.offices || [];
-  const reassignments = data.reassignments || [];
-  const headerHtml = `
-    <div style="margin-bottom:12px">
-      <div><strong>Election · tick ${data.tick}</strong></div>
-      <div class="muted-text" style="font-size:0.82rem; margin-top:4px">
-        ${offices.length} office${offices.length === 1 ? "" : "s"} contested
-        ${reassignments.length ? ` · ${reassignments.length} reassignment${reassignments.length === 1 ? "" : "s"}` : ""}
-      </div>
-    </div>`;
-  const debateHtml = debate.length
-    ? `<h3 style="margin:14px 0 6px 0; font-size:0.92rem; color:#58a6ff">
-         Debate (${debate.length} speeches)
-       </h3>` +
-      debate.map(s => `
-        <div class="speech-row">
-          <span class="speaker">${escapeHtml(s.speaker_name || s.speaker_id || "?")}</span>
-          <span class="ts" style="color:#6e7681; font-size:0.72rem; margin-left:6px">
-            round ${s.round != null ? s.round + 1 : "?"} · ${escapeHtml(s.ts || "")}
-          </span>
-          <div style="margin-top:3px">${escapeHtml(s.text || "")}</div>
-        </div>`).join("")
-    : `<h3 style="margin:14px 0 6px 0; font-size:0.92rem; color:#58a6ff">Debate</h3>
-       <span class="muted-text">no debate this election</span>`;
-  const officesHtml = `
-    <h3 style="margin:14px 0 6px 0; font-size:0.92rem; color:#58a6ff">
-      Office ballots (${offices.length})
-    </h3>` +
-    (offices.length
-      ? offices.map(o => {
-          const status = o.changed
-            ? `<span class="kind-badge v-changed">flipped</span>`
-            : `<span class="kind-badge v-unchanged">retained</span>`;
-          const head = `
-            <span class="pill">${escapeHtml(o.office_label || o.office || "?")}</span>
-            ${status}
-            winner <b class="ok">${escapeHtml(o.winner_name || "?")}</b>
-            ${o.changed && o.incumbent_name
-                ? `<span class="muted-text">(was ${escapeHtml(o.incumbent_name)})</span>` : ""}
-            ${o.winner_votes != null
-                ? `<span class="muted-text" style="font-size:0.78rem">· ${o.winner_votes}–${o.runner_up_votes || 0}</span>` : ""}`;
-          return renderBallot(o, head);
-        }).join("")
-      : `<span class="muted-text">no office ballots</span>`);
-  const reassignHtml = reassignments.length
-    ? `<h3 style="margin:14px 0 6px 0; font-size:0.92rem; color:#58a6ff">
-         Reassignments (${reassignments.length})
-       </h3>` +
-      reassignments.map(r => {
-        const head = `
-          <span class="kind-badge v-reassign">reassign</span>
-          <b>${escapeHtml(r.target_name || "?")}</b>
-          <span class="muted-text">left ${escapeHtml(r.office || "?")}</span> →
-          <b>${escapeHtml(r.new_role_label || r.new_role || "?")}</b>`;
-        return renderBallot(r, head);
-      }).join("")
-    : "";
-  // Preserve scroll on auto-refresh.
-  const prevScroll = root.scrollTop;
-  root.innerHTML = headerHtml + debateHtml + officesHtml + reassignHtml;
-  root.scrollTop = prevScroll;
-}
-
-// ---- actions tab ----
-async function loadActionsList() {
-  const tb = document.querySelector("#actions-table tbody");
-  if (!currentActionsData && tb)
-    tb.innerHTML = `<tr><td colspan="5" style="padding:10px">loading…</td></tr>`;
-  try {
-    const r = await fetch(`/runs/${currentExplorerRun}/actions?limit=1000`);
-    if (!r.ok) throw new Error(await r.text());
-    currentActionsData = await r.json();
-  } catch (e) {
-    if (tb) tb.innerHTML =
-      `<tr><td colspan="5" style="padding:10px; color:#f85149">${escapeHtml(e.message)}</td></tr>`;
-    return;
-  }
-  renderActionsList();
-}
-
-function renderActionsList() {
-  const tb = document.querySelector("#actions-table tbody");
-  if (!tb || !currentActionsData) return;
-  const filter = (document.getElementById("action-filter").value || "").trim().toLowerCase();
-  const { actions } = currentActionsData;
-  const filtered = actions.filter(a => {
-    if (!filter) return true;
-    const hay = [
-      a.type || "", a.kind || "", a.details || "",
-      (a.agents_involved || []).join(" "),
-    ].join(" ").toLowerCase();
-    return hay.includes(filter);
-  });
-  if (!filtered.length) {
-    document.getElementById("actions-summary").textContent =
-      `${actions.length} total · 0 match · newest first`;
-    tb.innerHTML =
-      `<tr><td colspan="5" class="muted-text" style="padding:12px">No actions match the filter.</td></tr>`;
-    renderPager("actions-pagination", 0, 1, () => {});
-    return;
-  }
-  const totalPages = Math.max(1, Math.ceil(filtered.length / EXPLORER_PAGE_SIZE));
-  if (actionsPage > totalPages - 1) actionsPage = totalPages - 1;
-  if (actionsPage < 0) actionsPage = 0;
-  const start = actionsPage * EXPLORER_PAGE_SIZE;
-  const pageItems = filtered.slice(start, start + EXPLORER_PAGE_SIZE);
-  document.getElementById("actions-summary").textContent =
-    `${actions.length} total · ${filtered.length} match · showing ${start + 1}–${start + pageItems.length} · newest first`;
-  tb.innerHTML = pageItems.map(a => `
-    <tr style="border-bottom:1px solid #21262d; vertical-align:top;">
-      <td style="padding:6px 8px; white-space:nowrap;">${fmtTs(a.ts)}</td>
-      <td style="padding:6px 8px;"><span class="pill">${escapeHtml(a.type)}</span></td>
-      <td style="padding:6px 8px; white-space:nowrap;">${escapeHtml(a.kind)}</td>
-      <td style="padding:6px 8px;">${escapeHtml(a.details || "—")}</td>
-      <td style="padding:6px 8px;">${escapeHtml((a.agents_involved || []).join(", ") || "—")}</td>
-    </tr>
-  `).join("");
-  renderPager("actions-pagination", actionsPage, totalPages, p => {
-    actionsPage = p; renderActionsList();
-  });
-}
-
-// ---- community tab ----
-let currentCommunityData = null;
-
-async function loadCommunity() {
-  const balanceEl = document.getElementById("community-balance");
-  const body = document.querySelector("#community-tx-table tbody");
-  if (!currentCommunityData) {
-    body.innerHTML = `<tr><td colspan="7" class="muted-text">loading…</td></tr>`;
-  }
-  try {
-    const r = await fetch(`/runs/${currentExplorerRun}/community?limit=500`);
-    if (!r.ok) throw new Error(await r.text());
-    currentCommunityData = await r.json();
-  } catch (e) {
-    balanceEl.textContent = "?";
-    body.innerHTML = `<tr><td colspan="7" style="color:#f85149">${escapeHtml(e.message)}</td></tr>`;
-    return;
-  }
-  renderCommunity();
-}
-
-function renderCommunity() {
-  if (!currentCommunityData) return;
-  const balanceEl = document.getElementById("community-balance");
-  const body = document.querySelector("#community-tx-table tbody");
-  const bal = Number(currentCommunityData.balance) || 0;
-  balanceEl.className = bal <= 0 ? "bad" : (bal < 100 ? "muted-text" : "ok");
-  balanceEl.textContent = bal.toFixed(2);
-
-  const filter = (document.getElementById("community-filter").value || "").trim().toLowerCase();
-  const txs = currentCommunityData.transactions || [];
-  const filtered = txs.filter(t => {
-    if (!filter) return true;
-    const hay = [
-      t.kind || "", t.from_party || "", t.to_party || "", t.reason || "",
-    ].join(" ").toLowerCase();
-    return hay.includes(filter);
-  });
-  if (!filtered.length) {
-    document.getElementById("community-summary").textContent =
-      `${txs.length} movements · 0 match · newest first`;
-    body.innerHTML = `<tr><td colspan="7" class="muted-text">no movements${filter ? " match the filter" : " yet"}</td></tr>`;
-    renderPager("community-pagination", 0, 1, () => {});
-    return;
-  }
-  const totalPages = Math.max(1, Math.ceil(filtered.length / EXPLORER_PAGE_SIZE));
-  if (communityPage > totalPages - 1) communityPage = totalPages - 1;
-  if (communityPage < 0) communityPage = 0;
-  const start = communityPage * EXPLORER_PAGE_SIZE;
-  const pageItems = filtered.slice(start, start + EXPLORER_PAGE_SIZE);
-  document.getElementById("community-summary").textContent =
-    `${txs.length} movements · ${filtered.length} match · showing ${start + 1}–${start + pageItems.length} · newest first`;
-  body.innerHTML = pageItems.map(t => {
-    const amt = Number(t.amount) || 0;
-    let delta = 0;
-    if (t.to_party === "community") delta += amt;
-    if (t.from_party === "community") delta -= amt;
-    const deltaCls = delta > 0 ? "ok" : (delta < 0 ? "bad" : "muted-text");
-    const deltaSign = delta > 0 ? "+" : (delta < 0 ? "−" : "·");
-    return `<tr style="border-bottom:1px solid #161b22;">
-      <td class="muted-text" style="font-size:0.72rem;">${escapeHtml(t.ts || "")}</td>
-      <td><span class="kind-badge">${escapeHtml(t.kind || "?")}</span></td>
-      <td>${escapeHtml(t.from_party || "—")}</td>
-      <td>${escapeHtml(t.to_party || "—")}</td>
-      <td style="text-align:right;">${amt.toFixed(2)}</td>
-      <td style="text-align:right;" class="${deltaCls}">${deltaSign}${Math.abs(delta).toFixed(2)}</td>
-      <td class="muted-text" style="font-size:0.78rem;">${escapeHtml(t.reason || "")}</td>
-    </tr>`;
-  }).join("");
-  renderPager("community-pagination", communityPage, totalPages, p => {
-    communityPage = p; renderCommunity();
-  });
-}
-
-function escapeHtml(s) {
-  return String(s == null ? "" : s)
-    .replace(/&/g, "&amp;").replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;").replace(/"/g, "&quot;");
-}
-
-document.getElementById("btn-close-explorer").addEventListener("click", () => {
-  // In past mode the explorer is bound to the run currently being viewed,
-  // so closing it should drop the whole past view; otherwise just collapse
-  // the bottom panel and leave the live sim alone.
-  if (viewMode === "past") exitPastView();
-  else closeExplorer();
-});
-document.getElementById("conv-filter").addEventListener("input", renderMessageList);
-document.getElementById("election-filter").addEventListener("input", renderElectionsList);
-document.getElementById("action-filter").addEventListener("input", () => {
-  actionsPage = 0; renderActionsList();
-});
-document.getElementById("community-filter").addEventListener("input", () => {
-  communityPage = 0; renderCommunity();
-});
-document.querySelectorAll(".explorer-tab").forEach(b =>
-  b.addEventListener("click", () => setExplorerTab(b.dataset.tab)));
-
-// Auto-refresh: only refresh whichever tab is visible.
-setInterval(() => {
-  if (currentExplorerRun == null) return;
-  // Only the live run's data changes. A past run is immutable and was loaded
-  // once when its explorer opened, so re-fetching it on a timer is pure waste.
-  if (viewMode !== "live") return;
-  if (currentExplorerTab === "messages") {
-    fetch(`/runs/${currentExplorerRun}/messages?limit=500`)
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d) { currentExplorerData = d; renderMessageList(); } })
-      .catch(() => {});
-  } else if (currentExplorerTab === "elections") {
-    fetch(`/runs/${currentExplorerRun}/elections`)
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d) { currentElectionsData = d; renderElectionsList(); } })
-      .catch(() => {});
-    if (currentSelectedElection != null) {
-      fetch(`/runs/${currentExplorerRun}/elections/${currentSelectedElection}`)
-        .then(r => r.ok ? r.json() : null)
-        .then(d => { if (d) renderElectionDetail(d); })
-        .catch(() => {});
-    }
-  } else if (currentExplorerTab === "actions") {
-    fetch(`/runs/${currentExplorerRun}/actions?limit=1000`)
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d) { currentActionsData = d; renderActionsList(); } })
-      .catch(() => {});
-  } else if (currentExplorerTab === "community") {
-    fetch(`/runs/${currentExplorerRun}/community?limit=500`)
-      .then(r => r.ok ? r.json() : null)
-      .then(d => { if (d) { currentCommunityData = d; renderCommunity(); } })
-      .catch(() => {});
-  }
-}, 2000);
-
-function enterPastView(runId, runName, runStatus) {
-  if (isRunning) {
-    alert("Stop the running simulation before exploring an older one.");
-    return;
-  }
-  viewMode = "past";
-  viewedRunId = Number(runId);
-  pastRunInfo = { id: viewedRunId, name: runName, status: runStatus };
-  // Reset agent panel; new run, new roster.
-  selectedAgentId = null;
-  document.getElementById("agent-list").innerHTML = "loading…";
-  document.getElementById("agent-detail").innerHTML =
-    `<span class="muted-text">Select an agent on the left.</span>`;
-  // Open the run explorer pane so conversations/elections/community follow too.
-  openExplorer(viewedRunId, runName);
-  loadState();
-  loadAgentList();
-  GRAPHS.forEach(refreshGraph);
-  loadRuns();   // refresh button highlight
-}
-
-function exitPastView() {
-  viewMode = "idle";
-  viewedRunId = null;
-  pastRunInfo = null;
-  selectedAgentId = null;
-  // Clear images so we don't show stale past-run graphs while idle, and
-  // re-hide each graph container until a new run makes them available again.
-  for (const g of GRAPHS) {
-    const img = document.getElementById("img-" + g);
-    if (img) { img.removeAttribute("src"); img.alt = g; }
-    const div = document.getElementById("graph-" + g);
-    if (div) { div.style.display = "none"; }
-  }
-  closeExplorer();
-  loadState();
-  loadAgentList();
-  loadRuns();
-}
-
-async function resumePastRun() {
-  if (viewMode !== "past" || viewedRunId == null) return;
-  const status = document.getElementById("sim-action-status-past");
-  const btn = document.getElementById("btn-resume-past");
-  btn.disabled = true;
-  status.textContent = "resuming…";
-  try {
-    const r = await fetch(`/runs/${encodeURIComponent(viewedRunId)}/resume`,
-                          { method: "POST" });
-    if (!r.ok) {
-      status.textContent = `error: ${await r.text()}`;
-      btn.disabled = false;
-      return;
-    }
-    status.textContent = "resumed.";
-    // Switch into live view of the freshly-resumed run.
-    viewMode = "live";
-    pastRunInfo = null;
-    loadState();
-    loadAgentList();
-    loadRuns();
-    GRAPHS.forEach(refreshGraph);
-  } catch (e) {
-    status.textContent = `error: ${e}`;
-    btn.disabled = false;
-  }
-}
-
-async function endPastRun() {
-  if (viewMode !== "past" || viewedRunId == null) return;
-  if (!confirm(`Terminally mark run #${viewedRunId} as ended? `
-               + `It will no longer be resumable.`)) return;
-  const status = document.getElementById("sim-action-status-past");
-  const btn = document.getElementById("btn-end-past");
-  btn.disabled = true;
-  status.textContent = "ending…";
-  try {
-    const r = await fetch(`/runs/${encodeURIComponent(viewedRunId)}/end`,
-                          { method: "POST" });
-    if (!r.ok) {
-      status.textContent = `error: ${await r.text()}`;
-      btn.disabled = false;
-      return;
-    }
-    status.textContent = "ended.";
-    if (pastRunInfo) pastRunInfo.status = "ended";
-    renderSimControls({ run_id: viewedRunId, tick_no: 0 });
-    loadRuns();
-  } catch (e) {
-    status.textContent = `error: ${e}`;
-    btn.disabled = false;
-  }
-}
-
-document.getElementById("btn-pause").addEventListener("click", async () => {
-  await fetch("/pause", { method: "POST" });
-  loadState();
-});
-document.getElementById("btn-resume").addEventListener("click", async () => {
-  await fetch("/resume", { method: "POST" });
-  loadState();
-});
-document.getElementById("btn-checkpoint").addEventListener("click", async () => {
-  await fetch("/checkpoint", { method: "POST" });
-});
-document.getElementById("btn-send").addEventListener("click", async () => {
-  const txt = document.getElementById("msg").value.trim();
-  if (!txt) return;
-  const r = await fetch("/broadcast", {
-    method: "POST", headers: { "content-type": "application/json" },
-    body: JSON.stringify({ message: txt }),
-  });
-  const data = await r.json();
-  document.getElementById("bc-status").textContent =
-    `${data.status} (queue: ${data.queue_length})`;
-  document.getElementById("msg").value = "";
-});
-document.getElementById("btn-refresh-all").addEventListener("click", refreshAll);
-document.getElementById("btn-start").addEventListener("click", startSim);
-document.getElementById("btn-stop").addEventListener("click", stopSim);
-document.getElementById("btn-resume-past").addEventListener("click", resumePastRun);
-document.getElementById("btn-end-past").addEventListener("click", endPastRun);
-document.getElementById("btn-exit-past").addEventListener("click", exitPastView);
-
-buildGraphs();
-loadState();
-loadRuns();
-loadAgentList();
-// All recurring backend polling is gated to a live simulation. While idle
-// there is nothing to refresh, and a past run is immutable (loaded once on
-// entry), so polling either would just stream useless calls at the backend.
-// Local actions (start/stop/pause/resume, enter/exit past view, delete) call
-// loadState()/loadRuns() directly, and page load primes everything once.
-setInterval(() => {
-  if (viewMode !== "live") return;
-  loadState();
-}, 1500);
-setInterval(() => {
-  if (viewMode !== "live") return;
-  loadRuns();
-}, 15000);
-setInterval(() => {
-  if (viewMode !== "live" || !isRunning) return;
-  loadAgentList();
-  if (selectedAgentId) loadAgentDetail(selectedAgentId);
-}, 4000);
+boot();
 </script>
 </body>
 </html>

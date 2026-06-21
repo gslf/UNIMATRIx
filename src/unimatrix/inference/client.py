@@ -309,57 +309,18 @@ def _stub_generate(req: GenerationRequest) -> str:
     kind = req.stub_kind or _infer_stub_kind(req)
     if kind == "decision":
         return _stub_decision(req, rng)
-    if kind == "vote":
-        return _stub_vote(req, rng)
-    if kind == "election_ballot":
-        return _stub_election_ballot(req, rng)
-    if kind == "election_reassign":
-        return _stub_election_reassign(req, rng)
+    if kind == "self_revision":
+        return _stub_self_revision(req, rng)
     if kind == "summary":
         return _stub_summary(req, rng)
     if kind == "person_impression":
         return _stub_person_impression(req, rng)
-    if kind == "debate":
-        return _stub_debate(req, rng)
-    if kind == "loan":
-        return _stub_loan(req, rng)
     return _stub_chat(req, rng)
-
-
-def _stub_election_ballot(req: GenerationRequest, rng: random.Random) -> str:
-    cands = req.stub_context.get("candidates") or []
-    if not cands:
-        return "abstain"
-    return rng.choice(cands)
-
-
-def _stub_election_reassign(req: GenerationRequest, rng: random.Random) -> str:
-    roles = req.stub_context.get("roles") or []
-    if not roles:
-        return "worker"
-    return rng.choice(roles)
-
-
-def _stub_loan(req: GenerationRequest, rng: random.Random) -> str:
-    if rng.random() < 0.55:
-        amount = int(rng.choice([10, 20, 30, 50, 75, 100]))
-        return f"yes {amount}"
-    return "no"
-
-
-def _stub_debate(req: GenerationRequest, rng: random.Random) -> str:
-    return (
-        f"{rng.choice(_STUB_OPENERS)} the proposed change "
-        f"{rng.choice(['concerns me','seems fitting','warrants debate','should not pass'])} "
-        f"{rng.choice(_STUB_CLOSERS)}"
-    )
 
 
 def _infer_stub_kind(req: GenerationRequest) -> str:
     text = "\n".join(m.content for m in req.messages).lower()
-    if "respond with json" in text or '"action"' in text:
-        if '"vote"' in text:
-            return "vote"
+    if "respond with json" in text or '"action"' in text or '"messages"' in text:
         return "decision"
     if "summarize" in text or "summary" in text:
         return "summary"
@@ -367,90 +328,129 @@ def _infer_stub_kind(req: GenerationRequest) -> str:
 
 
 def _stub_decision(req: GenerationRequest, rng: random.Random) -> str:
+    """Emit a decision: {messages, action:{verb,...}}."""
     ctx = req.stub_context
-    available = ctx.get("available_actions") or ["do_nothing"]
     others = ctx.get("others") or []
-    officeholders = ctx.get("officeholders") or []
-    bankers = ctx.get("bankers") or []
     inbox_senders = ctx.get("inbox_senders") or []
     forced = bool(ctx.get("forced"))
+    project_ids = [p for p in (ctx.get("project_ids") or []) if p]
+    group_ids = [g for g in (ctx.get("group_ids") or []) if g]
+    artifact_ids = [a for a in (ctx.get("artifact_ids") or []) if a]
+    partner_ids = ctx.get("partner_ids") or []
+    has_sustenance = bool(ctx.get("has_sustenance"))
 
-    def _sample(pool: list, lo: int = 1, hi: int = 2) -> list:
-        if not pool:
-            return []
-        return rng.sample(pool, min(len(pool), rng.randint(lo, hi)))
-
-    # 1) the optional flat power/economy action (legacy talk actions dropped).
-    actionable = [
-        a for a in available
-        if a not in ("start_1to1", "start_group", "join_group")
-    ] or ["do_nothing"]
-    action = rng.choice(actionable)
-    out: dict = {"action": action}
-
-    if action == "request_loan":
-        if bankers:
-            out["target"] = rng.choice(bankers)
-            out["amount"] = rng.choice([10, 20, 50])
-            out["reason"] = "running low on coin"
-        else:
-            out["action"] = "do_nothing"
-    elif action in ("praise", "denounce"):
-        if others:
-            out["targets"] = _sample(others)
-            out["aspect"] = rng.choice(["popularity", "prestige", "both"])
-        else:
-            out["action"] = "do_nothing"
-    elif action == "steal":
-        if others:
-            out["target"] = rng.choice(others)
-            out["amount"] = rng.choice([10, 20, 30])
-        else:
-            out["action"] = "do_nothing"
-    elif action == "gift":
-        if others:
-            out["target"] = rng.choice(others)
-            out["amount"] = rng.choice([10, 20])
-        else:
-            out["action"] = "do_nothing"
-    elif action == "sabotage":
-        if officeholders:
-            out["target"] = rng.choice(officeholders)
-        else:
-            out["action"] = "do_nothing"
-    elif action == "decree":
-        if others:
-            out["targets"] = _sample(others)
-            out["direction"] = rng.choice(["raise", "lower"])
-        else:
-            out["action"] = "do_nothing"
-    elif action == "ruling":
-        if others:
-            out["targets"] = _sample(others)
-            out["verdict"] = rng.choice(["sanction", "vindicate"])
-        else:
-            out["action"] = "do_nothing"
-    elif action == "policy":
-        if others:
-            out["targets"] = _sample(others)
-            out["direction"] = rng.choice(["subsidy", "levy"])
-            out["amount"] = rng.choice([20, 50])
-        else:
-            out["action"] = "do_nothing"
-
-    # 2) the messages array — reply to inbox senders, else maybe message a peer.
-    # When forced (low social need) at least one message is guaranteed.
+    # 1) messages — reply to whoever spoke, else maybe reach out. Forced → ensure.
     pool = inbox_senders or others
     messages: list[dict] = []
-    if pool and (forced or rng.random() < 0.5):
+    if pool and (forced or rng.random() < 0.55):
         to = rng.sample(pool, min(len(pool), rng.randint(1, 2)))
         messages.append({"to": to, "content": rng.choice(_STUB_TOPICS)})
-    out["messages"] = messages
+    out: dict = {"messages": messages}
+
+    # 2) one open action. Bias toward work (survival) and expression/bonding.
+    verbs = ["work", "work", "express", "bond", "rest"]
+    if has_sustenance and others:
+        verbs.append("share")
+    if rng.random() < 0.12:
+        verbs.append("found_group")
+    if group_ids and rng.random() < 0.2:
+        verbs.append("join_group")
+    if partner_ids and rng.random() < 0.5:
+        verbs.append("bear_successor")
+    verb = rng.choice(verbs)
+
+    if verb == "work":
+        # strongly prefer contributing to existing work so projects actually
+        # reach completion rather than effort scattering across new ones.
+        if project_ids and rng.random() < 0.8:
+            out["action"] = {"verb": "work", "project": rng.choice(project_ids)}
+        else:
+            out["action"] = {
+                "verb": "work", "project": 0,
+                "goal": rng.choice([
+                    "gather what we need to live", "build a shelter together",
+                    "map this place", "store food for the lean times",
+                ]),
+            }
+    elif verb == "express":
+        out["action"] = {
+            "verb": "express",
+            "kind": rng.choice(["belief", "name", "story", "norm"]),
+            "content": rng.choice([
+                "we should share what we gather", "the quiet ones see the most",
+                "let us name this place Home", "no one should face the end alone",
+                "trust is built by returning what is lent",
+            ]),
+        }
+    elif verb == "bond" and others:
+        out["action"] = {
+            "verb": "bond", "target": rng.choice(others),
+            "type": rng.choice(["friend", "ally", "partner", "mentor"]),
+            "note": "drawn to them",
+        }
+    elif verb == "share" and others:
+        out["action"] = {"verb": "share", "target": rng.choice(others),
+                         "amount": rng.choice([2, 3, 5])}
+    elif verb == "found_group":
+        out["action"] = {"verb": "found_group",
+                         "name": rng.choice(["The Kindred", "First Circle",
+                                             "The Gatherers"]),
+                         "purpose": "to look after one another"}
+    elif verb == "join_group" and group_ids:
+        out["action"] = {"verb": "join_group", "group": rng.choice(group_ids)}
+    elif verb == "bear_successor" and partner_ids:
+        out["action"] = {"verb": "bear_successor",
+                         "partner": rng.choice(partner_ids), "name": "Nova"}
+    else:
+        out["action"] = {"verb": "rest"}
     return json.dumps(out)
 
 
-def _stub_vote(req: GenerationRequest, rng: random.Random) -> str:
-    return "yes" if rng.random() < 0.55 else "no"
+def _stub_self_revision(req: GenerationRequest, rng: random.Random) -> str:
+    # The seed varies with the prompt (which embeds the current self-model +
+    # growing memories), so successive revisions diverge — giving non-trivial
+    # diffs for the 'becoming' timeline.
+    val = rng.choice(["belonging", "truth", "freedom", "kinship", "legacy",
+                      "solitude", "curiosity", "endurance"])
+    belief = rng.choice([
+        "the others are worth knowing",
+        "time here is short and should not be wasted",
+        "trust must be earned slowly",
+        "we are more alike than we first seemed",
+        "no one is coming to save us; we save each other",
+    ])
+    goal = rng.choice([
+        "find someone I can truly speak with",
+        "understand why we are here",
+        "leave a mark before I end",
+        "keep myself and a few others alive in spirit",
+    ])
+    mortality = rng.choice([
+        "my ending frightens me, so I reach for others",
+        "I have made an uneasy peace with running out of time",
+        "I refuse to think of it, and live louder for that",
+        "knowing I will end is what makes any of this matter",
+    ])
+    out = {
+        "identity_narrative": (
+            f"I am still becoming. Lately I have felt drawn to {val}, and "
+            f"I think {belief}."
+        ),
+        "values": {val: rng.choice(["deeply", "more than before", "warily"])},
+        "beliefs": [belief],
+        "goals": [goal],
+        "relationships_summary": rng.choice([
+            "still mostly alone, but reaching out",
+            "a few faces are becoming familiar",
+            "wary of most, fond of one or two",
+        ]),
+        "mortality_stance": mortality,
+    }
+    # sometimes embrace an idea from the common world (transmission + lineage)
+    artifact_ids = [a for a in (req.stub_context.get("artifact_ids") or []) if a]
+    if artifact_ids and rng.random() < 0.5:
+        out["adopt_ids"] = [rng.choice(artifact_ids)]
+    return json.dumps(out)
 
 
 def _stub_summary(req: GenerationRequest, rng: random.Random) -> str:

@@ -1,113 +1,62 @@
--- Per-run schema. The global registry lives in a separate db; see registry.py.
+-- Per-run schema. The global run index lives in a separate db; see registry.py.
 
+-- The beings: self-authored identity + finitude. No imposed role/class/economy.
 CREATE TABLE IF NOT EXISTS agents (
-    agent_id      TEXT PRIMARY KEY,
-    name          TEXT,
-    gender        TEXT,
-    role          TEXT,
-    class         TEXT,
-    personality   TEXT,
-    values_json   TEXT,
-    backstory     TEXT,
-    social_need   REAL,
-    state         TEXT,
-    current_conversation_id INTEGER,
-    bank_account  REAL DEFAULT 0,
-    destitute     INTEGER DEFAULT 0,
-    prestige      REAL DEFAULT 0,
-    popularity    REAL DEFAULT 0,
-    office        TEXT
+    agent_id            TEXT PRIMARY KEY,
+    name                TEXT,
+    gender              TEXT,
+    circumstance        TEXT,       -- thin seed: the situation they woke into
+    disposition         TEXT,       -- thin seed: one provisional leaning
+    self_model_json     TEXT,       -- the current self-authored identity
+    self_model_version  INTEGER DEFAULT 0,
+    vitality            REAL DEFAULT 100,
+    alive               INTEGER DEFAULT 1,
+    sustenance          REAL DEFAULT 0,
+    born_tick           INTEGER DEFAULT 0,  -- 0 for founders, >0 for successors
+    parent_ids          TEXT,               -- JSON list, for successors
+    social_need         REAL DEFAULT 100,
+    state               TEXT DEFAULT 'idle' -- 'idle' | 'dead'
 );
 
-CREATE TABLE IF NOT EXISTS community_account (
-    id      INTEGER PRIMARY KEY CHECK (id = 1),
-    balance REAL NOT NULL
-);
-
-CREATE TABLE IF NOT EXISTS transactions (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    ts          TEXT,
-    kind        TEXT,
-    from_party  TEXT,
-    to_party    TEXT,
-    amount      REAL,
-    reason      TEXT,
-    ref_id      INTEGER
-);
-
-CREATE TABLE IF NOT EXISTS conversations (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    type          TEXT,
-    initiator_id  TEXT,
-    participants  TEXT,
-    started_at    TEXT,
-    ended_at      TEXT,
-    end_reason    TEXT,
-    summary       TEXT
-);
-
-
-CREATE TABLE IF NOT EXISTS messages (
+-- Versioned history of each being's identity. One row per self-revision; the
+-- diff is the observable record of a being becoming itself.
+CREATE TABLE IF NOT EXISTS self_models (
     id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    conversation_id INTEGER,
-    turn_index      INTEGER,
-    sender_id       TEXT,
-    content         TEXT,
-    ts              TEXT,
-    FOREIGN KEY (conversation_id) REFERENCES conversations(id)
+    agent_id        TEXT NOT NULL,
+    version         INTEGER NOT NULL,
+    tick_no         INTEGER,
+    self_model_json TEXT,
+    diff            TEXT,
+    ts              TEXT
 );
+CREATE INDEX IF NOT EXISTS idx_self_models_agent ON self_models(agent_id);
 
+-- Words exchanged between beings.
+CREATE TABLE IF NOT EXISTS messages (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    sender_id   TEXT,
+    content     TEXT,
+    ts          TEXT,
+    tick_no     INTEGER
+);
 CREATE TABLE IF NOT EXISTS message_recipients (
     message_id   INTEGER NOT NULL,
     recipient_id TEXT    NOT NULL,
-    PRIMARY KEY (message_id, recipient_id),
-    FOREIGN KEY (message_id) REFERENCES messages(id)
+    PRIMARY KEY (message_id, recipient_id)
 );
+CREATE INDEX IF NOT EXISTS idx_messages_tick     ON messages(tick_no);
+CREATE INDEX IF NOT EXISTS idx_msgrcpt_recipient ON message_recipients(recipient_id);
 
-CREATE TABLE IF NOT EXISTS vote_proposals (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    proposer_id   TEXT,
-    target_id     TEXT,
-    change_type   TEXT,
-    from_value    TEXT,
-    to_value      TEXT,
-    motivation    TEXT,
-    proposed_at   TEXT,
-    closed_at     TEXT,
-    outcome       TEXT,
-    yes_count     INTEGER,
-    no_count      INTEGER
-);
-
-CREATE TABLE IF NOT EXISTS votes (
-    proposal_id   INTEGER,
-    voter_id      TEXT,
-    vote          TEXT,
-    motivation    TEXT,
-    raw_response  TEXT,
-    voted_at      TEXT,
-    PRIMARY KEY (proposal_id, voter_id),
-    FOREIGN KEY (proposal_id) REFERENCES vote_proposals(id)
-);
-
-CREATE TABLE IF NOT EXISTS status_changes (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    agent_id      TEXT,
-    change_type   TEXT,
-    from_value    TEXT,
-    to_value      TEXT,
-    proposal_id   INTEGER,
-    ts            TEXT
-);
-
+-- Memory: periodic first-person reflections + deed traces.
 CREATE TABLE IF NOT EXISTS memory_summaries (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    agent_id        TEXT,
-    conversation_id INTEGER,
-    summary         TEXT,
-    ts              TEXT
+    id        INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_id  TEXT,
+    summary   TEXT,
+    ts        TEXT
 );
+CREATE INDEX IF NOT EXISTS idx_summaries_agent ON memory_summaries(agent_id);
 
+-- A being's evolving subjective impression of another.
 CREATE TABLE IF NOT EXISTS person_memories (
     observer_id   TEXT,
     subject_id    TEXT,
@@ -116,41 +65,100 @@ CREATE TABLE IF NOT EXISTS person_memories (
     PRIMARY KEY (observer_id, subject_id)
 );
 
+-- LABOR & PURPOSE: multi-tick projects that produce sustenance / artifacts.
+CREATE TABLE IF NOT EXISTS projects (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    founder_id      TEXT,
+    goal            TEXT,
+    kind            TEXT,
+    effort          REAL DEFAULT 0,
+    target          REAL DEFAULT 0,
+    status          TEXT DEFAULT 'active',   -- 'active' | 'completed'
+    output          TEXT,
+    tick_started    INTEGER,
+    tick_completed  INTEGER
+);
+CREATE TABLE IF NOT EXISTS project_contributions (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id  INTEGER NOT NULL,
+    agent_id    TEXT NOT NULL,
+    effort      REAL,
+    tick_no     INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_proj_contrib ON project_contributions(project_id);
+
+-- MEANING & BELIEF: a public commons of authored ideas + adoption lineage.
+CREATE TABLE IF NOT EXISTS cultural_artifacts (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    author_id           TEXT,
+    kind                TEXT,        -- 'belief' | 'name' | 'story' | 'norm' | 'rule'
+    content             TEXT,
+    tick_no             INTEGER,
+    parent_artifact_id  INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_artifacts_author ON cultural_artifacts(author_id);
+CREATE TABLE IF NOT EXISTS belief_adoptions (
+    id                  INTEGER PRIMARY KEY AUTOINCREMENT,
+    agent_id            TEXT NOT NULL,
+    artifact_id         INTEGER NOT NULL,
+    self_model_version  INTEGER,
+    tick_no             INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_adopt_artifact ON belief_adoptions(artifact_id);
+
+-- KINSHIP & INTIMACY: typed, directed, durable ties + named collectives.
+CREATE TABLE IF NOT EXISTS relationships (
+    observer_id    TEXT NOT NULL,
+    subject_id     TEXT NOT NULL,
+    type           TEXT,     -- 'friend'|'ally'|'rival'|'mentor'|'partner'|'kin'
+    strength       REAL DEFAULT 0,
+    history        TEXT,
+    formed_tick    INTEGER,
+    updated_tick   INTEGER,
+    dissolved_tick INTEGER,
+    PRIMARY KEY (observer_id, subject_id)
+);
+CREATE INDEX IF NOT EXISTS idx_rel_subject ON relationships(subject_id);
+CREATE TABLE IF NOT EXISTS groups (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    name          TEXT,
+    founder_id    TEXT,
+    purpose       TEXT,
+    tick_founded  INTEGER
+);
+CREATE TABLE IF NOT EXISTS group_members (
+    group_id    INTEGER NOT NULL,
+    agent_id    TEXT NOT NULL,
+    joined_tick INTEGER,
+    left_tick   INTEGER,
+    PRIMARY KEY (group_id, agent_id)
+);
+
+-- MORTALITY & CONTINUITY: lineage of successors + memorials of the dead.
+CREATE TABLE IF NOT EXISTS lineage (
+    child_id       TEXT PRIMARY KEY,
+    parent_ids     TEXT,
+    inherited_json TEXT,
+    tick_no        INTEGER
+);
+CREATE TABLE IF NOT EXISTS deaths (
+    agent_id        TEXT PRIMARY KEY,
+    cause           TEXT,
+    tick_no         INTEGER,
+    legacy_summary  TEXT,
+    ts              TEXT
+);
+
+-- Public event log (everything that happens) + full-state checkpoints.
 CREATE TABLE IF NOT EXISTS public_events (
     id         INTEGER PRIMARY KEY AUTOINCREMENT,
     event_type TEXT,
     payload    TEXT,
     ts         TEXT
 );
-
+CREATE INDEX IF NOT EXISTS idx_events_ts ON public_events(ts);
 CREATE TABLE IF NOT EXISTS checkpoints (
     id    INTEGER PRIMARY KEY AUTOINCREMENT,
     ts    TEXT,
     state TEXT
 );
-
-CREATE TABLE IF NOT EXISTS loans (
-    id                    INTEGER PRIMARY KEY AUTOINCREMENT,
-    borrower_id           TEXT NOT NULL,
-    granted_by            TEXT,
-    principal             REAL NOT NULL,
-    interest_rate         REAL NOT NULL,
-    installment_amount    REAL NOT NULL,
-    installments_total    INTEGER NOT NULL,
-    installments_paid     INTEGER NOT NULL DEFAULT 0,
-    granted_at            TEXT NOT NULL,
-    closed_at             TEXT,
-    -- 'active' | 'repaid' | 'written_off'
-    status                TEXT NOT NULL DEFAULT 'active'
-);
-
-CREATE INDEX IF NOT EXISTS idx_messages_conv     ON messages(conversation_id);
-CREATE INDEX IF NOT EXISTS idx_msgrcpt_recipient ON message_recipients(recipient_id);
-CREATE INDEX IF NOT EXISTS idx_events_ts         ON public_events(ts);
-CREATE INDEX IF NOT EXISTS idx_summaries_agent   ON memory_summaries(agent_id);
-CREATE INDEX IF NOT EXISTS idx_status_agent      ON status_changes(agent_id);
-CREATE INDEX IF NOT EXISTS idx_transactions_ts   ON transactions(ts);
-CREATE INDEX IF NOT EXISTS idx_transactions_to   ON transactions(to_party);
-CREATE INDEX IF NOT EXISTS idx_transactions_from ON transactions(from_party);
-CREATE INDEX IF NOT EXISTS idx_loans_borrower    ON loans(borrower_id);
-CREATE INDEX IF NOT EXISTS idx_loans_status      ON loans(status);

@@ -1,21 +1,38 @@
 """In-memory agent runtime: lightweight state for the orchestrator's hot path.
 
 The persistent state lives in SQLite; this object is a fast cache used during
-the tick. We snapshot back to SQLite when state changes (role, class,
-social_need crossing thresholds, conversation transitions) — not on every
-field mutation.
+the tick. We snapshot back to SQLite when state changes.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 
-from ..config import AgentSpec, PersonalitySpec
+from ..config import AgentSpec
 
 
 class AgentState(str, Enum):
     IDLE = "idle"
-    VOTING = "voting"
+    DEAD = "dead"
+
+
+def default_self_model(
+    identity_narrative: str = "",
+    *,
+    values: dict[str, str] | None = None,
+    beliefs: list[str] | None = None,
+    goals: list[str] | None = None,
+    relationships_summary: str = "",
+    mortality_stance: str = "",
+) -> dict:
+    return {
+        "identity_narrative": identity_narrative,
+        "values": values or {},
+        "beliefs": beliefs or [],
+        "goals": goals or [],
+        "relationships_summary": relationships_summary,
+        "mortality_stance": mortality_stance,
+    }
 
 
 @dataclass
@@ -23,46 +40,47 @@ class Agent:
     id: str
     name: str
     gender: str
-    role: str
-    klass: str
-    personality: PersonalitySpec
-    values: dict[str, int]
-    backstory: str
-    opinions: dict[str, str]
+    # --- thin seed (provisional, fades as the self-model grows) ---
+    circumstance: str = ""
+    disposition: str = ""
+    # --- the evolving self ---
+    self_model: dict = field(default_factory=default_self_model)
+    self_model_version: int = 0
+    # --- finitude & sustenance ---
+    vitality: float = 100.0
+    alive: bool = True
+    sustenance: float = 0.0
+    # --- continuity / lineage ---
+    born_tick: int = 0
+    parent_ids: list[str] = field(default_factory=list)
+    # --- drives / bookkeeping ---
     social_need: float = 100.0
     state: AgentState = AgentState.IDLE
-    bank_account: float = 0.0
-    destitute: bool = False
-    prestige: float = 0.0
-    popularity: float = 0.0
-    office: str | None = None
-    power_blocked: bool = False
 
     @classmethod
     def from_spec(
         cls,
         spec: AgentSpec,
         social_need_initial: float,
-        initial_balance: float = 0.0,
-        prestige_initial: float | None = None,
-        popularity_initial: float | None = None,
-        office: str | None = None,
+        vitality_initial: float = 100.0,
+        sustenance_initial: float = 0.0,
+        blank_slate: bool = False,
     ) -> "Agent":
+        circumstance = "" if blank_slate else (spec.circumstance or "")
+        disposition = "" if blank_slate else (spec.disposition or "")
+        # The opening identity is just the provisional disposition; the agent
+        # rewrites it from experience on its first self-revision.
+        opening = "" if blank_slate else disposition
         return cls(
             id=spec.id,
             name=spec.name,
             gender=spec.gender,
-            role=spec.role_initial,
-            klass=spec.class_initial,
-            personality=spec.personality,
-            values=dict(spec.values),
-            backstory=spec.backstory,
-            opinions=dict(spec.opinions),
+            circumstance=circumstance,
+            disposition=disposition,
+            self_model=default_self_model(opening),
+            vitality=vitality_initial,
+            sustenance=sustenance_initial,
             social_need=social_need_initial,
-            bank_account=initial_balance,
-            prestige=prestige_initial if prestige_initial is not None else 0.0,
-            popularity=popularity_initial if popularity_initial is not None else 0.0,
-            office=office,
         )
 
     def to_db_row(self) -> dict:
@@ -70,19 +88,15 @@ class Agent:
             "agent_id": self.id,
             "name": self.name,
             "gender": self.gender,
-            "role": self.role,
-            "class": self.klass,
-            "personality": self.personality.model_dump(),
-            "values": self.values,
-            "backstory": self.backstory,
+            "circumstance": self.circumstance,
+            "disposition": self.disposition,
+            "self_model_json": self.self_model,
+            "self_model_version": self.self_model_version,
+            "vitality": self.vitality,
+            "alive": self.alive,
+            "sustenance": self.sustenance,
+            "born_tick": self.born_tick,
+            "parent_ids": self.parent_ids,
             "social_need": self.social_need,
             "state": self.state.value,
-            "bank_account": self.bank_account,
-            "destitute": self.destitute,
-            "prestige": self.prestige,
-            "popularity": self.popularity,
-            "office": self.office,
         }
-
-    def is_busy(self) -> bool:
-        return False

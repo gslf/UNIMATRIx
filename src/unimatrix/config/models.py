@@ -1,8 +1,7 @@
 """Pydantic models for the JSON simulation configuration.
 
 Validation is fail-fast: a malformed config produces a clear ValidationError at
-load time rather than failing deep inside the orchestrator. Defaults match the
-spec.
+load time rather than failing deep inside the orchestrator.
 """
 from __future__ import annotations
 
@@ -10,9 +9,7 @@ import json
 from pathlib import Path
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-
-_OFFICE_POWERS = ("legislative", "judicial", "financial")
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class SimulationConfig(BaseModel):
@@ -28,9 +25,8 @@ class InferenceConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     backend: Literal["vllm", "llama_cpp", "stub"] = "vllm"
-    endpoint: str = "http://localhost:8000"
+    endpoint: str = "http://127.0.0.1:1234"
     model: str = "Qwen/Qwen2.5-14B-Instruct-AWQ"
-    max_tokens_per_message: int = Field(200, ge=1)
     temperature: float = Field(0.95, ge=0.0, le=2.0)
     top_p: float = Field(0.95, ge=0.0, le=1.0)
     request_timeout_seconds: float = Field(600.0, gt=0)
@@ -50,6 +46,10 @@ class MemoryConfig(BaseModel):
 
 
 class SocialConfig(BaseModel):
+    """The connection drive — a being grows restless when unspoken-to and is
+    nudged to reach out. This is NOT a status ladder; just the pull toward
+    others that keeps the world from going silent."""
+
     model_config = ConfigDict(extra="forbid")
 
     social_need_initial: float = 100.0
@@ -64,7 +64,6 @@ class SocialConfig(BaseModel):
 class MessagingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-
     reflection_interval_ticks: int = Field(20, ge=1)
     reflection_min_new_messages: int = Field(1, ge=1)
     max_recipients_per_message: int = Field(6, ge=1)
@@ -72,109 +71,57 @@ class MessagingConfig(BaseModel):
     message_history_window: int = Field(15, ge=1)
 
 
-class VotingConfig(BaseModel):
+class WorldConfig(BaseModel):
+    """The primordial substrate."""
+
     model_config = ConfigDict(extra="forbid")
 
-    election_interval_ticks: int = Field(100, ge=1)
-    warmup_ticks: int = Field(4, ge=0)
-    debate_rounds: int = Field(1, ge=0)
-    max_tokens_per_debate_speech: int = Field(2000, ge=10)
-    max_vote_attempts: int = Field(3, ge=1)
-    election_ballot_max_tokens: int = Field(2000, ge=16)
+    # --- finitude (the one hard law) ---
+    vitality_initial: float = Field(100.0, gt=0)
+    vitality_decay_per_tick: float = Field(1.0, ge=0)
+    vitality_death_threshold: float = Field(0.0)
+    # senescence: the attainable vitality ceiling falls linearly with age and
+    # reaches 0 at max_age_ticks — a hard maximum lifespan, and rising survival
+    # pressure as a being ages.
+    max_age_ticks: int = Field(220, ge=1)
+    # --- sustenance & labor (survival depends on work) ---
+    sustenance_initial: float = Field(12.0, ge=0)
+    sustenance_consumed_per_tick: float = Field(1.0, ge=0)
+    vitality_per_sustenance: float = Field(5.0, ge=0)
+    sustenance_max: float = Field(15.0, ge=0)  # storage cap; <=0 means no cap
+    work_vitality_cost: float = Field(1.5, ge=0)  # labor tires — a real trade-off
+    project_effort_per_work: float = Field(1.0, gt=0)
+    project_default_target: float = Field(10.0, gt=0)
+    project_sustenance_yield: float = Field(24.0, ge=0)
+    # --- continuity: succession ---
+    succession_sustenance_cost: float = Field(20.0, ge=0)
+    succession_min_partner_strength: float = Field(1.0, ge=0)
+    max_population: int = Field(80, ge=1)
+    # --- self-construction (the engine of evolution) ---
+    blank_slate: bool = False  # start beings identical — a comparison control
+    self_revision_interval_ticks: int = Field(15, ge=1)
+    self_revision_min_new_memories: int = Field(1, ge=0)
+    max_tokens_per_self_revision: int = Field(700, ge=64)
 
-
-class ClassThreshold(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    popularity_min: float = Field(0.0, ge=0)
-    balance_min: float = Field(0.0, ge=0)
-
-
-class MobilityConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    class_thresholds: dict[str, ClassThreshold] | None = None
-    influence_step: float = Field(5.0, ge=0)
-    max_influence_targets: int = Field(3, ge=1)
-    prestige_decay_per_tick: float = Field(0.0, ge=0)
-    popularity_decay_per_tick: float = Field(0.0, ge=0)
-
-
-class OfficePowersConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    senator_prestige_power: float = Field(20.0, ge=0)
-    judge_popularity_power: float = Field(20.0, ge=0)
-    judge_fine_fraction: float = Field(0.25, ge=0, le=1)
-    banker_transfer_max: float = Field(200.0, ge=0)
-    max_targets_per_power: int = Field(3, ge=1)
-
-
-class AgentPowersConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    steal_success_prob: float = Field(0.5, ge=0, le=1)
-    steal_max: float = Field(50.0, ge=0)
-    steal_caught_popularity_penalty: float = Field(10.0, ge=0)
-    # gift/bribe: cap on a single voluntary agent->agent transfer.
-    gift_max: float = Field(100.0, ge=0)
-    # sabotage: probability the saboteur blocks the target office's next power
-    # use; the popularity penalty the saboteur pays if caught.
-    sabotage_success_prob: float = Field(0.4, ge=0, le=1)
-    sabotage_caught_popularity_penalty: float = Field(15.0, ge=0)
-
-
-class EconomyConfig(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-
-    salary_per_prestige: float = Field(0.5, ge=0)
-    production_per_prestige: float = Field(0.4, ge=0)
-    tax_rate: float = Field(0.3, ge=0, le=1)
-    agent_initial_balance: float = Field(100.0, ge=0)
-    agent_expense_per_tick: float = Field(5.0, ge=0)
-    community_initial_balance: float = Field(10000.0, ge=0)
-    community_expense_per_tick: float = Field(50.0, ge=0)
-    community_bankruptcy_balance: float = Field(0.0)
-    destitution_exit_balance: float = Field(50.0, ge=0)
-    protected_roles: list[str] = Field(
-        default_factory=lambda: ["senator", "judge", "banker"]
-    )
-    loan_max_per_request: float = Field(200.0, ge=0)
-    loan_interest_rate: float = Field(0.1, ge=0)
-    loan_installments: int = Field(20, ge=1)
-
-
-class RoleSpec(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    id: str
-    name: str
-    prestige: int = Field(..., ge=0, le=100)
-
-
-class PersonalitySpec(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    openness: int = Field(..., ge=0, le=100)
-    conscientiousness: int = Field(..., ge=0, le=100)
-    extraversion: int = Field(..., ge=0, le=100)
-    agreeableness: int = Field(..., ge=0, le=100)
-    neuroticism: int = Field(..., ge=0, le=100)
+    def vitality_ceiling(self, age_ticks: int) -> float:
+        """Maximum vitality attainable at a given age. Falls linearly with age
+        (senescence) and reaches 0 at max_age_ticks — the hard lifespan cap."""
+        if self.max_age_ticks <= 0:
+            return self.vitality_initial
+        frac = 1.0 - max(0, age_ticks) / self.max_age_ticks
+        return self.vitality_initial * max(0.0, frac)
 
 
 class AgentSpec(BaseModel):
+    """A being's thin seed: just enough to differ, fully overwritable."""
+
     model_config = ConfigDict(extra="forbid")
 
     id: str
     name: str
     gender: Literal["m", "f", "x"] = "x"
-    role_initial: str
-    class_initial: str
-    personality: PersonalitySpec
-    values: dict[str, int] = Field(default_factory=dict)
-    backstory: str = ""
-    opinions: dict[str, str] = Field(default_factory=dict)
+    circumstance: str = ""
+    disposition: str = ""
 
 
 class Config(BaseModel):
@@ -184,82 +131,9 @@ class Config(BaseModel):
     inference: InferenceConfig
     memory: MemoryConfig
     social: SocialConfig
+    world: WorldConfig = Field(default_factory=WorldConfig)
     messaging: MessagingConfig = Field(default_factory=MessagingConfig)
-    voting: VotingConfig
-    economy: EconomyConfig = Field(default_factory=EconomyConfig)
-    mobility: MobilityConfig = Field(default_factory=MobilityConfig)
-    office_powers: OfficePowersConfig = Field(default_factory=OfficePowersConfig)
-    agent_powers: AgentPowersConfig = Field(default_factory=AgentPowersConfig)
-    offices: list[str] | None = None
-    classes: list[str]
-    roles: list[RoleSpec]
     agents: list[AgentSpec]
-
-    # ----- office / power resolution -----
-
-    def office_ids(self) -> list[str]:
-        """The three elected office role-ids, in canonical (power) order."""
-        return list(self.offices) if self.offices is not None else list(
-            self.economy.protected_roles
-        )
-
-    def power_of_office(self, office_id: str) -> str | None:
-        """Map an office role-id to its power kind, or None if not an office."""
-        ids = self.office_ids()
-        if office_id in ids:
-            i = ids.index(office_id)
-            if i < len(_OFFICE_POWERS):
-                return _OFFICE_POWERS[i]
-        return None
-
-    def office_for_power(self, power: str) -> str | None:
-        """Map a power kind ('legislative'|'judicial'|'financial') to its
-        office role-id, or None."""
-        ids = self.office_ids()
-        try:
-            i = _OFFICE_POWERS.index(power)
-        except ValueError:
-            return None
-        return ids[i] if i < len(ids) else None
-
-    def ordinary_role_ids(self) -> list[str]:
-        """Role ids that are NOT elected offices (the prestige-driven pool)."""
-        offices = set(self.office_ids())
-        return [r.id for r in self.roles if r.id not in offices]
-
-    def resolved_class_thresholds(self) -> dict[str, ClassThreshold]:
-        """class_thresholds as given, or an auto-derived default ladder
-        (balance_min=0 everywhere; popularity_min evenly spaced over the class
-        order, lowest class = 0)."""
-        if self.mobility.class_thresholds:
-            return dict(self.mobility.class_thresholds)
-        n = len(self.classes)
-        out: dict[str, ClassThreshold] = {}
-
-        for i, c in enumerate(self.classes):
-            rank_from_bottom = (n - 1 - i)
-            pop = (100.0 * rank_from_bottom / (n - 1)) if n > 1 else 0.0
-            out[c] = ClassThreshold(popularity_min=pop, balance_min=0.0)
-        return out
-
-    @field_validator("classes")
-    @classmethod
-    def _classes_unique(cls, v: list[str]) -> list[str]:
-        if len(set(v)) != len(v):
-            raise ValueError("classes must be unique")
-        if not v:
-            raise ValueError("at least one class required")
-        return v
-
-    @field_validator("roles")
-    @classmethod
-    def _roles_unique(cls, v: list[RoleSpec]) -> list[RoleSpec]:
-        ids = [r.id for r in v]
-        if len(set(ids)) != len(ids):
-            raise ValueError("role ids must be unique")
-        if not v:
-            raise ValueError("at least one role required")
-        return v
 
     @field_validator("agents")
     @classmethod
@@ -271,94 +145,8 @@ class Config(BaseModel):
             raise ValueError("at least one agent required")
         return v
 
-    @model_validator(mode="after")
-    def _cross_check(self) -> "Config":
-        role_ids = {r.id for r in self.roles}
-        class_ids = set(self.classes)
-        for a in self.agents:
-            if a.role_initial not in role_ids:
-                raise ValueError(
-                    f"agent {a.id}: role_initial '{a.role_initial}' not in roles table"
-                )
-            if a.class_initial not in class_ids:
-                raise ValueError(
-                    f"agent {a.id}: class_initial '{a.class_initial}' not in classes list"
-                )
-        role_counts: dict[str, int] = {}
-        for a in self.agents:
-            role_counts[a.role_initial] = role_counts.get(a.role_initial, 0) + 1
-        for pr in self.economy.protected_roles:
-            if pr not in role_ids:
-                raise ValueError(
-                    f"economy.protected_roles entry '{pr}' is not in the roles table"
-                )
-            if role_counts.get(pr, 0) < 1:
-                raise ValueError(
-                    f"initial population has no agent with protected role '{pr}'"
-                )
-
-        office_ids = self.office_ids()
-        if len(office_ids) != 3:
-            raise ValueError(
-                "exactly 3 elected offices are required "
-                f"(got {len(office_ids)}: {office_ids}); set economy.protected_roles "
-                "or offices to three role ids"
-            )
-        for oid in office_ids:
-            if oid not in role_ids:
-                raise ValueError(f"office '{oid}' is not in the roles table")
-            if role_counts.get(oid, 0) < 1:
-                raise ValueError(
-                    f"initial population has no agent with office role '{oid}'"
-                )
-        if self.mobility.class_thresholds is not None:
-            tk = set(self.mobility.class_thresholds)
-            if tk != class_ids:
-                raise ValueError(
-                    "mobility.class_thresholds keys must match classes exactly; "
-                    f"got {sorted(tk)} vs classes {sorted(class_ids)}"
-                )
-        step = self.mobility.influence_step
-        if step >= self.office_powers.senator_prestige_power:
-            raise ValueError(
-                "mobility.influence_step must be < office_powers."
-                "senator_prestige_power (ordinary influence smaller than offices)"
-            )
-        if step >= self.office_powers.judge_popularity_power:
-            raise ValueError(
-                "mobility.influence_step must be < office_powers."
-                "judge_popularity_power (ordinary influence smaller than offices)"
-            )
-        return self
-
-# Config keys that used to exist but were retired. Historical run configs saved
-# in the run registry still carry them, and the schema is extra="forbid", so they
-# must be dropped before validation or old runs would fail to load. Add an entry
-# here whenever a field is removed: (block, key).
-_REMOVED_LEGACY_KEYS: tuple[tuple[str, str], ...] = (
-    ("simulation", "language"),
-    ("voting", "max_ticks_without_vote"),
-)
-
-
-def strip_removed_legacy_keys(raw: dict) -> dict:
-    """Drop known-retired config keys from a raw config dict in place.
-
-    Keeps backward compatibility with configs saved before those fields were
-    removed (e.g. the JSON snapshot stored for each past run) without weakening
-    extra="forbid" for genuinely unknown keys. Returns the same dict for chaining.
-    """
-    for block, key in _REMOVED_LEGACY_KEYS:
-        section = raw.get(block)
-        if isinstance(section, dict):
-            section.pop(key, None)
-    return raw
-
 
 def load_config(path: str | Path) -> Config:
     """Read a JSON config file from disk and validate it."""
-    p = Path(path)
-    raw: Any = json.loads(p.read_text(encoding="utf-8"))
-    if isinstance(raw, dict):
-        strip_removed_legacy_keys(raw)
+    raw: Any = json.loads(Path(path).read_text(encoding="utf-8"))
     return Config.model_validate(raw)

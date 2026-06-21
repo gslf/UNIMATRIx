@@ -1,7 +1,9 @@
-"""Per-run SQLite store. Thread-safe via a single connection guarded by a lock.
+"""SQLite store for a single simulation run.
 
-All access is synchronous; the orchestrator wraps writes in `asyncio.to_thread`
-when called from the async loop.
+Holds the world's persistent state: the beings (agents) and their self-authored
+identity history, the words they exchange, their memories and impressions, the
+shared cultural commons, projects, ties, collectives, lineage and deaths, plus
+the public event log and checkpoints.
 """
 from __future__ import annotations
 
@@ -26,12 +28,8 @@ def _load_schema() -> str:
 
 
 class RunStore:
-    """SQLite store for a single simulation run.
-
-    A single connection is reused with a re-entrant lock; sqlite3 in
-    serialized mode (the default) is safe to share across threads as long as
-    only one statement runs at a time.
-    """
+    """Thread-safe SQLite wrapper. All methods are synchronous; async callers
+    wrap them in ``asyncio.to_thread``."""
 
     def __init__(self, db_path: str | Path) -> None:
         self.path = Path(db_path)
@@ -44,49 +42,6 @@ class RunStore:
         self._conn.execute("PRAGMA journal_mode = WAL")
         self._conn.execute("PRAGMA synchronous = NORMAL")
         self._conn.executescript(_load_schema())
-        self._migrate()
-
-    def _migrate(self) -> None:
-        """Idempotent in-place migrations for older run databases."""
-        cols = {
-            r["name"]
-            for r in self._conn.execute("PRAGMA table_info(votes)").fetchall()
-        }
-        if "raw_response" not in cols:
-            self._conn.execute("ALTER TABLE votes ADD COLUMN raw_response TEXT")
-        agent_cols = {
-            r["name"]
-            for r in self._conn.execute("PRAGMA table_info(agents)").fetchall()
-        }
-        if "bank_account" not in agent_cols:
-            self._conn.execute(
-                "ALTER TABLE agents ADD COLUMN bank_account REAL DEFAULT 0"
-            )
-        if "destitute" not in agent_cols:
-            self._conn.execute(
-                "ALTER TABLE agents ADD COLUMN destitute INTEGER DEFAULT 0"
-            )
-        if "prestige" not in agent_cols:
-            self._conn.execute(
-                "ALTER TABLE agents ADD COLUMN prestige REAL DEFAULT 0"
-            )
-        if "popularity" not in agent_cols:
-            self._conn.execute(
-                "ALTER TABLE agents ADD COLUMN popularity REAL DEFAULT 0"
-            )
-        if "office" not in agent_cols:
-            self._conn.execute(
-                "ALTER TABLE agents ADD COLUMN office TEXT"
-            )
-        msg_cols = {
-            r["name"]
-            for r in self._conn.execute("PRAGMA table_info(messages)").fetchall()
-        }
-        if "tick_no" not in msg_cols:
-            self._conn.execute("ALTER TABLE messages ADD COLUMN tick_no INTEGER")
-        self._conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_messages_tick ON messages(tick_no)"
-        )
 
     def close(self) -> None:
         with self._lock:
@@ -103,51 +58,47 @@ class RunStore:
                 self._conn.execute("ROLLBACK")
                 raise
 
-    # ----- agents -----
+    # ----- beings -----
 
     def upsert_agent(self, agent: dict) -> None:
         with self._tx() as c:
             c.execute(
                 """
                 INSERT INTO agents
-                  (agent_id, name, gender, role, class, personality, values_json,
-                   backstory, social_need, state, current_conversation_id,
-                   bank_account, destitute, prestige, popularity, office)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                  (agent_id, name, gender, circumstance, disposition,
+                   self_model_json, self_model_version, vitality, alive,
+                   sustenance, born_tick, parent_ids, social_need, state)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(agent_id) DO UPDATE SET
                     name = excluded.name,
                     gender = excluded.gender,
-                    role = excluded.role,
-                    class = excluded.class,
-                    personality = excluded.personality,
-                    values_json = excluded.values_json,
-                    backstory = excluded.backstory,
+                    circumstance = excluded.circumstance,
+                    disposition = excluded.disposition,
+                    self_model_json = excluded.self_model_json,
+                    self_model_version = excluded.self_model_version,
+                    vitality = excluded.vitality,
+                    alive = excluded.alive,
+                    sustenance = excluded.sustenance,
+                    born_tick = excluded.born_tick,
+                    parent_ids = excluded.parent_ids,
                     social_need = excluded.social_need,
-                    state = excluded.state,
-                    current_conversation_id = excluded.current_conversation_id,
-                    bank_account = excluded.bank_account,
-                    destitute = excluded.destitute,
-                    prestige = excluded.prestige,
-                    popularity = excluded.popularity,
-                    office = excluded.office
+                    state = excluded.state
                 """,
                 (
                     agent["agent_id"],
                     agent.get("name"),
                     agent.get("gender"),
-                    agent.get("role"),
-                    agent.get("class"),
-                    json.dumps(agent.get("personality", {})),
-                    json.dumps(agent.get("values", {})),
-                    agent.get("backstory", ""),
-                    agent.get("social_need", 100.0),
+                    agent.get("circumstance", ""),
+                    agent.get("disposition", ""),
+                    json.dumps(agent.get("self_model_json", {})),
+                    int(agent.get("self_model_version", 0) or 0),
+                    float(agent.get("vitality", 100.0) or 0.0),
+                    int(bool(agent.get("alive", True))),
+                    float(agent.get("sustenance", 0.0) or 0.0),
+                    int(agent.get("born_tick", 0) or 0),
+                    json.dumps(agent.get("parent_ids", []) or []),
+                    float(agent.get("social_need", 100.0) or 0.0),
                     agent.get("state", "idle"),
-                    agent.get("current_conversation_id"),
-                    agent.get("bank_account", 0.0),
-                    int(bool(agent.get("destitute", False))),
-                    agent.get("prestige", 0.0),
-                    agent.get("popularity", 0.0),
-                    agent.get("office"),
                 ),
             )
 
@@ -156,47 +107,28 @@ class RunStore:
         agent_id: str,
         state: str | None = None,
         social_need: float | None = None,
-        current_conversation_id: int | None | object = ...,
-        role: str | None = None,
-        klass: str | None = None,
-        bank_account: float | None = None,
-        destitute: bool | None = None,
-        prestige: float | None = None,
-        popularity: float | None = None,
-        office: str | None | object = ...,
+        vitality: float | None = None,
+        alive: bool | None = None,
+        sustenance: float | None = None,
+        self_model_json: dict | None = None,
+        self_model_version: int | None = None,
     ) -> None:
         sets: list[str] = []
         params: list[Any] = []
         if state is not None:
-            sets.append("state = ?")
-            params.append(state)
+            sets.append("state = ?"); params.append(state)
         if social_need is not None:
-            sets.append("social_need = ?")
-            params.append(social_need)
-        if current_conversation_id is not ...:
-            sets.append("current_conversation_id = ?")
-            params.append(current_conversation_id)
-        if role is not None:
-            sets.append("role = ?")
-            params.append(role)
-        if klass is not None:
-            sets.append("class = ?")
-            params.append(klass)
-        if bank_account is not None:
-            sets.append("bank_account = ?")
-            params.append(bank_account)
-        if destitute is not None:
-            sets.append("destitute = ?")
-            params.append(int(bool(destitute)))
-        if prestige is not None:
-            sets.append("prestige = ?")
-            params.append(prestige)
-        if popularity is not None:
-            sets.append("popularity = ?")
-            params.append(popularity)
-        if office is not ...:
-            sets.append("office = ?")
-            params.append(office)
+            sets.append("social_need = ?"); params.append(float(social_need))
+        if vitality is not None:
+            sets.append("vitality = ?"); params.append(float(vitality))
+        if alive is not None:
+            sets.append("alive = ?"); params.append(int(bool(alive)))
+        if sustenance is not None:
+            sets.append("sustenance = ?"); params.append(float(sustenance))
+        if self_model_json is not None:
+            sets.append("self_model_json = ?"); params.append(json.dumps(self_model_json))
+        if self_model_version is not None:
+            sets.append("self_model_version = ?"); params.append(int(self_model_version))
         if not sets:
             return
         params.append(agent_id)
@@ -219,281 +151,58 @@ class RunStore:
             ).fetchall()
             return [dict(r) for r in rows]
 
-    # ----- economy -----
+    # ----- self-model history (the 'becoming' timeline) -----
 
-    def init_community_account(self, initial_balance: float) -> bool:
-        """Create the singleton community row if missing.
-
-        Returns True if the row was just inserted, False if it already existed.
-        Idempotent — never overwrites an existing balance.
-        """
-        with self._tx() as c:
-            cur = c.execute(
-                "INSERT OR IGNORE INTO community_account (id, balance) "
-                "VALUES (1, ?)",
-                (float(initial_balance),),
-            )
-            return (cur.rowcount or 0) > 0
-
-    def get_community_balance(self) -> float:
-        with self._lock:
-            row = self._conn.execute(
-                "SELECT balance FROM community_account WHERE id = 1"
-            ).fetchone()
-            return float(row["balance"]) if row else 0.0
-
-    def get_agent_balance(self, agent_id: str) -> float:
-        with self._lock:
-            row = self._conn.execute(
-                "SELECT bank_account FROM agents WHERE agent_id = ?",
-                (agent_id,),
-            ).fetchone()
-            return float(row["bank_account"]) if row else 0.0
-
-    def apply_transaction(
-        self,
-        kind: str,
-        from_party: str | None,
-        to_party: str | None,
-        amount: float,
-        reason: str = "",
-        ref_id: int | None = None,
+    def add_self_model(
+        self, agent_id: str, version: int, tick_no: int,
+        self_model_json: dict, diff: str = "",
     ) -> int:
-        """Atomically record a transaction and move the funds.
-
-        `from_party` / `to_party` are either an agent_id, the literal string
-        'community', or None (for one-sided init/expense rows). Money flows
-        from → to; if either side is None it is a sink/source.
-        All balance mutations and the log row land in the same SQL transaction.
-        """
-        amt = float(amount)
         with self._tx() as c:
             cur = c.execute(
-                "INSERT INTO transactions "
-                "(ts, kind, from_party, to_party, amount, reason, ref_id) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (utc_now_iso(), kind, from_party, to_party, amt, reason, ref_id),
-            )
-            tx_id = int(cur.lastrowid or 0)
-            if from_party == "community":
-                c.execute(
-                    "UPDATE community_account SET balance = balance - ? "
-                    "WHERE id = 1",
-                    (amt,),
-                )
-            elif from_party is not None:
-                c.execute(
-                    "UPDATE agents SET bank_account = bank_account - ? "
-                    "WHERE agent_id = ?",
-                    (amt, from_party),
-                )
-            if to_party == "community":
-                c.execute(
-                    "UPDATE community_account SET balance = balance + ? "
-                    "WHERE id = 1",
-                    (amt,),
-                )
-            elif to_party is not None:
-                c.execute(
-                    "UPDATE agents SET bank_account = bank_account + ? "
-                    "WHERE agent_id = ?",
-                    (amt, to_party),
-                )
-            return tx_id
-
-    def list_transactions(
-        self,
-        limit: int = 200,
-        agent_id: str | None = None,
-    ) -> list[dict]:
-        with self._lock:
-            if agent_id is None:
-                rows = self._conn.execute(
-                    "SELECT * FROM transactions ORDER BY id DESC LIMIT ?",
-                    (limit,),
-                ).fetchall()
-            else:
-                rows = self._conn.execute(
-                    "SELECT * FROM transactions "
-                    "WHERE from_party = ? OR to_party = ? "
-                    "ORDER BY id DESC LIMIT ?",
-                    (agent_id, agent_id, limit),
-                ).fetchall()
-            return [dict(r) for r in rows]
-
-    # ----- loans -----
-
-    def create_loan(
-        self,
-        borrower_id: str,
-        granted_by: str | None,
-        principal: float,
-        interest_rate: float,
-        installment_amount: float,
-        installments_total: int,
-    ) -> int:
-        """Record a new active loan and return its id.
-
-        The principal transfer itself is recorded separately via
-        `apply_transaction('loan', ...)`; this row tracks the amortization
-        schedule so the economy module can debit installments per tick.
-        """
-        with self._tx() as c:
-            cur = c.execute(
-                """
-                INSERT INTO loans
-                  (borrower_id, granted_by, principal, interest_rate,
-                   installment_amount, installments_total, installments_paid,
-                   granted_at, status)
-                VALUES (?, ?, ?, ?, ?, ?, 0, ?, 'active')
-                """,
-                (
-                    borrower_id,
-                    granted_by,
-                    float(principal),
-                    float(interest_rate),
-                    float(installment_amount),
-                    int(installments_total),
-                    utc_now_iso(),
-                ),
+                "INSERT INTO self_models "
+                "(agent_id, version, tick_no, self_model_json, diff, ts) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (agent_id, int(version), int(tick_no),
+                 json.dumps(self_model_json), diff or "", utc_now_iso()),
             )
             return int(cur.lastrowid or 0)
 
-    def list_active_loans(self) -> list[dict]:
+    def list_self_models(self, agent_id: str) -> list[dict]:
         with self._lock:
             rows = self._conn.execute(
-                "SELECT * FROM loans WHERE status = 'active' ORDER BY id"
+                "SELECT * FROM self_models WHERE agent_id = ? "
+                "ORDER BY version ASC, id ASC", (agent_id,),
             ).fetchall()
-            return [dict(r) for r in rows]
+        out: list[dict] = []
+        for r in rows:
+            d = dict(r)
+            try:
+                d["self_model"] = json.loads(d.get("self_model_json") or "{}")
+            except (TypeError, ValueError):
+                d["self_model"] = {}
+            out.append(d)
+        return out
 
-    def record_loan_installment(self, loan_id: int) -> None:
-        """Bump installments_paid; if it now equals installments_total, close
-        the loan as 'repaid'."""
-        with self._tx() as c:
-            c.execute(
-                "UPDATE loans SET installments_paid = installments_paid + 1 "
-                "WHERE id = ?",
-                (loan_id,),
-            )
-            c.execute(
-                "UPDATE loans SET status = 'repaid', closed_at = ? "
-                "WHERE id = ? AND installments_paid >= installments_total",
-                (utc_now_iso(), loan_id),
-            )
-
-    def write_off_loan(self, loan_id: int) -> None:
-        with self._tx() as c:
-            c.execute(
-                "UPDATE loans SET status = 'written_off', closed_at = ? "
-                "WHERE id = ?",
-                (utc_now_iso(), loan_id),
-            )
-
-    # ----- conversations -----
-
-    def open_conversation(
-        self, type_: str, initiator_id: str, participants: Iterable[str]
-    ) -> int:
-        with self._tx() as c:
-            cur = c.execute(
-                "INSERT INTO conversations "
-                "(type, initiator_id, participants, started_at) "
-                "VALUES (?, ?, ?, ?)",
-                (type_, initiator_id, json.dumps(list(participants)), utc_now_iso()),
-            )
-            return int(cur.lastrowid or 0)
-
-    def close_conversation(
-        self, conv_id: int, end_reason: str, summary: str | None = None
-    ) -> None:
-        with self._tx() as c:
-            c.execute(
-                "UPDATE conversations SET ended_at = ?, end_reason = ?, summary = ? "
-                "WHERE id = ?",
-                (utc_now_iso(), end_reason, summary, conv_id),
-            )
-
-    def update_conversation_participants(
-        self, conv_id: int, participants: Iterable[str]
-    ) -> None:
-        with self._tx() as c:
-            c.execute(
-                "UPDATE conversations SET participants = ? WHERE id = ?",
-                (json.dumps(list(participants)), conv_id),
-            )
-
-    def append_message(
-        self, conv_id: int, turn_index: int, sender_id: str, content: str
-    ) -> int:
-        with self._tx() as c:
-            cur = c.execute(
-                "INSERT INTO messages "
-                "(conversation_id, turn_index, sender_id, content, ts) "
-                "VALUES (?, ?, ?, ?, ?)",
-                (conv_id, turn_index, sender_id, content, utc_now_iso()),
-            )
-            return int(cur.lastrowid or 0)
-
-    def get_conversation(self, conv_id: int) -> dict | None:
-        with self._lock:
-            row = self._conn.execute(
-                "SELECT * FROM conversations WHERE id = ?", (conv_id,)
-            ).fetchone()
-            return dict(row) if row else None
-
-    def get_messages(self, conv_id: int) -> list[dict]:
+    def self_model_ticks(self) -> list[int]:
         with self._lock:
             rows = self._conn.execute(
-                "SELECT * FROM messages WHERE conversation_id = ? "
-                "ORDER BY turn_index ASC",
-                (conv_id,),
+                "SELECT tick_no FROM self_models "
+                "WHERE version > 0 AND tick_no IS NOT NULL ORDER BY tick_no"
             ).fetchall()
-            return [dict(r) for r in rows]
+            return [int(r["tick_no"]) for r in rows]
 
-    def list_conversations(self, limit: int = 500) -> list[dict]:
-        with self._lock:
-            rows = self._conn.execute(
-                "SELECT c.id, c.type, c.initiator_id, c.participants, "
-                "       c.started_at, c.ended_at, c.end_reason, c.summary, "
-                "       (SELECT COUNT(*) FROM messages m "
-                "          WHERE m.conversation_id = c.id) AS message_count "
-                "FROM conversations c "
-                "ORDER BY c.id DESC LIMIT ?",
-                (limit,),
-            ).fetchall()
-            out = []
-            for r in rows:
-                d = dict(r)
-                try:
-                    d["participants"] = json.loads(d["participants"])
-                except (TypeError, json.JSONDecodeError):
-                    d["participants"] = []
-                out.append(d)
-            return out
-
-    # ----- messages (tick-based async messaging) -----
+    # ----- words (messages) -----
 
     @staticmethod
     def _msg_row(r: sqlite3.Row) -> dict:
-        """Convert a message row whose recipients were group_concat'd into a
-        dict with a `recipients` list."""
         d = dict(r)
         rec = d.pop("recipients", None)
         d["recipients"] = rec.split(",") if rec else []
         return d
 
     def add_message(
-        self,
-        sender_id: str,
-        recipient_ids: Iterable[str],
-        content: str,
-        tick_no: int,
+        self, sender_id: str, recipient_ids: Iterable[str], content: str, tick_no: int
     ) -> int:
-        """Persist one message + its recipient rows in a single transaction.
-
-        `conversation_id`/`turn_index` are left NULL (legacy columns); the
-        message is keyed by `tick_no` for the async model.
-        """
         with self._tx() as c:
             cur = c.execute(
                 "INSERT INTO messages (sender_id, content, ts, tick_no) "
@@ -504,27 +213,11 @@ class RunStore:
             for rid in recipient_ids:
                 c.execute(
                     "INSERT OR IGNORE INTO message_recipients "
-                    "(message_id, recipient_id) VALUES (?, ?)",
-                    (mid, rid),
+                    "(message_id, recipient_id) VALUES (?, ?)", (mid, rid),
                 )
             return mid
 
-    def messages_in_tick(self, tick_no: int) -> list[dict]:
-        with self._lock:
-            rows = self._conn.execute(
-                "SELECT m.id, m.sender_id, m.content, m.ts, m.tick_no, "
-                "       group_concat(r.recipient_id) AS recipients "
-                "FROM messages m LEFT JOIN message_recipients r "
-                "  ON r.message_id = m.id "
-                "WHERE m.tick_no = ? GROUP BY m.id ORDER BY m.id",
-                (tick_no,),
-            ).fetchall()
-            return [self._msg_row(r) for r in rows]
-
     def unread_messages_for(self, agent_id: str, after_tick: int) -> list[dict]:
-        """Messages addressed to `agent_id` sent strictly after `after_tick`,
-        each decorated with its full recipient list. Used to re-derive an
-        inbox on resume."""
         with self._lock:
             rows = self._conn.execute(
                 "SELECT m.id, m.sender_id, m.content, m.ts, m.tick_no, "
@@ -539,8 +232,6 @@ class RunStore:
             return [self._msg_row(r) for r in rows]
 
     def recent_messages_for(self, agent_id: str, limit: int) -> list[dict]:
-        """Latest messages where the agent is sender OR recipient, oldest
-        first (for prompt history + reflection)."""
         with self._lock:
             rows = self._conn.execute(
                 "SELECT m.id, m.sender_id, m.content, m.ts, m.tick_no, "
@@ -554,58 +245,7 @@ class RunStore:
             ).fetchall()
             return [self._msg_row(r) for r in reversed(rows)]
 
-    def messages_by_sender(self, sender_id: str, limit: int = 20) -> list[dict]:
-        with self._lock:
-            rows = self._conn.execute(
-                "SELECT m.id, m.sender_id, m.content, m.ts, m.tick_no, "
-                "       group_concat(r.recipient_id) AS recipients "
-                "FROM messages m LEFT JOIN message_recipients r "
-                "  ON r.message_id = m.id "
-                "WHERE m.sender_id = ? GROUP BY m.id ORDER BY m.id DESC LIMIT ?",
-                (sender_id, limit),
-            ).fetchall()
-            return [self._msg_row(r) for r in rows]
-
-    def list_messages(
-        self,
-        limit: int = 500,
-        sender: str | None = None,
-        recipient: str | None = None,
-        text: str | None = None,
-    ) -> list[dict]:
-        """Explorer feed: newest-first messages from the async stream
-        (tick_no set), with optional sender/recipient/text filters."""
-        clauses = ["m.tick_no IS NOT NULL"]
-        params: list[Any] = []
-        if sender:
-            clauses.append("m.sender_id = ?")
-            params.append(sender)
-        if recipient:
-            clauses.append(
-                "m.id IN (SELECT message_id FROM message_recipients "
-                "WHERE recipient_id = ?)"
-            )
-            params.append(recipient)
-        if text:
-            clauses.append("m.content LIKE ?")
-            params.append(f"%{text}%")
-        params.append(limit)
-        with self._lock:
-            rows = self._conn.execute(
-                "SELECT m.id, m.sender_id, m.content, m.ts, m.tick_no, "
-                "       group_concat(r.recipient_id) AS recipients "
-                "FROM messages m LEFT JOIN message_recipients r "
-                "  ON r.message_id = m.id "
-                "WHERE " + " AND ".join(clauses) +
-                " GROUP BY m.id ORDER BY m.id DESC LIMIT ?",
-                params,
-            ).fetchall()
-            return [self._msg_row(r) for r in rows]
-
-    def messages_between(
-        self, a_id: str, b_id: str, limit: int = 500
-    ) -> list[dict]:
-        """Pairwise thread: messages a→b or b→a, oldest first."""
+    def messages_between(self, a_id: str, b_id: str, limit: int = 500) -> list[dict]:
         with self._lock:
             rows = self._conn.execute(
                 "SELECT m.id, m.sender_id, m.content, m.ts, m.tick_no, "
@@ -613,261 +253,21 @@ class RunStore:
                 "FROM messages m LEFT JOIN message_recipients r "
                 "  ON r.message_id = m.id "
                 "WHERE (m.sender_id = ? AND m.id IN "
-                "        (SELECT message_id FROM message_recipients "
-                "         WHERE recipient_id = ?)) "
+                "        (SELECT message_id FROM message_recipients WHERE recipient_id = ?)) "
                 "   OR (m.sender_id = ? AND m.id IN "
-                "        (SELECT message_id FROM message_recipients "
-                "         WHERE recipient_id = ?)) "
+                "        (SELECT message_id FROM message_recipients WHERE recipient_id = ?)) "
                 "GROUP BY m.id ORDER BY m.id ASC LIMIT ?",
                 (a_id, b_id, b_id, a_id, limit),
             ).fetchall()
             return [self._msg_row(r) for r in rows]
 
-    def all_messages_with_recipients(self) -> list[dict]:
-        """Every async message with its recipient list (graph renderer).
-        Inner join excludes legacy conversation rows lacking recipients."""
-        with self._lock:
-            rows = self._conn.execute(
-                "SELECT m.id, m.sender_id, m.ts, m.tick_no, "
-                "       group_concat(r.recipient_id) AS recipients "
-                "FROM messages m JOIN message_recipients r "
-                "  ON r.message_id = m.id "
-                "GROUP BY m.id ORDER BY m.id"
-            ).fetchall()
-            return [self._msg_row(r) for r in rows]
+    # ----- memory: reflections + impressions -----
 
-    # ----- voting -----
-
-    def open_proposal(
-        self,
-        proposer_id: str,
-        target_id: str,
-        change_type: str,
-        from_value: str,
-        to_value: str,
-        motivation: str = "",
-    ) -> int:
+    def add_memory_summary(self, agent_id: str, summary: str) -> int:
         with self._tx() as c:
             cur = c.execute(
-                "INSERT INTO vote_proposals "
-                "(proposer_id, target_id, change_type, from_value, to_value, "
-                " motivation, proposed_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (
-                    proposer_id,
-                    target_id,
-                    change_type,
-                    from_value,
-                    to_value,
-                    motivation,
-                    utc_now_iso(),
-                ),
-            )
-            return int(cur.lastrowid or 0)
-
-    def record_vote(
-        self,
-        proposal_id: int,
-        voter_id: str,
-        vote: str,
-        motivation: str,
-        raw_response: str | None = None,
-    ) -> None:
-        with self._tx() as c:
-            c.execute(
-                "INSERT OR REPLACE INTO votes "
-                "(proposal_id, voter_id, vote, motivation, raw_response, voted_at) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                (
-                    proposal_id,
-                    voter_id,
-                    vote,
-                    motivation,
-                    raw_response,
-                    utc_now_iso(),
-                ),
-            )
-
-    def close_proposal(
-        self,
-        proposal_id: int,
-        outcome: str,
-        yes_count: int,
-        no_count: int,
-    ) -> None:
-        with self._tx() as c:
-            c.execute(
-                "UPDATE vote_proposals SET outcome = ?, yes_count = ?, no_count = ?, "
-                "closed_at = ? WHERE id = ?",
-                (outcome, yes_count, no_count, utc_now_iso(), proposal_id),
-            )
-
-    def get_votes_by_voter(self, voter_id: str, limit: int = 10) -> list[dict]:
-        """Return the most recent votes cast by a single voter, joined with
-        the corresponding proposal so the UI gets target/change/outcome."""
-        with self._lock:
-            rows = self._conn.execute(
-                "SELECT v.proposal_id, v.vote, v.motivation, v.raw_response, "
-                "       v.voted_at, p.target_id, p.change_type, p.from_value, "
-                "       p.to_value, p.outcome "
-                "FROM votes v JOIN vote_proposals p "
-                "  ON v.proposal_id = p.id "
-                "WHERE v.voter_id = ? "
-                "ORDER BY v.proposal_id DESC LIMIT ?",
-                (voter_id, limit),
-            ).fetchall()
-            return [dict(r) for r in rows]
-
-    def get_votes(self, proposal_id: int) -> list[dict]:
-        with self._lock:
-            rows = self._conn.execute(
-                "SELECT * FROM votes WHERE proposal_id = ?", (proposal_id,)
-            ).fetchall()
-            return [dict(r) for r in rows]
-
-    def list_proposals(self) -> list[dict]:
-        with self._lock:
-            rows = self._conn.execute(
-                "SELECT * FROM vote_proposals ORDER BY id"
-            ).fetchall()
-            return [dict(r) for r in rows]
-
-    def get_proposal(self, proposal_id: int) -> dict | None:
-        with self._lock:
-            row = self._conn.execute(
-                "SELECT * FROM vote_proposals WHERE id = ?", (proposal_id,)
-            ).fetchone()
-            return dict(row) if row else None
-
-    def events_by_type(
-        self, types: list[str], limit: int = 500
-    ) -> list[dict]:
-        """Return public_events filtered by type, newest first."""
-        if not types:
-            return []
-        placeholders = ",".join(["?"] * len(types))
-        with self._lock:
-            rows = self._conn.execute(
-                f"SELECT * FROM public_events "
-                f"WHERE event_type IN ({placeholders}) "
-                f"ORDER BY id DESC LIMIT ?",
-                (*types, limit),
-            ).fetchall()
-            out: list[dict] = []
-            for r in rows:
-                d = dict(r)
-                try:
-                    d["payload"] = json.loads(d["payload"])
-                except (TypeError, json.JSONDecodeError):
-                    pass
-                out.append(d)
-            return out
-
-    def list_events_excluding(
-        self, exclude_types: list[str], limit: int = 1000
-    ) -> list[dict]:
-        """Return public_events whose type is NOT in exclude_types, newest first."""
-        with self._lock:
-            if exclude_types:
-                placeholders = ",".join(["?"] * len(exclude_types))
-                rows = self._conn.execute(
-                    f"SELECT * FROM public_events "
-                    f"WHERE event_type NOT IN ({placeholders}) "
-                    f"ORDER BY id DESC LIMIT ?",
-                    (*exclude_types, limit),
-                ).fetchall()
-            else:
-                rows = self._conn.execute(
-                    "SELECT * FROM public_events ORDER BY id DESC LIMIT ?",
-                    (limit,),
-                ).fetchall()
-            out: list[dict] = []
-            for r in rows:
-                d = dict(r)
-                try:
-                    d["payload"] = json.loads(d["payload"])
-                except (TypeError, json.JSONDecodeError):
-                    d["payload"] = {}
-                out.append(d)
-            return out
-
-    def election_debate_speeches(self, tick: int | None = None) -> list[dict]:
-        """Election debate transcript, oldest first.
-
-        The debate runs once per election, before any office ballot, so it is
-        keyed by the election `tick` (stamped into each speech payload) rather
-        than by a single proposal. Pass `tick` to scope to one election; omit it
-        to get every speech (e.g. for per-tick counts). Speeches recorded before
-        per-tick stamping carry no `tick` and are filtered out when one is
-        requested.
-        """
-        with self._lock:
-            rows = self._conn.execute(
-                "SELECT payload, ts FROM public_events "
-                "WHERE event_type = 'election_debate_speech' "
-                "ORDER BY id ASC"
-            ).fetchall()
-        out: list[dict] = []
-        for r in rows:
-            try:
-                payload = json.loads(r["payload"]) if r["payload"] else {}
-            except (TypeError, json.JSONDecodeError):
-                continue
-            if tick is not None and payload.get("tick") != tick:
-                continue
-            out.append({
-                "tick": payload.get("tick"),
-                "round": payload.get("round"),
-                "speaker_id": payload.get("speaker_id"),
-                "speaker_name": payload.get("speaker_name"),
-                "text": payload.get("text"),
-                "ts": r["ts"],
-            })
-        return out
-
-    # ----- status changes -----
-
-    def record_status_change(
-        self,
-        agent_id: str,
-        change_type: str,
-        from_value: str | None,
-        to_value: str,
-        proposal_id: int | None = None,
-    ) -> None:
-        with self._tx() as c:
-            c.execute(
-                "INSERT INTO status_changes "
-                "(agent_id, change_type, from_value, to_value, proposal_id, ts) "
-                "VALUES (?, ?, ?, ?, ?, ?)",
-                (agent_id, change_type, from_value, to_value, proposal_id, utc_now_iso()),
-            )
-
-    def list_status_changes(self) -> list[dict]:
-        with self._lock:
-            rows = self._conn.execute(
-                "SELECT * FROM status_changes ORDER BY ts ASC"
-            ).fetchall()
-            return [dict(r) for r in rows]
-
-    def list_status_changes_for(self, agent_id: str) -> list[dict]:
-        """Role/class movement history for a single agent, oldest first."""
-        with self._lock:
-            rows = self._conn.execute(
-                "SELECT * FROM status_changes WHERE agent_id = ? ORDER BY ts ASC",
-                (agent_id,),
-            ).fetchall()
-            return [dict(r) for r in rows]
-
-    # ----- memory -----
-
-    def add_memory_summary(
-        self, agent_id: str, conversation_id: int | None, summary: str
-    ) -> int:
-        with self._tx() as c:
-            cur = c.execute(
-                "INSERT INTO memory_summaries "
-                "(agent_id, conversation_id, summary, ts) VALUES (?, ?, ?, ?)",
-                (agent_id, conversation_id, summary, utc_now_iso()),
+                "INSERT INTO memory_summaries (agent_id, summary, ts) "
+                "VALUES (?, ?, ?)", (agent_id, summary, utc_now_iso()),
             )
             return int(cur.lastrowid or 0)
 
@@ -875,10 +275,17 @@ class RunStore:
         with self._lock:
             rows = self._conn.execute(
                 "SELECT * FROM memory_summaries WHERE agent_id = ? "
-                "ORDER BY id DESC LIMIT ?",
-                (agent_id, limit),
+                "ORDER BY id DESC LIMIT ?", (agent_id, limit),
             ).fetchall()
             return [dict(r) for r in reversed(rows)]
+
+    def count_memory_summaries(self, agent_id: str) -> int:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT COUNT(*) n FROM memory_summaries WHERE agent_id = ?",
+                (agent_id,),
+            ).fetchone()
+            return int(row["n"]) if row else 0
 
     def upsert_person_memory(
         self, observer_id: str, subject_id: str, impression: str
@@ -889,8 +296,7 @@ class RunStore:
                 "(observer_id, subject_id, impression, last_updated) "
                 "VALUES (?, ?, ?, ?) "
                 "ON CONFLICT(observer_id, subject_id) DO UPDATE SET "
-                "impression = excluded.impression, "
-                "last_updated = excluded.last_updated",
+                "impression = excluded.impression, last_updated = excluded.last_updated",
                 (observer_id, subject_id, impression, utc_now_iso()),
             )
 
@@ -907,74 +313,277 @@ class RunStore:
         with self._lock:
             rows = self._conn.execute(
                 "SELECT subject_id, impression, last_updated FROM person_memories "
-                "WHERE observer_id = ? ORDER BY last_updated DESC",
-                (observer_id,),
+                "WHERE observer_id = ? ORDER BY last_updated DESC", (observer_id,),
             ).fetchall()
             return [dict(r) for r in rows]
 
-    def agent_decision_history(
-        self, agent_id: str, limit: int = 20
-    ) -> list[dict]:
-        """Reconstruct an agent's recent applied decisions.
+    # ----- labor: projects -----
 
-        Sources merged in time order:
-          - messages sent by this agent (sent_message)
-          - public_events of type 'broadcast_agent' from this agent
-          - public_events of type 'vote_proposed' by this agent
-        do_nothing leaves no per-agent trace, but the three above cover the
-        decisions a user actually wants to inspect.
-        """
-        out: list[dict] = []
-        for m in self.messages_by_sender(agent_id, limit):
-            out.append({
-                "kind": "sent_message",
-                "at": m.get("ts"),
-                "message_id": m.get("id"),
-                "tick_no": m.get("tick_no"),
-                "recipients": m.get("recipients", []),
-                "content": (m.get("content") or "")[:200],
-            })
+    def create_project(
+        self, founder_id: str, goal: str, kind: str, target: float, tick_no: int
+    ) -> int:
+        with self._tx() as c:
+            cur = c.execute(
+                "INSERT INTO projects "
+                "(founder_id, goal, kind, effort, target, status, tick_started) "
+                "VALUES (?, ?, ?, 0, ?, 'active', ?)",
+                (founder_id, goal, kind, float(target), int(tick_no)),
+            )
+            return int(cur.lastrowid or 0)
+
+    def add_project_effort(
+        self, project_id: int, agent_id: str, effort: float, tick_no: int
+    ) -> dict | None:
+        with self._tx() as c:
+            row = c.execute(
+                "SELECT * FROM projects WHERE id = ?", (project_id,)
+            ).fetchone()
+            if row is None or row["status"] != "active":
+                return None
+            c.execute(
+                "INSERT INTO project_contributions "
+                "(project_id, agent_id, effort, tick_no) VALUES (?, ?, ?, ?)",
+                (project_id, agent_id, float(effort), int(tick_no)),
+            )
+            c.execute(
+                "UPDATE projects SET effort = effort + ? WHERE id = ?",
+                (float(effort), project_id),
+            )
+            return dict(c.execute(
+                "SELECT * FROM projects WHERE id = ?", (project_id,)
+            ).fetchone())
+
+    def complete_project(self, project_id: int, output: str, tick_no: int) -> None:
+        with self._tx() as c:
+            c.execute(
+                "UPDATE projects SET status = 'completed', output = ?, "
+                "tick_completed = ? WHERE id = ?", (output, int(tick_no), project_id),
+            )
+
+    def project_contributors(self, project_id: int) -> dict[str, float]:
         with self._lock:
-            evs = self._conn.execute(
-                "SELECT event_type, payload, ts FROM public_events "
-                "WHERE event_type IN ('broadcast_agent', 'vote_proposed') "
-                "ORDER BY id DESC LIMIT ?",
-                (limit * 4,),
+            rows = self._conn.execute(
+                "SELECT agent_id, SUM(effort) tot FROM project_contributions "
+                "WHERE project_id = ? GROUP BY agent_id", (project_id,),
             ).fetchall()
-            for r in evs:
-                try:
-                    payload = json.loads(r["payload"]) if r["payload"] else {}
-                except (TypeError, json.JSONDecodeError):
-                    payload = {}
-                if r["event_type"] == "broadcast_agent":
-                    if payload.get("sender_id") != agent_id:
-                        continue
-                    out.append({
-                        "kind": "broadcast",
-                        "at": r["ts"],
-                        "message": payload.get("message"),
-                    })
-                elif r["event_type"] == "vote_proposed":
-                    if payload.get("proposer_id") != agent_id:
-                        continue
-                    out.append({
-                        "kind": "vote_proposed",
-                        "at": r["ts"],
-                        "target_id": payload.get("target_id"),
-                        "change_type": payload.get("change_type"),
-                        "from_value": payload.get("from_value"),
-                        "to_value": payload.get("to_value"),
-                    })
-        out.sort(key=lambda d: d.get("at") or "", reverse=True)
-        return out[:limit]
+        return {r["agent_id"]: float(r["tot"] or 0) for r in rows}
 
-    # ----- events -----
+    def list_projects(self, status: str | None = None, limit: int = 1000) -> list[dict]:
+        with self._lock:
+            if status:
+                rows = self._conn.execute(
+                    "SELECT * FROM projects WHERE status = ? ORDER BY id DESC LIMIT ?",
+                    (status, limit),
+                ).fetchall()
+            else:
+                rows = self._conn.execute(
+                    "SELECT * FROM projects ORDER BY id DESC LIMIT ?", (limit,),
+                ).fetchall()
+            return [dict(r) for r in rows]
+
+    def active_projects(self) -> list[dict]:
+        return self.list_projects(status="active")
+
+    # ----- meaning: cultural commons -----
+
+    def add_artifact(
+        self, author_id: str, kind: str, content: str, tick_no: int,
+        parent_artifact_id: int | None = None,
+    ) -> int:
+        with self._tx() as c:
+            cur = c.execute(
+                "INSERT INTO cultural_artifacts "
+                "(author_id, kind, content, tick_no, parent_artifact_id) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (author_id, kind, content, int(tick_no), parent_artifact_id),
+            )
+            return int(cur.lastrowid or 0)
+
+    def recent_artifacts(self, limit: int = 12) -> list[dict]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM cultural_artifacts ORDER BY id DESC LIMIT ?", (limit,),
+            ).fetchall()
+            return [dict(r) for r in rows][::-1]
+
+    def list_artifacts(self, limit: int = 1000) -> list[dict]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM cultural_artifacts ORDER BY id DESC LIMIT ?", (limit,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def record_adoption(
+        self, agent_id: str, artifact_id: int, self_model_version: int, tick_no: int
+    ) -> None:
+        with self._tx() as c:
+            c.execute(
+                "INSERT INTO belief_adoptions "
+                "(agent_id, artifact_id, self_model_version, tick_no) "
+                "VALUES (?, ?, ?, ?)",
+                (agent_id, int(artifact_id), int(self_model_version), int(tick_no)),
+            )
+
+    def list_adoptions(self) -> list[dict]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM belief_adoptions ORDER BY id"
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    # ----- kinship: ties + collectives -----
+
+    def upsert_relationship(
+        self, observer_id: str, subject_id: str, type_: str,
+        strength_delta: float, note: str, tick_no: int,
+    ) -> None:
+        with self._tx() as c:
+            row = c.execute(
+                "SELECT strength, history FROM relationships "
+                "WHERE observer_id = ? AND subject_id = ?",
+                (observer_id, subject_id),
+            ).fetchone()
+            if row is None:
+                c.execute(
+                    "INSERT INTO relationships "
+                    "(observer_id, subject_id, type, strength, history, "
+                    "formed_tick, updated_tick) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (observer_id, subject_id, type_, float(strength_delta),
+                     note, int(tick_no), int(tick_no)),
+                )
+            else:
+                new_strength = float(row["strength"] or 0) + float(strength_delta)
+                hist = (row["history"] or "")
+                hist = (hist + " | " + note)[-400:] if note else hist
+                c.execute(
+                    "UPDATE relationships SET type = ?, strength = ?, history = ?, "
+                    "updated_tick = ?, dissolved_tick = NULL "
+                    "WHERE observer_id = ? AND subject_id = ?",
+                    (type_, new_strength, hist, int(tick_no), observer_id, subject_id),
+                )
+
+    def dissolve_relationship(
+        self, observer_id: str, subject_id: str, tick_no: int
+    ) -> None:
+        with self._tx() as c:
+            c.execute(
+                "UPDATE relationships SET dissolved_tick = ? "
+                "WHERE observer_id = ? AND subject_id = ?",
+                (int(tick_no), observer_id, subject_id),
+            )
+
+    def get_relationship(self, observer_id: str, subject_id: str) -> dict | None:
+        with self._lock:
+            row = self._conn.execute(
+                "SELECT * FROM relationships WHERE observer_id = ? AND subject_id = ?",
+                (observer_id, subject_id),
+            ).fetchone()
+            return dict(row) if row else None
+
+    def list_relationships(self) -> list[dict]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM relationships ORDER BY observer_id, subject_id"
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def relationships_for(self, observer_id: str) -> list[dict]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM relationships WHERE observer_id = ? "
+                "AND dissolved_tick IS NULL ORDER BY strength DESC", (observer_id,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def create_group(
+        self, name: str, founder_id: str, purpose: str, tick_no: int
+    ) -> int:
+        with self._tx() as c:
+            cur = c.execute(
+                "INSERT INTO groups (name, founder_id, purpose, tick_founded) "
+                "VALUES (?, ?, ?, ?)", (name, founder_id, purpose, int(tick_no)),
+            )
+            gid = int(cur.lastrowid or 0)
+            c.execute(
+                "INSERT OR IGNORE INTO group_members "
+                "(group_id, agent_id, joined_tick) VALUES (?, ?, ?)",
+                (gid, founder_id, int(tick_no)),
+            )
+            return gid
+
+    def join_group(self, group_id: int, agent_id: str, tick_no: int) -> bool:
+        with self._tx() as c:
+            if not c.execute("SELECT 1 FROM groups WHERE id = ?", (group_id,)).fetchone():
+                return False
+            c.execute(
+                "INSERT INTO group_members (group_id, agent_id, joined_tick) "
+                "VALUES (?, ?, ?) "
+                "ON CONFLICT(group_id, agent_id) DO UPDATE SET left_tick = NULL",
+                (group_id, agent_id, int(tick_no)),
+            )
+            return True
+
+    def leave_group(self, group_id: int, agent_id: str, tick_no: int) -> None:
+        with self._tx() as c:
+            c.execute(
+                "UPDATE group_members SET left_tick = ? "
+                "WHERE group_id = ? AND agent_id = ?", (int(tick_no), group_id, agent_id),
+            )
+
+    def list_groups(self) -> list[dict]:
+        with self._lock:
+            rows = self._conn.execute("SELECT * FROM groups ORDER BY id").fetchall()
+            groups = [dict(r) for r in rows]
+            for g in groups:
+                mem = self._conn.execute(
+                    "SELECT agent_id FROM group_members "
+                    "WHERE group_id = ? AND left_tick IS NULL", (g["id"],),
+                ).fetchall()
+                g["members"] = [m["agent_id"] for m in mem]
+            return groups
+
+    # ----- mortality & continuity: lineage + memorials -----
+
+    def record_lineage(
+        self, child_id: str, parent_ids: list[str], inherited: dict, tick_no: int
+    ) -> None:
+        with self._tx() as c:
+            c.execute(
+                "INSERT OR REPLACE INTO lineage "
+                "(child_id, parent_ids, inherited_json, tick_no) VALUES (?, ?, ?, ?)",
+                (child_id, json.dumps(parent_ids), json.dumps(inherited), int(tick_no)),
+            )
+
+    def list_lineage(self) -> list[dict]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM lineage ORDER BY tick_no"
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def record_death(
+        self, agent_id: str, cause: str, tick_no: int, legacy_summary: str
+    ) -> None:
+        with self._tx() as c:
+            c.execute(
+                "INSERT OR REPLACE INTO deaths "
+                "(agent_id, cause, tick_no, legacy_summary, ts) VALUES (?, ?, ?, ?, ?)",
+                (agent_id, cause, int(tick_no), legacy_summary, utc_now_iso()),
+            )
+
+    def list_deaths(self) -> list[dict]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM deaths ORDER BY tick_no"
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    # ----- public events -----
 
     def record_event(self, event_type: str, payload: dict) -> int:
         with self._tx() as c:
             cur = c.execute(
-                "INSERT INTO public_events (event_type, payload, ts) "
-                "VALUES (?, ?, ?)",
+                "INSERT INTO public_events (event_type, payload, ts) VALUES (?, ?, ?)",
                 (event_type, json.dumps(payload), utc_now_iso()),
             )
             return int(cur.lastrowid or 0)
@@ -984,15 +593,15 @@ class RunStore:
             rows = self._conn.execute(
                 "SELECT * FROM public_events ORDER BY id DESC LIMIT ?", (limit,)
             ).fetchall()
-            out = []
-            for r in reversed(rows):
-                d = dict(r)
-                try:
-                    d["payload"] = json.loads(d["payload"])
-                except (TypeError, json.JSONDecodeError):
-                    pass
-                out.append(d)
-            return out
+        out = []
+        for r in reversed(rows):
+            d = dict(r)
+            try:
+                d["payload"] = json.loads(d["payload"])
+            except (TypeError, json.JSONDecodeError):
+                pass
+            out.append(d)
+        return out
 
     # ----- checkpoints -----
 
@@ -1005,7 +614,6 @@ class RunStore:
             return int(cur.lastrowid or 0)
 
     def latest_checkpoint(self) -> dict | None:
-        """Return the most recently written checkpoint payload, or None."""
         with self._lock:
             row = self._conn.execute(
                 "SELECT state FROM checkpoints ORDER BY id DESC LIMIT 1"
@@ -1016,24 +624,3 @@ class RunStore:
             return json.loads(row["state"])
         except (TypeError, json.JSONDecodeError):
             return None
-
-    # ----- analytics helpers (used by the graph renderer) -----
-
-    def all_messages_with_conv(self) -> list[dict]:
-        with self._lock:
-            rows = self._conn.execute(
-                "SELECT m.id, m.conversation_id, m.sender_id, m.ts, "
-                "       c.participants, c.type "
-                "FROM messages m JOIN conversations c "
-                "  ON m.conversation_id = c.id "
-                "ORDER BY m.id"
-            ).fetchall()
-            out = []
-            for r in rows:
-                d = dict(r)
-                try:
-                    d["participants"] = json.loads(d["participants"])
-                except (TypeError, json.JSONDecodeError):
-                    d["participants"] = []
-                out.append(d)
-            return out

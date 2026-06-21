@@ -15,5 +15,5 @@ runs/
 *.db-shm
 .DS_Store
 chroma_*/
-.claude/
+.claude/*
 analysis_scripts/

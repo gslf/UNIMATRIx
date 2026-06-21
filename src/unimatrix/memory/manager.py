@@ -47,37 +47,13 @@ class MemoryManager:
 
     # ----- writes -----
 
-    async def add_conversation_summary(
-        self, agent_id: str, conversation_id: int, summary: str
-    ) -> None:
-        # SQLite + vector store; both run in worker threads.
-        sid = await asyncio.to_thread(
-            self.store.add_memory_summary, agent_id, conversation_id, summary
-        )
-        await asyncio.to_thread(
-            self.vector.add,
-            [f"summary_{sid}_{agent_id}"],
-            [summary],
-            [
-                {
-                    "agent_id": agent_id,
-                    "type": "conversation_summary",
-                    "conversation_id": conversation_id,
-                }
-            ],
-        )
-
     async def add_summary(
         self, agent_id: str, summary: str, tick_no: int | None = None
     ) -> None:
-        """Persist a reflection summary (not tied to a conversation) + embed it.
-
-        The async messaging model has no conversation to close, so summaries
-        come from the periodic per-agent reflection pass. `conversation_id` is
-        stored NULL; the vector metadata carries `tick_no` instead.
-        """
+        """Persist a lived-experience summary (a reflection or a deed trace) and
+        embed it for semantic recall. The vector metadata carries `tick_no`."""
         sid = await asyncio.to_thread(
-            self.store.add_memory_summary, agent_id, None, summary
+            self.store.add_memory_summary, agent_id, summary
         )
         await asyncio.to_thread(
             self.vector.add,
@@ -119,6 +95,13 @@ class MemoryManager:
             self.store.recent_summaries, agent_id, self.cfg.medium_term_summaries
         )
         return [r["summary"] for r in rows]
+
+    async def count_summaries(self, agent_id: str) -> int:
+        """Total persisted summaries (reflections + deed traces) for an agent —
+        used by the self-revision freshness gate."""
+        return await asyncio.to_thread(
+            self.store.count_memory_summaries, agent_id
+        )
 
     async def long_term(self, agent_id: str, query: str) -> list[RetrievedMemory]:
         if self.cfg.long_term_retrieval_k <= 0:

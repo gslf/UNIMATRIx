@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from .config import Config, load_config, strip_removed_legacy_keys
+from .config import Config, load_config
 from pydantic import ValidationError
 from .inference import InferenceClient
 from .log_console import LoggingConsole
@@ -193,9 +193,11 @@ class SessionManager:
             return run_id
 
     async def resume(self, run_id: int) -> None:
-        """Re-attach to a previously-paused run and resume ticking.
+        """Re-attach to a previously-paused or interrupted run and resume ticking.
 
-        Only runs whose registry status is exactly `paused` are eligible.
+        Runs whose registry status is `paused` (cleanly paused) or `running`
+        (interrupted by a server restart/crash) are eligible; both restore from
+        the latest checkpoint / persisted agent table.
         """
         async with self._get_lock():
             if self.is_active:
@@ -203,15 +205,14 @@ class SessionManager:
             info = self.registry.get(run_id)
             if info is None:
                 raise SessionError(404, f"run {run_id} not found")
-            if (info.get("status") or "") != "paused":
+            if (info.get("status") or "") not in ("paused", "running"):
                 raise SessionError(
                     409,
-                    f"run {run_id} is '{info.get('status')}', only paused runs "
-                    "can be resumed",
+                    f"run {run_id} is '{info.get('status')}', only paused or "
+                    "interrupted runs can be resumed",
                 )
             try:
-                cfg_dict = strip_removed_legacy_keys(json.loads(info["config_json"]))
-                cfg: Config = Config.model_validate(cfg_dict)
+                cfg: Config = Config.model_validate(json.loads(info["config_json"]))
             except (ValidationError, ValueError) as exc:
                 raise SessionError(
                     500, f"saved config for run {run_id} is invalid: {exc}"
