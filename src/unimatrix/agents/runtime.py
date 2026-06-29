@@ -16,22 +16,45 @@ class AgentState(str, Enum):
     DEAD = "dead"
 
 
+def default_traits() -> dict[str, float]:
+    """Heritable, non-anthropocentric biology. All baseline 1.0; offspring inherit
+    a mutated blend of both parents, so the population's trait distribution drifts
+    under selection without any rule telling a being what to be.
+
+      metabolism       — multiplies vitality decay (low = frugal, lives longer)
+      labor_efficiency — multiplies effort per work (high = more output)
+      fecundity        — divides the cost of bringing a new being into the world
+      sociality        — surfaced to the being (a leaning toward reaching out)
+      generosity       — surfaced to the being (a leaning toward giving)
+    """
+    return {
+        "metabolism": 1.0,
+        "labor_efficiency": 1.0,
+        "fecundity": 1.0,
+        "sociality": 1.0,
+        "generosity": 1.0,
+    }
+
+
 def default_self_model(
     identity_narrative: str = "",
     *,
     values: dict[str, str] | None = None,
-    beliefs: list[str] | None = None,
+    carried: list[str] | None = None,
     goals: list[str] | None = None,
     relationships_summary: str = "",
-    mortality_stance: str = "",
 ) -> dict:
+    """The evolving self. Deliberately light: a behavioural/relational account,
+    not a philosophical questionnaire. `carried` holds signals taken from others
+    (the adoption sink), not self-authored convictions. There is no mandatory
+    field about meaning or mortality — if such concerns arise, they live in the
+    being's own narrative, they are not demanded of it."""
     return {
         "identity_narrative": identity_narrative,
         "values": values or {},
-        "beliefs": beliefs or [],
+        "carried": carried or [],
         "goals": goals or [],
         "relationships_summary": relationships_summary,
-        "mortality_stance": mortality_stance,
     }
 
 
@@ -53,6 +76,11 @@ class Agent:
     # --- continuity / lineage ---
     born_tick: int = 0
     parent_ids: list[str] = field(default_factory=list)
+    # --- heritable biology (subject to selection) ---
+    traits: dict = field(default_factory=default_traits)
+    # --- place (ecology mode; 0,0 and unused when ecology is off) ---
+    pos_x: int = 0
+    pos_y: int = 0
     # --- drives / bookkeeping ---
     social_need: float = 100.0
     state: AgentState = AgentState.IDLE
@@ -97,6 +125,9 @@ class Agent:
             "sustenance": self.sustenance,
             "born_tick": self.born_tick,
             "parent_ids": self.parent_ids,
+            "traits_json": self.traits,
+            "pos_x": self.pos_x,
+            "pos_y": self.pos_y,
             "social_need": self.social_need,
             "state": self.state.value,
         }

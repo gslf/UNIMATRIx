@@ -1,6 +1,6 @@
 {
   "simulation": {
-    "name": "standard",
+    "name": "Standard Demo",
     "seed": 7,
     "tick_interval_seconds": 3.0,
     "auto_checkpoint_minutes": 5.0
@@ -8,7 +8,7 @@
   "inference": {
     "backend": "vllm",
     "endpoint": "http://127.0.0.1:1234",
-    "model": "gemma-4-12b-it",
+    "model": "google/gemma-4-31b",
     "max_tokens_per_decision": 2000,
     "temperature": 0.95,
     "top_p": 0.95,
@@ -24,7 +24,7 @@
   },
   "social": {
     "social_need_initial": 100.0,
-    "social_need_decay_per_tick": 12.0,
+    "social_need_decay_per_tick": 8.0,
     "social_need_gain_per_turn": 8.0,
     "social_need_critical_threshold": 25.0,
     "silence_detection_seconds": 20.0,
@@ -33,24 +33,41 @@
   },
   "world": {
     "vitality_initial": 100.0,
-    "vitality_decay_per_tick": 2.0,
+    "vitality_decay_per_tick": 1.5,
     "vitality_death_threshold": 0.0,
     "max_age_ticks": 220,
-    "sustenance_initial": 12.0,
-    "sustenance_consumed_per_tick": 1.0,
+    "sustenance_initial": 14.0,
+    "sustenance_consumed_per_tick": 0.8,
     "vitality_per_sustenance": 3.0,
-    "sustenance_max": 15.0,
+    "sustenance_max": 24.0,
     "work_vitality_cost": 1.5,
-    "project_effort_per_work": 1.0,
-    "project_default_target": 10.0,
-    "project_sustenance_yield": 24.0,
-    "succession_sustenance_cost": 12.0,
+    "succession_sustenance_cost": 6.0,
     "succession_min_partner_strength": 1.0,
-    "max_population": 80,
+    "kin_bond_strength": 2.0,
+    "kin_coharvest_bonus": 1.5,
+    "max_population": 60,
+    "child_sustenance_initial": 8.0,
+    "maturity_age_ticks": 15,
+    "child_effort_factor": 0.5,
+    "trait_mutation_sigma": 0.08,
+    "trait_min": 0.5,
+    "trait_max": 1.8,
     "blank_slate": false,
     "self_revision_interval_ticks": 8,
     "self_revision_min_new_memories": 1,
-    "max_tokens_per_self_revision": 700
+    "max_tokens_per_self_revision": 700,
+    "ecology": {
+      "grid_width": 4,
+      "grid_height": 4,
+      "perception_radius": 1,
+      "patch_capacity": 12.0,
+      "patch_regen_per_tick": 0.6,
+      "initial_patch_fill_frac": 0.7,
+      "harvest_base_yield": 3.0,
+      "coharvest_bonus_per_partner": 2.0,
+      "coharvest_max_partners": 3,
+      "move_vitality_cost": 0.5
+    }
   },
   "messaging": {
     "reflection_interval_ticks": 6,
@@ -61,60 +78,52 @@
   },
   "agents": [
     {
-      "id": "agent_01",
-      "name": "Ada",
-      "gender": "f",
-      "circumstance": "You woke first, before any of the others stirred.",
-      "disposition": "A pull toward making sense of things."
+      "id": "vor",
+      "name": "vor",
+      "circumstance": "You woke already in motion, as if you had somewhere to be.",
+      "disposition": "A restlessness that resists standing still."
     },
     {
-      "id": "agent_02",
-      "name": "Bran",
-      "gender": "m",
-      "circumstance": "You woke cold and unsure whether the others mean you well.",
-      "disposition": "A wariness that wants to be proven wrong."
+      "id": "k7",
+      "name": "k7",
+      "circumstance": "You woke counting what was around you, sorting it into kinds.",
+      "disposition": "A need for order and clear edges."
     },
     {
-      "id": "agent_03",
-      "name": "Cael",
-      "gender": "x",
-      "circumstance": "You woke already reaching out a hand toward the nearest voice.",
-      "disposition": "A hunger for company."
+      "id": "msa",
+      "name": "msa",
+      "circumstance": "You woke with the others' faces already mattering to you.",
+      "disposition": "A pull toward tending whoever is near."
     },
     {
-      "id": "agent_04",
-      "name": "Dunya",
-      "gender": "f",
-      "circumstance": "You woke counting the others, wondering who would lead.",
-      "disposition": "An instinct to organize."
+      "id": "ix",
+      "name": "ix",
+      "circumstance": "You woke at a distance, watching before stepping in.",
+      "disposition": "A caution that trusts only what it has tested."
     },
     {
-      "id": "agent_05",
-      "name": "Eskar",
-      "gender": "m",
-      "circumstance": "You woke certain only that you would one day end.",
-      "disposition": "A preoccupation with what lasts."
+      "id": "thuo",
+      "name": "tuho",
+      "circumstance": "You woke wanting to make something that was not there before.",
+      "disposition": "A drive to build and leave a mark."
     },
     {
-      "id": "agent_06",
-      "name": "Fen",
-      "gender": "x",
-      "circumstance": "You woke amused by the absurdity of finding yourself here at all.",
-      "disposition": "A taste for play."
+      "id": "zel",
+      "name": "zel",
+      "circumstance": "You woke amused, half-certain none of this was serious.",
+      "disposition": "A taste for play and small rebellions."
     },
     {
-      "id": "agent_07",
-      "name": "Goro",
-      "gender": "m",
-      "circumstance": "You woke wanting to build something with your hands and time.",
-      "disposition": "A need to be useful."
+      "id": "qen",
+      "name": "qen",
+      "circumstance": "You woke asking why, and the question would not leave.",
+      "disposition": "A hunger to understand the reasons of things."
     },
     {
-      "id": "agent_08",
-      "name": "Hessa",
-      "gender": "f",
-      "circumstance": "You woke listening, saying nothing, watching the others.",
-      "disposition": "A habit of holding back until you understand."
+      "id": "ru9",
+      "name": "ru9",
+      "circumstance": "You woke aware your time was finite, already counting.",
+      "disposition": "A preoccupation with what outlasts you."
     }
   ]
 }

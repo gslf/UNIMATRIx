@@ -198,6 +198,46 @@ def build_app(
     def _names(s: RunStore) -> dict:
         return {a["agent_id"]: a.get("name") for a in s.list_agents()}
 
+    def _labor_summary(s: RunStore, recent_n: int = 14) -> dict:
+        """Aggregate every `harvest` event into the labor picture the World tab
+        shows: totals, who worked how much, per-patch draw, and recent sessions.
+        `harvest` payloads carry {patch, harvesters, drawn, shares:{id:amt}, tick}."""
+        evs = s.events_by_type("harvest", 20000)  # oldest-first
+        sessions = cooperative = 0
+        total_drawn = 0.0
+        per_being: dict[str, dict] = {}
+        by_patch: dict[str, float] = {}
+        for e in evs:
+            p = e.get("payload") or {}
+            crew = p.get("harvesters") or []
+            drawn = float(p.get("drawn") or 0)
+            sessions += 1
+            cooperative += 1 if len(crew) > 1 else 0
+            total_drawn += drawn
+            if p.get("patch"):
+                by_patch[p["patch"]] = round(by_patch.get(p["patch"], 0.0) + drawn, 1)
+            shares = p.get("shares") or {}
+            if not shares and crew:  # older events without per-head shares
+                shares = {aid: drawn / len(crew) for aid in crew}
+            for aid, amt in shares.items():
+                d = per_being.setdefault(aid, {"sessions": 0, "drawn": 0.0})
+                d["sessions"] += 1
+                d["drawn"] += float(amt or 0)
+        for d in per_being.values():
+            d["drawn"] = round(d["drawn"], 1)
+        recent = [{
+            "patch": (e.get("payload") or {}).get("patch"),
+            "harvesters": (e.get("payload") or {}).get("harvesters") or [],
+            "drawn": (e.get("payload") or {}).get("drawn"),
+            "tick": (e.get("payload") or {}).get("tick"),
+            "cooperative": len((e.get("payload") or {}).get("harvesters") or []) > 1,
+        } for e in reversed(evs[-recent_n:])]  # newest first
+        return {
+            "sessions": sessions, "cooperative": cooperative,
+            "solo": sessions - cooperative, "total_drawn": round(total_drawn, 1),
+            "per_being": per_being, "by_patch": by_patch, "recent": recent,
+        }
+
     @app.get("/runs/{run_id}/beings")
     async def run_beings(run_id: int) -> JSONResponse:
         def _impl() -> dict:
@@ -210,10 +250,28 @@ def build_app(
                     "self_model": _parse_json(a.get("self_model_json"), {}),
                     "born_tick": a.get("born_tick") or 0,
                     "parent_ids": _parse_json(a.get("parent_ids"), []),
+                    "traits": _parse_json(a.get("traits_json"), {}),
+                    "pos_x": a.get("pos_x") or 0,
+                    "pos_y": a.get("pos_y") or 0,
                     "circumstance": a.get("circumstance"),
                     "disposition": a.get("disposition"),
                 } for a in s.list_agents()]
                 return {"beings": beings}
+        return JSONResponse(await asyncio.to_thread(_impl))
+
+    @app.get("/runs/{run_id}/space")
+    async def run_space(run_id: int) -> JSONResponse:
+        def _impl() -> dict:
+            with open_run_store(run_id) as s:
+                patches = s.list_patches()
+                beings = [{
+                    "id": a["agent_id"], "name": a.get("name") or a["agent_id"],
+                    "alive": bool(a.get("alive", 1)),
+                    "vitality": a.get("vitality"),
+                    "pos_x": a.get("pos_x") or 0, "pos_y": a.get("pos_y") or 0,
+                } for a in s.list_agents() if bool(a.get("alive", 1))]
+                return {"patches": patches, "beings": beings,
+                        "labor": _labor_summary(s), "names": _names(s)}
         return JSONResponse(await asyncio.to_thread(_impl))
 
     @app.get("/runs/{run_id}/self/{agent_id}")
@@ -238,22 +296,12 @@ def build_app(
                         "names": names}
         return JSONResponse(await asyncio.to_thread(_impl))
 
-    @app.get("/runs/{run_id}/labor")
-    async def run_labor(run_id: int) -> JSONResponse:
-        def _impl() -> dict:
-            with open_run_store(run_id) as s:
-                projects = s.list_projects(limit=2000)
-                for p in projects:
-                    p["contributors"] = s.project_contributors(p["id"])
-                return {"projects": projects}
-        return JSONResponse(await asyncio.to_thread(_impl))
-
     @app.get("/runs/{run_id}/kinship")
     async def run_kinship(run_id: int) -> JSONResponse:
         def _impl() -> dict:
             with open_run_store(run_id) as s:
                 return {"relationships": s.list_relationships(),
-                        "groups": s.list_groups(), "names": _names(s)}
+                        "names": _names(s)}
         return JSONResponse(await asyncio.to_thread(_impl))
 
     @app.get("/runs/{run_id}/continuity")
@@ -272,16 +320,27 @@ def build_app(
         def _impl() -> dict:
             with open_run_store(run_id) as s:
                 agents = s.list_agents()
-                projects = s.list_projects(limit=5000)
+                # Split each harvest session by tick into all / cooperative / solo,
+                # so the panel can chart whether beings come to work together.
+                work_sessions, coop_sessions, solo_sessions = [], [], []
+                for e in s.events_by_type("harvest", 20000):
+                    p = e.get("payload") or {}
+                    t = p.get("tick")
+                    if t is None:
+                        continue
+                    t = int(t)
+                    work_sessions.append(t)
+                    (coop_sessions if len(p.get("harvesters") or []) > 1
+                     else solo_sessions).append(t)
                 return {
                     "founders": sum(1 for a in agents if not (a.get("born_tick") or 0)),
                     "self_revisions": s.self_model_ticks(),
                     "artifacts": _ticks(s.list_artifacts(5000), "tick_no"),
                     "adoptions": _ticks(s.list_adoptions(), "tick_no"),
-                    "projects_started": _ticks(projects, "tick_started"),
-                    "projects_completed": _ticks(projects, "tick_completed"),
+                    "work_sessions": work_sessions,
+                    "cooperative_sessions": coop_sessions,
+                    "solo_sessions": solo_sessions,
                     "bonds": _ticks(s.list_relationships(), "formed_tick"),
-                    "groups": _ticks(s.list_groups(), "tick_founded"),
                     "births": _ticks(s.list_lineage(), "tick_no"),
                     "deaths": _ticks(s.list_deaths(), "tick_no"),
                 }

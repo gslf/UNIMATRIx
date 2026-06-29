@@ -112,25 +112,6 @@ async def test_social_need_credited_once_per_party(
 
 
 @pytest.mark.asyncio
-async def test_election_preserves_pending_inbox(
-    stub_config: Path, tmp_path: Path
-) -> None:
-    """An election tick must not erase mail waiting to be read."""
-    orch, cfg, store, memory, inference = await _make_orch(stub_config, tmp_path)
-    try:
-        a, b = _two(orch)
-        await orch.messaging.send(a, [b], "before the vote", tick_no=2)
-        orch.messaging.swap()
-        await orch._run_election()  # decisions/messaging skipped on this tick
-        got = await orch.messaging.read_inbox(b, 4)
-        assert [m.content for m in got] == ["before the vote"]
-    finally:
-        await inference.aclose()
-        await memory.close()
-        store.close()
-
-
-@pytest.mark.asyncio
 async def test_checkpoint_resume_rederives_inbox(
     stub_config: Path, tmp_path: Path
 ) -> None:
@@ -188,8 +169,9 @@ async def test_broadcast_delivered_not_persisted(
         a = next(iter(orch.agents))
         got = await orch.messaging.read_inbox(a, 1)
         assert any(m.is_broadcast for m in got)
-        # No messages rows created for the broadcast.
-        assert store.all_messages_with_recipients() == []
+        # The broadcast is delivered via the inbox, never written to the messages
+        # table — so no recipient has a persisted message.
+        assert all(not store.unread_messages_for(x, 0) for x in orch.agents)
         events = {e["event_type"] for e in store.recent_events(50)}
         assert "broadcast_human" in events
     finally:

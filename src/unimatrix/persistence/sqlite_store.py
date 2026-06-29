@@ -2,8 +2,8 @@
 
 Holds the world's persistent state: the beings (agents) and their self-authored
 identity history, the words they exchange, their memories and impressions, the
-shared cultural commons, projects, ties, collectives, lineage and deaths, plus
-the public event log and checkpoints.
+shared cultural commons, the spatial patches beings work, ties,
+lineage and deaths, plus the public event log and checkpoints.
 """
 from __future__ import annotations
 
@@ -42,6 +42,24 @@ class RunStore:
         self._conn.execute("PRAGMA journal_mode = WAL")
         self._conn.execute("PRAGMA synchronous = NORMAL")
         self._conn.executescript(_load_schema())
+        self._migrate()
+
+    def _migrate(self) -> None:
+        """Additive, idempotent migrations: `CREATE TABLE IF NOT EXISTS` never
+        adds columns to a pre-existing table, so bring older run DBs forward by
+        adding any columns introduced after their schema was first written."""
+        with self._lock:
+            cols = {
+                r["name"]
+                for r in self._conn.execute("PRAGMA table_info(agents)").fetchall()
+            }
+            for name, ddl in (
+                ("traits_json", "traits_json TEXT"),
+                ("pos_x", "pos_x INTEGER DEFAULT 0"),
+                ("pos_y", "pos_y INTEGER DEFAULT 0"),
+            ):
+                if name not in cols:
+                    self._conn.execute(f"ALTER TABLE agents ADD COLUMN {ddl}")
 
     def close(self) -> None:
         with self._lock:
@@ -67,8 +85,9 @@ class RunStore:
                 INSERT INTO agents
                   (agent_id, name, gender, circumstance, disposition,
                    self_model_json, self_model_version, vitality, alive,
-                   sustenance, born_tick, parent_ids, social_need, state)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                   sustenance, born_tick, parent_ids, traits_json,
+                   pos_x, pos_y, social_need, state)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(agent_id) DO UPDATE SET
                     name = excluded.name,
                     gender = excluded.gender,
@@ -81,6 +100,9 @@ class RunStore:
                     sustenance = excluded.sustenance,
                     born_tick = excluded.born_tick,
                     parent_ids = excluded.parent_ids,
+                    traits_json = excluded.traits_json,
+                    pos_x = excluded.pos_x,
+                    pos_y = excluded.pos_y,
                     social_need = excluded.social_need,
                     state = excluded.state
                 """,
@@ -97,6 +119,9 @@ class RunStore:
                     float(agent.get("sustenance", 0.0) or 0.0),
                     int(agent.get("born_tick", 0) or 0),
                     json.dumps(agent.get("parent_ids", []) or []),
+                    json.dumps(agent.get("traits_json", {}) or {}),
+                    int(agent.get("pos_x", 0) or 0),
+                    int(agent.get("pos_y", 0) or 0),
                     float(agent.get("social_need", 100.0) or 0.0),
                     agent.get("state", "idle"),
                 ),
@@ -112,6 +137,9 @@ class RunStore:
         sustenance: float | None = None,
         self_model_json: dict | None = None,
         self_model_version: int | None = None,
+        traits_json: dict | None = None,
+        pos_x: int | None = None,
+        pos_y: int | None = None,
     ) -> None:
         sets: list[str] = []
         params: list[Any] = []
@@ -129,6 +157,12 @@ class RunStore:
             sets.append("self_model_json = ?"); params.append(json.dumps(self_model_json))
         if self_model_version is not None:
             sets.append("self_model_version = ?"); params.append(int(self_model_version))
+        if traits_json is not None:
+            sets.append("traits_json = ?"); params.append(json.dumps(traits_json))
+        if pos_x is not None:
+            sets.append("pos_x = ?"); params.append(int(pos_x))
+        if pos_y is not None:
+            sets.append("pos_y = ?"); params.append(int(pos_y))
         if not sets:
             return
         params.append(agent_id)
@@ -143,6 +177,37 @@ class RunStore:
                 "SELECT * FROM agents WHERE agent_id = ?", (agent_id,)
             ).fetchone()
             return dict(row) if row else None
+
+    # ----- patches (ecology mode) -----
+
+    def init_patches(self, rows: Iterable[dict]) -> None:
+        """Create the patch grid once, at world bootstrap. Idempotent: existing
+        patches are left untouched (so a resume never resets the world)."""
+        with self._tx() as c:
+            for r in rows:
+                c.execute(
+                    "INSERT OR IGNORE INTO patches "
+                    "(x, y, resource, capacity, regen, updated_tick) "
+                    "VALUES (?, ?, ?, ?, ?, ?)",
+                    (int(r["x"]), int(r["y"]), float(r["resource"]),
+                     float(r["capacity"]), float(r["regen"]), int(r.get("tick", 0))),
+                )
+
+    def list_patches(self) -> list[dict]:
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM patches ORDER BY y, x"
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def bulk_update_patch_resources(self, updates: Iterable[tuple]) -> None:
+        """updates: iterable of (resource, tick, x, y)."""
+        with self._tx() as c:
+            c.executemany(
+                "UPDATE patches SET resource = ?, updated_tick = ? "
+                "WHERE x = ? AND y = ?",
+                [(float(res), int(tick), int(x), int(y)) for res, tick, x, y in updates],
+            )
 
     def list_agents(self) -> list[dict]:
         with self._lock:
@@ -317,73 +382,6 @@ class RunStore:
             ).fetchall()
             return [dict(r) for r in rows]
 
-    # ----- labor: projects -----
-
-    def create_project(
-        self, founder_id: str, goal: str, kind: str, target: float, tick_no: int
-    ) -> int:
-        with self._tx() as c:
-            cur = c.execute(
-                "INSERT INTO projects "
-                "(founder_id, goal, kind, effort, target, status, tick_started) "
-                "VALUES (?, ?, ?, 0, ?, 'active', ?)",
-                (founder_id, goal, kind, float(target), int(tick_no)),
-            )
-            return int(cur.lastrowid or 0)
-
-    def add_project_effort(
-        self, project_id: int, agent_id: str, effort: float, tick_no: int
-    ) -> dict | None:
-        with self._tx() as c:
-            row = c.execute(
-                "SELECT * FROM projects WHERE id = ?", (project_id,)
-            ).fetchone()
-            if row is None or row["status"] != "active":
-                return None
-            c.execute(
-                "INSERT INTO project_contributions "
-                "(project_id, agent_id, effort, tick_no) VALUES (?, ?, ?, ?)",
-                (project_id, agent_id, float(effort), int(tick_no)),
-            )
-            c.execute(
-                "UPDATE projects SET effort = effort + ? WHERE id = ?",
-                (float(effort), project_id),
-            )
-            return dict(c.execute(
-                "SELECT * FROM projects WHERE id = ?", (project_id,)
-            ).fetchone())
-
-    def complete_project(self, project_id: int, output: str, tick_no: int) -> None:
-        with self._tx() as c:
-            c.execute(
-                "UPDATE projects SET status = 'completed', output = ?, "
-                "tick_completed = ? WHERE id = ?", (output, int(tick_no), project_id),
-            )
-
-    def project_contributors(self, project_id: int) -> dict[str, float]:
-        with self._lock:
-            rows = self._conn.execute(
-                "SELECT agent_id, SUM(effort) tot FROM project_contributions "
-                "WHERE project_id = ? GROUP BY agent_id", (project_id,),
-            ).fetchall()
-        return {r["agent_id"]: float(r["tot"] or 0) for r in rows}
-
-    def list_projects(self, status: str | None = None, limit: int = 1000) -> list[dict]:
-        with self._lock:
-            if status:
-                rows = self._conn.execute(
-                    "SELECT * FROM projects WHERE status = ? ORDER BY id DESC LIMIT ?",
-                    (status, limit),
-                ).fetchall()
-            else:
-                rows = self._conn.execute(
-                    "SELECT * FROM projects ORDER BY id DESC LIMIT ?", (limit,),
-                ).fetchall()
-            return [dict(r) for r in rows]
-
-    def active_projects(self) -> list[dict]:
-        return self.list_projects(status="active")
-
     # ----- meaning: cultural commons -----
 
     def add_artifact(
@@ -431,7 +429,7 @@ class RunStore:
             ).fetchall()
             return [dict(r) for r in rows]
 
-    # ----- kinship: ties + collectives -----
+    # ----- kinship: ties -----
 
     def upsert_relationship(
         self, observer_id: str, subject_id: str, type_: str,
@@ -495,53 +493,6 @@ class RunStore:
             ).fetchall()
             return [dict(r) for r in rows]
 
-    def create_group(
-        self, name: str, founder_id: str, purpose: str, tick_no: int
-    ) -> int:
-        with self._tx() as c:
-            cur = c.execute(
-                "INSERT INTO groups (name, founder_id, purpose, tick_founded) "
-                "VALUES (?, ?, ?, ?)", (name, founder_id, purpose, int(tick_no)),
-            )
-            gid = int(cur.lastrowid or 0)
-            c.execute(
-                "INSERT OR IGNORE INTO group_members "
-                "(group_id, agent_id, joined_tick) VALUES (?, ?, ?)",
-                (gid, founder_id, int(tick_no)),
-            )
-            return gid
-
-    def join_group(self, group_id: int, agent_id: str, tick_no: int) -> bool:
-        with self._tx() as c:
-            if not c.execute("SELECT 1 FROM groups WHERE id = ?", (group_id,)).fetchone():
-                return False
-            c.execute(
-                "INSERT INTO group_members (group_id, agent_id, joined_tick) "
-                "VALUES (?, ?, ?) "
-                "ON CONFLICT(group_id, agent_id) DO UPDATE SET left_tick = NULL",
-                (group_id, agent_id, int(tick_no)),
-            )
-            return True
-
-    def leave_group(self, group_id: int, agent_id: str, tick_no: int) -> None:
-        with self._tx() as c:
-            c.execute(
-                "UPDATE group_members SET left_tick = ? "
-                "WHERE group_id = ? AND agent_id = ?", (int(tick_no), group_id, agent_id),
-            )
-
-    def list_groups(self) -> list[dict]:
-        with self._lock:
-            rows = self._conn.execute("SELECT * FROM groups ORDER BY id").fetchall()
-            groups = [dict(r) for r in rows]
-            for g in groups:
-                mem = self._conn.execute(
-                    "SELECT agent_id FROM group_members "
-                    "WHERE group_id = ? AND left_tick IS NULL", (g["id"],),
-                ).fetchall()
-                g["members"] = [m["agent_id"] for m in mem]
-            return groups
-
     # ----- mortality & continuity: lineage + memorials -----
 
     def record_lineage(
@@ -593,8 +544,21 @@ class RunStore:
             rows = self._conn.execute(
                 "SELECT * FROM public_events ORDER BY id DESC LIMIT ?", (limit,)
             ).fetchall()
+        return self._decode_events(reversed(rows))
+
+    def events_by_type(self, event_type: str, limit: int = 2000) -> list[dict]:
+        """Events of one kind, oldest-first — e.g. every `harvest` so far."""
+        with self._lock:
+            rows = self._conn.execute(
+                "SELECT * FROM public_events WHERE event_type = ? "
+                "ORDER BY id DESC LIMIT ?", (event_type, limit),
+            ).fetchall()
+        return self._decode_events(reversed(rows))
+
+    @staticmethod
+    def _decode_events(rows) -> list[dict]:
         out = []
-        for r in reversed(rows):
+        for r in rows:
             d = dict(r)
             try:
                 d["payload"] = json.loads(d["payload"])

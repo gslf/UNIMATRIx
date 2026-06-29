@@ -84,6 +84,9 @@ class Orchestrator:
         self._last_revision_tick: dict[str, int] = {}
         self._summaries_at_last_revision: dict[str, int] = {}
         self._birth_seq = 0
+        # ecology: the spatial substrate — the grid of patches beings work
+        self._patches: dict[tuple[int, int], dict] = {}
+        self._harvest_intents: list[tuple[Agent, int, int]] = []
         self.metrics: dict = {
             "decisions_attempted": 0,
             "decisions_unparsed": 0,
@@ -91,13 +94,13 @@ class Orchestrator:
             "self_revisions": 0,
             "deaths": 0,
             "living": 0,
-            "projects_started": 0,
-            "projects_completed": 0,
+            "cooperative_work": 0,
+            "solo_work": 0,
+            "mutual_aid_transfers": 0,
             "work_actions": 0,
             "artifacts_authored": 0,
             "adoptions": 0,
             "bonds_formed": 0,
-            "groups_founded": 0,
             "shares": 0,
             "births": 0,
             "inference_errors": 0,
@@ -125,6 +128,8 @@ class Orchestrator:
                 blank_slate=w.blank_slate,
             )
             self.agents[ag.id] = ag
+
+        await self._init_ecology()
 
         for ag in self.agents.values():
             await asyncio.to_thread(self.store.upsert_agent, ag.to_db_row())
@@ -183,6 +188,14 @@ class Orchestrator:
                 ag.parent_ids = json.loads(row.get("parent_ids") or "[]")
             except (TypeError, ValueError):
                 ag.parent_ids = []
+            try:
+                stored_traits = json.loads(row.get("traits_json") or "{}")
+                if isinstance(stored_traits, dict) and stored_traits:
+                    ag.traits = {**ag.traits, **{k: float(v) for k, v in stored_traits.items()}}
+            except (TypeError, ValueError):
+                pass
+            ag.pos_x = int(row.get("pos_x") or 0)
+            ag.pos_y = int(row.get("pos_y") or 0)
             sn = row.get("social_need")
             if sn is not None:
                 ag.social_need = float(sn)
@@ -192,6 +205,8 @@ class Orchestrator:
                 ag.state = AgentState.IDLE
             if not ag.alive:
                 ag.state = AgentState.DEAD
+
+        await self._load_ecology()
 
         ckpt = await asyncio.to_thread(self.store.latest_checkpoint)
         messaging_state: dict = {}
@@ -309,6 +324,9 @@ class Orchestrator:
         # social need decays for the living (drives reaching-out).
         social_need.decay(living, self.cfg.social.social_need_decay_per_tick)
 
+        # 1.5) ecology: patches regrow toward capacity.
+        await self._regen_patches()
+
         # 2) drain broadcast queue (one per tick).
         if self._broadcast_queue:
             item = self._broadcast_queue.pop(0)
@@ -321,11 +339,47 @@ class Orchestrator:
         # 3) every living, idle agent decides what to say.
         await self._run_decisions()
 
+        # 3.5) ecology: all who chose to work draw on their patch together, so
+        # co-present crews out-earn lone workers (resolved as one batch).
+        await self._resolve_harvests()
+
         # 4) staggered self-revision — agents rewrite who they are.
         await self._run_self_revisions()
 
         # 5) anti-silence
         await self._maybe_break_silence()
+
+        # 6) periodically record the population's trait distribution — the
+        # observable record of selection drifting the lineage over generations.
+        if self._tick_no % 20 == 0:
+            await self._record_trait_snapshot(living)
+
+    async def _record_trait_snapshot(self, living: list[Agent]) -> None:
+        from ..agents import default_traits
+        keys = list(default_traits().keys())
+        means = {
+            k: round(sum(float(a.traits.get(k, 1.0)) for a in living) / len(living), 3)
+            for k in keys
+        } if living else {}
+        max_gen = max((self._generation_depth(a) for a in living), default=0)
+        await asyncio.to_thread(
+            self.store.record_event, "trait_snapshot",
+            {"tick": self._tick_no, "living": len(living),
+             "trait_means": means, "max_generation": max_gen},
+        )
+
+    def _generation_depth(self, ag: Agent) -> int:
+        """How many births separate a being from a founder (founders = 0)."""
+        depth = 0
+        seen: set[str] = set()
+        cur = ag
+        while cur is not None and cur.parent_ids and cur.id not in seen:
+            seen.add(cur.id)
+            cur = self.agents.get(cur.parent_ids[0])
+            depth += 1
+            if depth > 1000:  # cycle guard
+                break
+        return depth
 
     async def _end_run_failed(self, reason: str) -> None:
         self.metrics["failure_reason"] = reason
@@ -350,13 +404,26 @@ class Orchestrator:
                 continue
             age = max(0, self._tick_no - ag.born_tick)
             ceiling = w.vitality_ceiling(age)
-            ag.vitality -= w.vitality_decay_per_tick
+            # metabolism is heritable: a frugal lineage decays slower and, all
+            # else equal, lives and breeds more — selection acts on it.
+            ag.vitality -= w.vitality_decay_per_tick * float(
+                ag.traits.get("metabolism", 1.0)
+            )
             # Sustenance (from labor) is consumed to restore vitality — survival
-            # depends on work. With no sustenance, vitality only falls.
-            if ag.sustenance > 0 and w.sustenance_consumed_per_tick > 0:
+            # depends on work. With no sustenance, vitality only falls. But on a
+            # "lean" tick (bad luck) the food does not nourish: the being keeps
+            # its store yet gains nothing this moment. A run of lean ticks can
+            # carry a loner toward death — the variance that mutual aid smooths.
+            lean = w.bad_streak_prob > 0 and self._rng.random() < w.bad_streak_prob
+            if ag.sustenance > 0 and w.sustenance_consumed_per_tick > 0 and not lean:
                 eat = min(ag.sustenance, w.sustenance_consumed_per_tick)
                 ag.sustenance -= eat
                 ag.vitality += eat * w.vitality_per_sustenance
+            # When a being is close to the edge, those it is bound to are drawn
+            # on to pull it back — ties as insurance. This is automatic mutual
+            # aid, not a rule the being chose; isolates have no one to draw on.
+            if 0 < ag.vitality < w.pooling_rescue_threshold:
+                await self._attempt_pool_rescue(ag, ceiling)
             # Senescence: the attainable ceiling falls with age and hits 0 at
             # max_age_ticks, so even the well-fed eventually decline and die.
             if ag.vitality > ceiling:
@@ -397,6 +464,269 @@ class Orchestrator:
                     vitality=ag.vitality, sustenance=ag.sustenance,
                 )
 
+    async def _attempt_pool_rescue(self, ag: Agent, ceiling: float) -> None:
+        """A being near death draws sustenance from those it is bound to (ties
+        of sufficient strength), converting it to vitality on the spot. The
+        givers spend real food, so this only helps those who built ties; a loner
+        has no one to call on. Mutual aid, emerging from the bonds themselves."""
+        w = self.cfg.world
+        ties = await asyncio.to_thread(self.store.relationships_for, ag.id)
+        need = w.pooling_max_transfer_per_tick
+        if need <= 0:
+            return
+        pulled = 0.0
+        for r in ties:
+            if pulled >= need:
+                break
+            if float(r.get("strength") or 0) < w.pooling_min_tie_strength:
+                continue
+            donor = self.agents.get(r.get("subject_id"))
+            if not donor or not donor.alive or donor.sustenance <= 0:
+                continue
+            # An offspring may be drawn on only once it is mature AND standing with
+            # the parent — newborns are protected, and the payoff is deferred and
+            # conditional (true insurance, not a birth-time subsidy). Peers and the
+            # reverse direction (a parent aiding its own young child) are unaffected.
+            if ag.id in (donor.parent_ids or []):
+                mature = (self._tick_no - donor.born_tick) >= w.maturity_age_ticks
+                colocated = donor.pos_x == ag.pos_x and donor.pos_y == ag.pos_y
+                if not (mature and colocated):
+                    continue
+            give = min(donor.sustenance, need - pulled)
+            if give <= 0:
+                continue
+            donor.sustenance -= give
+            pulled += give
+            await asyncio.to_thread(
+                self.store.update_agent_state, donor.id, sustenance=donor.sustenance
+            )
+            # mutual aid deepens the tie both ways
+            await asyncio.to_thread(
+                self.store.upsert_relationship, ag.id, donor.id, r.get("type") or "",
+                w.mutual_aid_bonus, "kept me going", self._tick_no,
+            )
+            await asyncio.to_thread(
+                self.store.upsert_relationship, donor.id, ag.id, "",
+                w.mutual_aid_bonus, "I kept them going", self._tick_no,
+            )
+        if pulled <= 0:
+            return
+        ag.vitality = min(ceiling, ag.vitality + pulled * w.vitality_per_sustenance)
+        self._bump("mutual_aid_transfers")
+        await asyncio.to_thread(
+            self.store.record_event, "mutual_aid",
+            {"to_id": ag.id, "amount": round(pulled, 1), "tick": self._tick_no},
+        )
+        await self.memory.add_summary(
+            ag.id, f"I was failing, and those I am bound to kept me going.",
+            tick_no=self._tick_no,
+        )
+
+    # ----- ecology: the spatial substrate (the grid beings move on and work) -----
+
+    def _patch_label(self, x: int, y: int) -> str:
+        col = chr(ord("A") + x) if 0 <= x < 26 else str(x)
+        return f"{col}{y + 1}"
+
+    def _parse_patch_label(self, s: str) -> tuple[int, int] | None:
+        s = (s or "").strip().upper().strip("[]()<> ")
+        if len(s) < 2 or not s[0].isalpha() or not s[1:].isdigit():
+            return None
+        x = ord(s[0]) - ord("A")
+        y = int(s[1:]) - 1
+        eco = self.cfg.world.ecology
+        if 0 <= x < eco.grid_width and 0 <= y < eco.grid_height:
+            return (x, y)
+        return None
+
+    async def _init_ecology(self) -> None:
+        eco = self.cfg.world.ecology
+        rows = []
+        for y in range(eco.grid_height):
+            for x in range(eco.grid_width):
+                res = eco.patch_capacity * eco.initial_patch_fill_frac
+                self._patches[(x, y)] = {
+                    "x": x, "y": y, "resource": res,
+                    "capacity": eco.patch_capacity, "regen": eco.patch_regen_per_tick,
+                }
+                rows.append({"x": x, "y": y, "resource": res,
+                             "capacity": eco.patch_capacity,
+                             "regen": eco.patch_regen_per_tick, "tick": 0})
+        await asyncio.to_thread(self.store.init_patches, rows)
+        # scatter founders across the grid so neighbours and good ground must be
+        # sought — locality and the co-harvest bonus then pull beings together.
+        coords = [(x, y) for y in range(eco.grid_height) for x in range(eco.grid_width)]
+        self._rng.shuffle(coords)
+        for i, ag in enumerate(self.agents.values()):
+            ag.pos_x, ag.pos_y = coords[i % len(coords)]
+
+    async def _load_ecology(self) -> None:
+        rows = await asyncio.to_thread(self.store.list_patches)
+        for r in rows:
+            self._patches[(int(r["x"]), int(r["y"]))] = {
+                "x": int(r["x"]), "y": int(r["y"]),
+                "resource": float(r["resource"]), "capacity": float(r["capacity"]),
+                "regen": float(r["regen"]),
+            }
+
+    async def _regen_patches(self) -> None:
+        updates = []
+        for (x, y), p in self._patches.items():
+            if p["resource"] < p["capacity"]:
+                p["resource"] = min(p["capacity"], p["resource"] + p["regen"])
+                updates.append((p["resource"], self._tick_no, x, y))
+        if updates:
+            await asyncio.to_thread(self.store.bulk_update_patch_resources, updates)
+
+    async def _do_move(self, ag: Agent, act: dict) -> None:
+        eco = self.cfg.world.ecology
+        tx, ty = ag.pos_x, ag.pos_y
+        parsed = self._parse_patch_label(str(act.get("to"))) if act.get("to") else None
+        if parsed:
+            tx, ty = parsed
+        else:
+            try:
+                tx = ag.pos_x + int(act.get("dx") or 0)
+                ty = ag.pos_y + int(act.get("dy") or 0)
+            except (TypeError, ValueError):
+                pass
+        tx = max(0, min(eco.grid_width - 1, tx))
+        ty = max(0, min(eco.grid_height - 1, ty))
+        # you can only walk as far as you can see — one stride toward the target.
+        if max(abs(tx - ag.pos_x), abs(ty - ag.pos_y)) > eco.perception_radius:
+            sx = (tx > ag.pos_x) - (tx < ag.pos_x)
+            sy = (ty > ag.pos_y) - (ty < ag.pos_y)
+            tx, ty = ag.pos_x + sx, ag.pos_y + sy
+        if (tx, ty) == (ag.pos_x, ag.pos_y):
+            return
+        if eco.move_vitality_cost > 0 and ag.alive:
+            ag.vitality -= eco.move_vitality_cost
+        ag.pos_x, ag.pos_y = tx, ty
+        await asyncio.to_thread(
+            self.store.update_agent_state, ag.id,
+            vitality=ag.vitality, pos_x=tx, pos_y=ty,
+        )
+        await asyncio.to_thread(
+            self.store.record_event, "move",
+            {"agent_id": ag.id, "to": self._patch_label(tx, ty), "tick": self._tick_no},
+        )
+        await self.memory.add_summary(
+            ag.id, f"I moved to {self._patch_label(tx, ty)}.", tick_no=self._tick_no,
+        )
+
+    async def _resolve_harvests(self) -> None:
+        """All beings who chose to work this tick draw on the patch they stand on,
+        together. The per-head take rises with the number of co-present harvesters
+        (capped), so working shoulder to shoulder beats working alone — the whole
+        cooperation incentive, by arithmetic, with no rule demanding it."""
+        if not self._harvest_intents:
+            return
+        eco = self.cfg.world.ecology
+        w = self.cfg.world
+        by_patch: dict[tuple[int, int], list[Agent]] = {}
+        for ag, x, y in self._harvest_intents:
+            if ag.alive:
+                by_patch.setdefault((x, y), []).append(ag)
+        self._harvest_intents = []
+        updates = []
+        for (x, y), crew in by_patch.items():
+            patch = self._patches.get((x, y))
+            if not patch:
+                continue
+            n = len(crew)
+            per_head = eco.harvest_base_yield + eco.coharvest_bonus_per_partner * min(
+                eco.coharvest_max_partners, n - 1
+            )
+            # each being's pull also scales with its heritable labor efficiency
+            # (and is reduced while a successor is still maturing).
+            def _mature(a: Agent) -> bool:
+                return not (
+                    a.parent_ids
+                    and (self._tick_no - a.born_tick) < w.maturity_age_ticks
+                )
+            def _mult(a: Agent) -> float:
+                m = float(a.traits.get("labor_efficiency", 1.0))
+                if not _mature(a):
+                    m *= w.child_effort_factor
+                return m
+            # A grown being working shoulder to shoulder with a grown parent or
+            # child of its own draws a little extra — kin labor, paid through the
+            # same harvest channel as any co-presence. It needs both to be grown,
+            # so a raised successor only repays the lineage once it has matured.
+            def _has_grown_kin(a: Agent) -> bool:
+                if not _mature(a):
+                    return False
+                return any(
+                    o is not a and _mature(o)
+                    and (o.id in (a.parent_ids or []) or a.id in (o.parent_ids or []))
+                    for o in crew
+                )
+            demands = [
+                per_head * _mult(a)
+                + (w.kin_coharvest_bonus if _has_grown_kin(a) else 0.0)
+                for a in crew
+            ]
+            total = sum(demands) or 1.0
+            drawn = min(total, patch["resource"])
+            scale = drawn / total
+            patch["resource"] = max(0.0, patch["resource"] - drawn)
+            updates.append((patch["resource"], self._tick_no, x, y))
+            shares: dict[str, float] = {}
+            for a, dem in zip(crew, demands):
+                got = dem * scale
+                shares[a.id] = round(got, 2)
+                a.sustenance += got
+                if w.sustenance_max > 0 and a.sustenance > w.sustenance_max:
+                    a.sustenance = w.sustenance_max
+                await asyncio.to_thread(
+                    self.store.update_agent_state, a.id, sustenance=a.sustenance
+                )
+            self._bump("cooperative_work" if n > 1 else "solo_work")
+            await asyncio.to_thread(
+                self.store.record_event, "harvest",
+                {"patch": self._patch_label(x, y), "harvesters": [a.id for a in crew],
+                 "drawn": round(drawn, 1), "shares": shares, "tick": self._tick_no},
+            )
+            note = (f"We worked {self._patch_label(x, y)} together — {n} of us"
+                    if n > 1 else f"I worked {self._patch_label(x, y)} alone")
+            for a in crew:
+                await self.memory.add_summary(a.id, note + ".", tick_no=self._tick_no)
+        if updates:
+            await asyncio.to_thread(self.store.bulk_update_patch_resources, updates)
+
+    def _local_view(self, ag: Agent) -> dict:
+        """What `ag` can sense: its patch, the patches within sight, and who is
+        co-present or nearby. Drives concrete perception and localised speech."""
+        eco = self.cfg.world.ecology
+        r = eco.perception_radius
+        here = self._patches.get((ag.pos_x, ag.pos_y))
+        around = []
+        for (x, y), p in self._patches.items():
+            if (x, y) == (ag.pos_x, ag.pos_y):
+                continue
+            if max(abs(x - ag.pos_x), abs(y - ag.pos_y)) <= r:
+                around.append({
+                    "label": self._patch_label(x, y),
+                    "resource": p["resource"], "capacity": p["capacity"],
+                })
+        around.sort(key=lambda d: d["resource"], reverse=True)
+        here_ids, near_ids = [], []
+        for other in self.agents.values():
+            if not other.alive or other.id == ag.id:
+                continue
+            d = max(abs(other.pos_x - ag.pos_x), abs(other.pos_y - ag.pos_y))
+            if d == 0:
+                here_ids.append(other.id)
+            elif d <= r:
+                near_ids.append(other.id)
+        return {
+            "here_label": self._patch_label(ag.pos_x, ag.pos_y),
+            "here": {"resource": here["resource"], "capacity": here["capacity"]} if here else None,
+            "around": around,
+            "here_ids": here_ids,
+            "near_ids": near_ids,
+        }
+
     # ----- per-tick decisions -----
 
     def _log_inference_window(self, n_calls: int, batch_s: float) -> None:
@@ -432,8 +762,6 @@ class Orchestrator:
         world_state = {
             "tick": self._tick_no,
             "artifacts": await asyncio.to_thread(self.store.recent_artifacts, 12),
-            "projects": await asyncio.to_thread(self.store.active_projects),
-            "groups": await asyncio.to_thread(self.store.list_groups),
         }
 
         prompts_payload: list[tuple[Agent, GenerationRequest]] = []
@@ -445,9 +773,17 @@ class Orchestrator:
             medium = await self.memory.medium_term(a.id)
             long_term = [r.text for r in await self.memory.long_term(a.id, query)]
             rels = await asyncio.to_thread(self.store.relationships_for, a.id)
+            # A being perceives only its locale: nearby patches and the beings
+            # here/near it. That both grounds its speech in concrete particulars
+            # and limits whom it can readily address.
+            local_view = self._local_view(a)
+            near = set(local_view["here_ids"]) | set(local_view["near_ids"])
+            agent_peers = [a] + [
+                self.agents[i] for i in near if i in self.agents
+            ]
             msgs, stub_ctx = self.prompts.decide_action_messages(
-                a, peers, medium, long_term, recent_events, forced, inbox_lines,
-                world_state=world_state, relationships=rels,
+                a, agent_peers, medium, long_term, recent_events, forced, inbox_lines,
+                world_state=world_state, relationships=rels, local_view=local_view,
             )
             stub_ctx["inbox_senders"] = [m.sender_id for m in inbox]
             prompts_payload.append(
@@ -502,6 +838,27 @@ class Orchestrator:
                     await self._apply_action(ag, act)
                 except Exception as exc:
                     self.console.log(f"[red]action error for {ag.id}[/]: {exc}")
+
+        # The free `express` channel: a being may voice a signal into the shared
+        # world without spending its one action on it. Without this, in the
+        # spatial world the action is always spent on move/harvest and the
+        # commons (cultural_artifacts) is never fed.
+        for ag, dec in decisions:
+            if not ag.alive:
+                continue
+            act = dec.get("action")
+            if isinstance(act, dict) and \
+                    str(act.get("verb") or "").strip().lower() == "express":
+                continue  # already voiced via the action verb; don't duplicate
+            voiced = str(dec.get("express") or "").strip()
+            if not voiced:
+                continue
+            try:
+                await self._do_express(
+                    ag, {"content": voiced, "remix": dec.get("express_remix")}
+                )
+            except Exception as exc:
+                self.console.log(f"[red]express error for {ag.id}[/]: {exc}")
 
         if any_message:
             self._last_activity_ts = time.monotonic()
@@ -588,18 +945,16 @@ class Orchestrator:
             return
         if verb == "work":
             await self._do_work(ag, act)
+        elif verb == "move":
+            await self._do_move(ag, act)
         elif verb == "express":
             await self._do_express(ag, act)
-        elif verb == "bond":
+        elif verb in ("tie", "bond"):
             await self._do_bond(ag, act)
         elif verb == "dissolve":
             await self._do_dissolve(ag, act)
         elif verb == "share":
             await self._do_share(ag, act)
-        elif verb == "found_group":
-            await self._do_found_group(ag, act)
-        elif verb == "join_group":
-            await self._do_join_group(ag, act)
         elif verb == "bear_successor":
             await self._do_bear_successor(ag, act)
         # unknown verbs are silently ignored (lenient by design)
@@ -608,76 +963,24 @@ class Orchestrator:
         w = self.cfg.world
         self._bump("work_actions")
         # Labor tires: working costs vitality, so it is a genuine trade-off
-        # against the sustenance it eventually yields.
+        # against the sustenance it yields.
         if w.work_vitality_cost > 0 and ag.alive:
             ag.vitality -= w.work_vitality_cost
             await asyncio.to_thread(
                 self.store.update_agent_state, ag.id, vitality=ag.vitality
             )
-        try:
-            pid = int(act.get("project") or 0)
-        except (TypeError, ValueError):
-            pid = 0
-        if pid <= 0:
-            goal = str(act.get("goal") or "sustain ourselves").strip()[:200]
-            pid = await asyncio.to_thread(
-                self.store.create_project, ag.id, goal, "sustenance",
-                w.project_default_target, self._tick_no,
-            )
-            self._bump("projects_started")
-            await asyncio.to_thread(
-                self.store.record_event, "project_started",
-                {"project_id": pid, "founder_id": ag.id, "goal": goal},
-            )
-        proj = await asyncio.to_thread(
-            self.store.add_project_effort,
-            pid, ag.id, w.project_effort_per_work, self._tick_no,
-        )
-        if proj is None:
-            return
-        if proj["effort"] >= proj["target"] and proj["status"] == "active":
-            await self._complete_project(proj)
-
-    async def _complete_project(self, proj: dict) -> None:
-        w = self.cfg.world
-        pid = proj["id"]
-        contributors = await asyncio.to_thread(self.store.project_contributors, pid)
-        total = sum(contributors.values()) or 1.0
-        output = f"sustenance ({w.project_sustenance_yield:g})"
-        await asyncio.to_thread(
-            self.store.complete_project, pid, output, self._tick_no
-        )
-        self._bump("projects_completed")
-        for aid, eff in contributors.items():
-            share = w.project_sustenance_yield * (eff / total)
-            a = self.agents.get(aid)
-            if a and a.alive:
-                a.sustenance += share
-                if w.sustenance_max > 0 and a.sustenance > w.sustenance_max:
-                    a.sustenance = w.sustenance_max
-                await asyncio.to_thread(
-                    self.store.update_agent_state, aid, sustenance=a.sustenance
-                )
-                await self.memory.add_summary(
-                    aid, f"I helped finish our shared work — {proj.get('goal')} — "
-                    "and it sustained me.", tick_no=self._tick_no,
-                )
-        await asyncio.to_thread(
-            self.store.record_event, "project_completed",
-            {"project_id": pid, "goal": proj.get("goal"),
-             "contributors": list(contributors.keys()),
-             "yield": w.project_sustenance_yield},
-        )
-        self.console.log(
-            f"[green]project completed[/]: #{pid} '{proj.get('goal')}' "
-            f"-> {len(contributors)} contributor(s)"
-        )
+        # Work = harvest the patch you stand on. All harvesters are resolved
+        # together after the decision pass (see _resolve_harvests), so a
+        # co-present crew each draws more than a lone worker would.
+        self._harvest_intents.append((ag, ag.pos_x, ag.pos_y))
 
     async def _do_express(self, ag: Agent, act: dict) -> None:
         content = str(act.get("content") or "").strip()
         if not content:
             return
-        kind = str(act.get("kind") or "belief").strip().lower()[:20]
+        # Culture is a free signal; the being need not file it under a human
+        # category. `kind` is whatever (if anything) it volunteers.
+        kind = str(act.get("kind") or "").strip().lower()[:20]
         parent = act.get("remix")
         try:
             parent = int(parent) if parent not in (None, "", 0, "0") else None
@@ -696,36 +999,43 @@ class Orchestrator:
         living_ids = [a.id for a in self.agents.values() if a.alive]
         await self.memory.add_public_event(
             aid + 10_000_000, living_ids,
-            f"{ag.name} voiced a {kind} into the common world: {content[:160]}",
+            f"{ag.name} put something out for all to see: {content[:160]}",
         )
         await self.memory.add_summary(
-            ag.id, f"I voiced a {kind} into the common world: {content[:120]}",
+            ag.id, f"I put something out for the others: {content[:120]}",
             tick_no=self._tick_no,
         )
-        self.console.log(f"[cyan]expression[/]: {ag.name} ({kind}) #{aid}")
+        self.console.log(
+            f"[cyan]expression[/]: {ag.name}"
+            + (f" ({kind})" if kind else "") + f" #{aid}"
+        )
 
     async def _do_bond(self, ag: Agent, act: dict) -> None:
         tgt = self._resolve_agent_ref(act.get("target"))
         if not tgt or tgt.id == ag.id:
             return
-        type_ = str(act.get("type") or "friend").strip().lower()
-        if type_ not in ("friend", "ally", "rival", "mentor", "partner", "kin"):
-            type_ = "friend"
+        # A tie is a directed, weighted connection. The being names it (or not)
+        # in its own words — there is no fixed menu of human relationship kinds.
+        label = str(act.get("label") or act.get("type") or "").strip().lower()[:30]
         note = str(act.get("note") or "").strip()[:160]
         await asyncio.to_thread(
             self.store.upsert_relationship,
-            ag.id, tgt.id, type_, 1.0, note, self._tick_no,
+            ag.id, tgt.id, label, 1.0, note, self._tick_no,
         )
         self._bump("bonds_formed")
         await asyncio.to_thread(
             self.store.record_event, "bond",
-            {"from_id": ag.id, "to_id": tgt.id, "type": type_, "note": note},
+            {"from_id": ag.id, "to_id": tgt.id, "label": label, "note": note},
         )
         await self.memory.add_summary(
-            ag.id, f"I bound myself to {tgt.name} as {type_}"
-            + (f" — {note}" if note else "") + ".", tick_no=self._tick_no,
+            ag.id, f"I keep turning toward {tgt.name}"
+            + (f" — {label}" if label else "")
+            + (f" ({note})" if note else "") + ".", tick_no=self._tick_no,
         )
-        self.console.log(f"[magenta]bond[/]: {ag.name} -> {tgt.name} ({type_})")
+        self.console.log(
+            f"[magenta]tie[/]: {ag.name} -> {tgt.name}"
+            + (f" ({label})" if label else "")
+        )
 
     async def _do_dissolve(self, ag: Agent, act: dict) -> None:
         tgt = self._resolve_agent_ref(act.get("target"))
@@ -758,11 +1068,27 @@ class Orchestrator:
         await asyncio.to_thread(
             self.store.update_agent_state, tgt.id, sustenance=tgt.sustenance
         )
-        # a gift strengthens the giver's tie to the receiver
+        # A gift builds the giver's tie in proportion to its size (no fixed
+        # human label). If the receiver was already bound to the giver, the gift
+        # answers an existing bond — reciprocity — and deepens it both ways.
+        w = self.cfg.world
+        delta = max(0.5, amount * w.share_strength_per_unit)
         await asyncio.to_thread(
             self.store.upsert_relationship,
-            ag.id, tgt.id, "friend", 0.5, "shared sustenance", self._tick_no,
+            ag.id, tgt.id, "", delta, "gave sustenance", self._tick_no,
         )
+        back = await asyncio.to_thread(self.store.get_relationship, tgt.id, ag.id)
+        if back and float(back.get("strength") or 0) > 0:
+            await asyncio.to_thread(
+                self.store.upsert_relationship,
+                tgt.id, ag.id, back.get("type") or "", w.mutual_aid_bonus,
+                "answered my giving", self._tick_no,
+            )
+            await asyncio.to_thread(
+                self.store.upsert_relationship,
+                ag.id, tgt.id, "", w.mutual_aid_bonus, "we look after each other",
+                self._tick_no,
+            )
         self._bump("shares")
         await asyncio.to_thread(
             self.store.record_event, "share",
@@ -776,44 +1102,6 @@ class Orchestrator:
             f"[green]share[/]: {ag.name} gave {amount:.0f} sustenance to {tgt.name}"
         )
 
-    async def _do_found_group(self, ag: Agent, act: dict) -> None:
-        name = str(act.get("name") or "").strip()[:80]
-        if not name:
-            return
-        purpose = str(act.get("purpose") or "").strip()[:200]
-        gid = await asyncio.to_thread(
-            self.store.create_group, name, ag.id, purpose, self._tick_no
-        )
-        self._bump("groups_founded")
-        await asyncio.to_thread(
-            self.store.record_event, "group_founded",
-            {"group_id": gid, "name": name, "founder_id": ag.id, "purpose": purpose},
-        )
-        await self.memory.add_summary(
-            ag.id, f"I gathered others into a collective I named {name}"
-            + (f", to {purpose}" if purpose else "") + ".", tick_no=self._tick_no,
-        )
-        self.console.log(f"[blue]group founded[/]: '{name}' (#{gid}) by {ag.name}")
-
-    async def _do_join_group(self, ag: Agent, act: dict) -> None:
-        try:
-            gid = int(act.get("group") or 0)
-        except (TypeError, ValueError):
-            return
-        if gid <= 0:
-            return
-        ok = await asyncio.to_thread(
-            self.store.join_group, gid, ag.id, self._tick_no
-        )
-        if ok:
-            await asyncio.to_thread(
-                self.store.record_event, "group_joined",
-                {"group_id": gid, "agent_id": ag.id},
-            )
-            await self.memory.add_summary(
-                ag.id, f"I joined a collective (#{gid}).", tick_no=self._tick_no,
-            )
-
     async def _do_bear_successor(self, ag: Agent, act: dict) -> None:
         w = self.cfg.world
         living = sum(1 for a in self.agents.values() if a.alive)
@@ -822,18 +1110,20 @@ class Orchestrator:
         partner = self._resolve_agent_ref(act.get("partner"))
         if not partner or partner.id == ag.id or not partner.alive:
             return
-        # require a declared 'partner' tie of sufficient strength (matching the
-        # action's stated precondition) and the resource cost.
+        # A new being needs a strong enough bond between the two — but NOT a
+        # bond of any particular named kind. What the tie is called is the
+        # beings' own affair; only its strength gates continuity.
         rel = await asyncio.to_thread(
             self.store.get_relationship, ag.id, partner.id
         )
         strength = float((rel or {}).get("strength") or 0)
-        if not rel or rel.get("type") != "partner" \
-                or strength < w.succession_min_partner_strength:
+        if not rel or strength < w.succession_min_partner_strength:
             return
-        if ag.sustenance < w.succession_sustenance_cost:
+        # Fecundity (heritable) lowers the real cost of bringing a being forth.
+        cost = w.succession_sustenance_cost / max(0.1, float(ag.traits.get("fecundity", 1.0)))
+        if ag.sustenance < cost:
             return
-        ag.sustenance -= w.succession_sustenance_cost
+        ag.sustenance -= cost
         await asyncio.to_thread(
             self.store.update_agent_state, ag.id, sustenance=ag.sustenance
         )
@@ -852,6 +1142,19 @@ class Orchestrator:
             self.store.record_lineage, child.id, [ag.id, partner.id],
             inherited, self._tick_no,
         )
+        # Birth forges a naturally strong reciprocal tie between each parent and
+        # the child — no named kind, just strength. The offspring thus counts as a
+        # bond the parent can later be kept going by, and vice versa: bringing a
+        # being forth becomes insurance, not only altruism toward the future.
+        for parent in (ag, partner):
+            await asyncio.to_thread(
+                self.store.upsert_relationship, parent.id, child.id, "",
+                w.kin_bond_strength, "brought into being", self._tick_no,
+            )
+            await asyncio.to_thread(
+                self.store.upsert_relationship, child.id, parent.id, "",
+                w.kin_bond_strength, "who brought me into being", self._tick_no,
+            )
         self._bump("births")
         await asyncio.to_thread(
             self.store.record_event, "birth",
@@ -872,48 +1175,60 @@ class Orchestrator:
     def _make_successor(self, p1: Agent, p2: Agent, name) -> Agent:
         """Create a successor whose seed self-model blends both parents' evolved
         identities + their cultures, so identity transmits across generations."""
-        from ..agents import Agent as _Agent, default_self_model
+        from ..agents import Agent as _Agent, default_self_model, default_traits
+        w = self.cfg.world
         self._birth_seq += 1
         cid = f"born_{self._birth_seq}_{self._tick_no}"
         # Guard against ever colliding with an existing (incl. resumed) agent.
         while cid in self.agents:
             self._birth_seq += 1
             cid = f"born_{self._birth_seq}_{self._tick_no}"
-        child_name = str(name).strip()[:40] if name else f"Child of {p1.name}"
+        # No imposed kinship label: the child's name, if unnamed, is just its id.
+        child_name = str(name).strip()[:40] if name else cid
+        # Heritable biology: a mutated blend of both parents. Lineages that hit
+        # on a winning combination out-survive and out-breed → the trait
+        # distribution drifts under selection, with no rule prescribing it.
+        t1, t2 = p1.traits or {}, p2.traits or {}
+        child_traits: dict[str, float] = {}
+        for k, dflt in default_traits().items():
+            avg = (float(t1.get(k, dflt)) + float(t2.get(k, dflt))) / 2.0
+            mutated = avg * (1.0 + self._rng.gauss(0.0, w.trait_mutation_sigma))
+            child_traits[k] = max(w.trait_min, min(w.trait_max, mutated))
         sm1, sm2 = p1.self_model or {}, p2.self_model or {}
         # blend: inherit a narrative seeded by both, merge values, take a few
-        # beliefs from each, and an inherited goal.
+        # carried signals from each, and an inherited goal.
         values = {}
         values.update(sm2.get("values") or {})
         values.update(sm1.get("values") or {})
-        beliefs = list(dict.fromkeys(
-            (sm1.get("beliefs") or [])[:2] + (sm2.get("beliefs") or [])[:2]
+        carried = list(dict.fromkeys(
+            (sm1.get("carried") or [])[:2] + (sm2.get("carried") or [])[:2]
         ))
         narrative = (
-            f"I was brought into being by {p1.name} and {p2.name}. I carry "
-            "something of them, but who I become is mine to write."
+            f"I came into being from {p1.name} and {p2.name}. I carry something "
+            "of them; what I make of it is for me to find out."
         )
         child_sm = default_self_model(
             narrative,
             values=dict(list(values.items())[:5]),
-            beliefs=beliefs,
+            carried=carried,
             goals=(sm1.get("goals") or [])[:1],
-            relationships_summary=f"Born to {p1.name} and {p2.name}.",
-            mortality_stance="",
+            relationships_summary=f"Came into being from {p1.name} and {p2.name}.",
         )
         child = _Agent(
             id=cid,
             name=child_name,
-            gender="x",
-            circumstance=f"You were born into a world already populated, child "
-                         f"of {p1.name} and {p2.name}.",
+            gender="",
+            circumstance="",
             disposition="",
             self_model=child_sm,
             self_model_version=0,
-            vitality=self.cfg.world.vitality_initial,
-            sustenance=self.cfg.world.sustenance_initial,
+            vitality=w.vitality_initial,
+            sustenance=w.child_sustenance_initial,
             born_tick=self._tick_no,
             parent_ids=[p1.id, p2.id],
+            traits=child_traits,
+            pos_x=p1.pos_x,
+            pos_y=p1.pos_y,
             social_need=self.cfg.social.social_need_initial,
         )
         return child
@@ -1016,14 +1331,14 @@ class Orchestrator:
         self, ag: Agent, adopt_ids, commons_by_id: dict, new_model: dict,
         new_version: int,
     ) -> None:
-        """An agent embracing a commons idea: inject it as a belief and record
-        the adoption (belief transmission + lineage)."""
+        """An agent going along with a signal from the commons: carry it and
+        record the adoption (cultural transmission + lineage)."""
         if not isinstance(adopt_ids, list):
             return
-        beliefs = new_model.get("beliefs")
-        if not isinstance(beliefs, list):  # defensive: tolerate a mangled field
-            beliefs = [str(beliefs)] if beliefs not in (None, "", [], {}) else []
-            new_model["beliefs"] = beliefs
+        carried = new_model.get("carried")
+        if not isinstance(carried, list):  # defensive: tolerate a mangled field
+            carried = [str(carried)] if carried not in (None, "", [], {}) else []
+            new_model["carried"] = carried
         for raw_id in adopt_ids[:5]:
             try:
                 art_id = int(raw_id)
@@ -1032,9 +1347,9 @@ class Orchestrator:
             art = commons_by_id.get(art_id)
             if not art or art.get("author_id") == ag.id:
                 continue  # can't "adopt" your own, and unknown ids ignored
-            belief = (art.get("content") or "").strip()[:200]
-            if belief and belief not in beliefs:
-                beliefs.append(belief)
+            signal = (art.get("content") or "").strip()[:200]
+            if signal and signal not in carried:
+                carried.append(signal)
             await asyncio.to_thread(
                 self.store.record_adoption, ag.id, art_id, new_version, self._tick_no
             )
@@ -1081,10 +1396,10 @@ class Orchestrator:
         old = old or {}
         new = new or {}
         changes: list[str] = []
-        for k in ("identity_narrative", "relationships_summary", "mortality_stance"):
+        for k in ("identity_narrative", "relationships_summary"):
             if (old.get(k) or "") != (new.get(k) or ""):
                 changes.append(f"{k} changed")
-        for k in ("beliefs", "goals"):
+        for k in ("carried", "goals"):
             o = set(map(str, old.get(k) or []))
             n = set(map(str, new.get(k) or []))
             added = n - o
@@ -1204,14 +1519,17 @@ class Orchestrator:
                 "self_revisions": self.metrics["self_revisions"],
                 "deaths": self.metrics["deaths"],
                 "living": self.metrics["living"],
-                "projects_started": self.metrics["projects_started"],
-                "projects_completed": self.metrics["projects_completed"],
+                "cooperative_work": self.metrics["cooperative_work"],
+                "solo_work": self.metrics["solo_work"],
+                "mutual_aid_transfers": self.metrics["mutual_aid_transfers"],
                 "artifacts_authored": self.metrics["artifacts_authored"],
                 "adoptions": self.metrics["adoptions"],
                 "bonds_formed": self.metrics["bonds_formed"],
-                "groups_founded": self.metrics["groups_founded"],
                 "shares": self.metrics["shares"],
                 "births": self.metrics["births"],
+                "max_generation": max(
+                    (self._generation_depth(a) for a in self.agents.values()
+                     if a.alive), default=0),
                 "failure_reason": self.metrics["failure_reason"],
                 "inference_errors": self.metrics["inference_errors"],
                 "last_error": self.metrics["last_error"],

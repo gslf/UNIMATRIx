@@ -87,8 +87,8 @@ async def test_stats_survive_missing_usage_and_count_errors() -> None:
     await client.aclose()
 
 
-def test_decision_prompt_leads_with_static_world_rules(example_config_path) -> None:
-    cfg = load_config(example_config_path)
+def test_decision_prompt_leads_with_static_world_rules(stub_config) -> None:
+    cfg = load_config(stub_config)
     pb = PromptBuilder(cfg)
     agents = [Agent.from_spec(s, cfg.social.social_need_initial) for s in cfg.agents[:2]]
 

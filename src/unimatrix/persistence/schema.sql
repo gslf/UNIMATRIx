@@ -14,6 +14,9 @@ CREATE TABLE IF NOT EXISTS agents (
     sustenance          REAL DEFAULT 0,
     born_tick           INTEGER DEFAULT 0,  -- 0 for founders, >0 for successors
     parent_ids          TEXT,               -- JSON list, for successors
+    traits_json         TEXT,               -- heritable biology (JSON), mutated at birth
+    pos_x               INTEGER DEFAULT 0,  -- position on the patch grid (ecology mode)
+    pos_y               INTEGER DEFAULT 0,
     social_need         REAL DEFAULT 100,
     state               TEXT DEFAULT 'idle' -- 'idle' | 'dead'
 );
@@ -65,28 +68,6 @@ CREATE TABLE IF NOT EXISTS person_memories (
     PRIMARY KEY (observer_id, subject_id)
 );
 
--- LABOR & PURPOSE: multi-tick projects that produce sustenance / artifacts.
-CREATE TABLE IF NOT EXISTS projects (
-    id              INTEGER PRIMARY KEY AUTOINCREMENT,
-    founder_id      TEXT,
-    goal            TEXT,
-    kind            TEXT,
-    effort          REAL DEFAULT 0,
-    target          REAL DEFAULT 0,
-    status          TEXT DEFAULT 'active',   -- 'active' | 'completed'
-    output          TEXT,
-    tick_started    INTEGER,
-    tick_completed  INTEGER
-);
-CREATE TABLE IF NOT EXISTS project_contributions (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    project_id  INTEGER NOT NULL,
-    agent_id    TEXT NOT NULL,
-    effort      REAL,
-    tick_no     INTEGER
-);
-CREATE INDEX IF NOT EXISTS idx_proj_contrib ON project_contributions(project_id);
-
 -- MEANING & BELIEF: a public commons of authored ideas + adoption lineage.
 CREATE TABLE IF NOT EXISTS cultural_artifacts (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -106,7 +87,7 @@ CREATE TABLE IF NOT EXISTS belief_adoptions (
 );
 CREATE INDEX IF NOT EXISTS idx_adopt_artifact ON belief_adoptions(artifact_id);
 
--- KINSHIP & INTIMACY: typed, directed, durable ties + named collectives.
+-- KINSHIP & INTIMACY: typed, directed, durable ties.
 CREATE TABLE IF NOT EXISTS relationships (
     observer_id    TEXT NOT NULL,
     subject_id     TEXT NOT NULL,
@@ -119,20 +100,6 @@ CREATE TABLE IF NOT EXISTS relationships (
     PRIMARY KEY (observer_id, subject_id)
 );
 CREATE INDEX IF NOT EXISTS idx_rel_subject ON relationships(subject_id);
-CREATE TABLE IF NOT EXISTS groups (
-    id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    name          TEXT,
-    founder_id    TEXT,
-    purpose       TEXT,
-    tick_founded  INTEGER
-);
-CREATE TABLE IF NOT EXISTS group_members (
-    group_id    INTEGER NOT NULL,
-    agent_id    TEXT NOT NULL,
-    joined_tick INTEGER,
-    left_tick   INTEGER,
-    PRIMARY KEY (group_id, agent_id)
-);
 
 -- MORTALITY & CONTINUITY: lineage of successors + memorials of the dead.
 CREATE TABLE IF NOT EXISTS lineage (
@@ -147,6 +114,19 @@ CREATE TABLE IF NOT EXISTS deaths (
     tick_no         INTEGER,
     legacy_summary  TEXT,
     ts              TEXT
+);
+
+-- PLACE: the patch grid (ecology mode). Resources deplete when harvested and
+-- regrow slowly when left alone, so ground gets used up and richer ground lies
+-- elsewhere — scarcity becomes local.
+CREATE TABLE IF NOT EXISTS patches (
+    x            INTEGER NOT NULL,
+    y            INTEGER NOT NULL,
+    resource     REAL DEFAULT 0,
+    capacity     REAL DEFAULT 0,
+    regen        REAL DEFAULT 0,
+    updated_tick INTEGER,
+    PRIMARY KEY (x, y)
 );
 
 -- Public event log (everything that happens) + full-state checkpoints.

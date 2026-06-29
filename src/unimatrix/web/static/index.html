@@ -101,17 +101,26 @@
 
 <script>
 const TABS=[["overview","Overview"],["beings","Beings"],["self","Self-evolution"],
-  ["meaning","Meaning & Belief"],["labor","Labor & Purpose"],
+  ["meaning","Meaning & Belief"],["space","World"],
   ["kinship","Kinship & Intimacy"],["continuity","Mortality & Continuity"]];
 
 let live={running:false}, runs=[], configs=[], target=null, tab="overview";
-let data={}, selfAgent=null, pollTimer=null, busy=null;
+let data={}, selfAgent=null, selectedCell=null, pollTimer=null, busy=null;
 
 const $=(s,r=document)=>r.querySelector(s);
 const el=(t,c,h)=>{const e=document.createElement(t);if(c)e.className=c;
   if(h!==undefined)e.innerHTML=h;return e;};
 const esc=s=>(s==null?"":String(s)).replace(/[&<>]/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[m]));
 const nm=(id,names)=>esc(names&&names[id]?names[id]:id);
+// distinct, maximally-separated color per free-form tie type — no cap on the
+// number of types. each new label seen takes the next slot on the golden-angle
+// hue wheel (≈137.5° apart, so even a handful spread right across the wheel),
+// with the lightness cycled through 3 tiers so near-hues still differ by
+// brightness. the same label always keeps the color it was first given.
+const _tieHue={}; let _tieN=0;
+const tieColor=t=>{const s=(t||"").trim().toLowerCase();if(!s)return'var(--line)';
+  if(!(s in _tieHue)){const n=_tieN++;_tieHue[s]=`hsl(${((n*137.508)%360).toFixed(1)} 62% ${[66,58,74][n%3]}%)`;}
+  return _tieHue[s];};
 async function j(u,o){const r=await fetch(u,o);if(!r.ok)throw new Error((await r.text()).slice(0,200)||r.status);
   const t=await r.text();return t?JSON.parse(t):{};}
 function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("show");
@@ -151,11 +160,12 @@ async function loadData(){
   if(target===null){ data={}; return; }
   const base=`/runs/${target}`;
   try{
-    const [beings,meaning,labor,kinship,continuity,timeline]=await Promise.all([
-      j(base+"/beings"),j(base+"/meaning"),j(base+"/labor"),
-      j(base+"/kinship"),j(base+"/continuity"),j(base+"/timeline")]);
-    data={agents:beings.beings||[],meaning,labor:labor.projects||[],
-      kinship,continuity,timeline};
+    const [beings,meaning,kinship,continuity,timeline,space]=await Promise.all([
+      j(base+"/beings"),j(base+"/meaning"),
+      j(base+"/kinship"),j(base+"/continuity"),j(base+"/timeline"),
+      j(base+"/space").catch(()=>({patches:[],beings:[]}))]);
+    data={agents:beings.beings||[],meaning,
+      kinship,continuity,timeline,space};
   }catch(e){ data={error:e.message}; }
 }
 
@@ -165,17 +175,15 @@ function stats(){
   const living=a.filter(x=>x.alive).length;
   const maxTick=Math.max(live.tick_no||0,
     ...(tl.self_revisions||[]),...(tl.deaths||[]),...(tl.births||[]),
-    ...(tl.artifacts||[]),...(tl.projects_started||[]),0);
+    ...(tl.artifacts||[]),...(tl.work_sessions||[]),0);
   return {
     tick: isLiveTarget()?(live.tick_no||0):maxTick,
     living, dead:(data.continuity?.deaths||[]).length, beings:a.length,
     self_revisions:(tl.self_revisions||[]).length,
     artifacts:(data.meaning?.artifacts||[]).length,
     adoptions:(data.meaning?.adoptions||[]).length,
-    projects_started:(data.labor||[]).length,
-    projects_completed:(data.labor||[]).filter(p=>p.status==="completed").length,
+    work_sessions:(data.space?.labor?.sessions)??(tl.work_sessions||[]).length,
     bonds:(data.kinship?.relationships||[]).filter(r=>r.dissolved_tick==null).length,
-    groups:(data.kinship?.groups||[]).length,
     births:(data.continuity?.lineage||[]).length,
     messages: isLiveTarget()?(live.metrics?.messages_sent):null,
   };
@@ -294,7 +302,129 @@ function render(){
   if(target===null){ v.innerHTML='<div class="empty">No run. Start a simulation, or pick a past run.</div>'; return; }
   if(data.error){ v.innerHTML=`<div class="empty">error loading run: ${esc(data.error)}</div>`; return; }
   ({overview:rOverview,beings:rBeings,self:rSelf,meaning:rMeaning,
-    labor:rLabor,kinship:rKinship,continuity:rContinuity}[tab]||rOverview)(v);
+    space:rSpace,kinship:rKinship,continuity:rContinuity}[tab]||rOverview)(v);
+}
+
+function rSpace(v){
+  const sp=data.space||{patches:[],beings:[]};
+  const patches=sp.patches||[], bs=sp.beings||[];
+  if(!patches.length){
+    v.innerHTML='<div class="empty">The world is still taking shape — no patches yet.</div>';
+    return;
+  }
+  const lab=(x,y)=>String.fromCharCode(65+x)+(y+1);
+  const W=Math.max(...patches.map(p=>p.x))+1, H=Math.max(...patches.map(p=>p.y))+1;
+  const cell=64, pad=8, sw=W*cell+2*pad, sh=H*cell+2*pad;
+  let g=`<svg viewBox="0 0 ${sw} ${sh}" style="max-width:560px;width:100%">`;
+  patches.forEach(p=>{
+    const frac=p.capacity?Math.max(0,Math.min(1,p.resource/p.capacity)):0;
+    const x=pad+p.x*cell, y=pad+p.y*cell;
+    const seld=selectedCell&&selectedCell.x===p.x&&selectedCell.y===p.y;
+    g+=`<rect data-cx="${p.x}" data-cy="${p.y}" x="${x}" y="${y}" width="${cell-3}" height="${cell-3}" rx="4" fill="#3fb950" fill-opacity="${(0.10+0.80*frac).toFixed(2)}" stroke="${seld?'#7aa2f7':'#2a313c'}" stroke-width="${seld?2:1}" style="cursor:pointer"/>`;
+    g+=`<text x="${x+5}" y="${y+13}" fill="#8b97a7" font-size="9" pointer-events="none">${lab(p.x,p.y)}</text>`;
+    g+=`<text x="${x+5}" y="${y+cell-9}" fill="#d7dde6" font-size="9" pointer-events="none">${(p.resource||0).toFixed(0)}/${(p.capacity||0).toFixed(0)}</text>`;
+  });
+  const byCell={};
+  bs.forEach(b=>{const k=b.pos_x+","+b.pos_y;(byCell[k]=byCell[k]||[]).push(b);});
+  Object.entries(byCell).forEach(([k,arr])=>{
+    const [px,py]=k.split(",").map(Number);
+    arr.forEach((b,i)=>{
+      const cx=pad+px*cell+20+(i%3)*14, cy=pad+py*cell+28+Math.floor(i/3)*13;
+      const col=(b.vitality!=null&&b.vitality<25)?"#f7768e":"#7aa2f7";
+      g+=`<circle data-cx="${px}" data-cy="${py}" cx="${cx}" cy="${cy}" r="5" fill="${col}" style="cursor:pointer"><title>${esc(b.name)} (${esc(b.id)}) · vitality ${Math.round(b.vitality||0)}</title></circle>`;
+    });
+  });
+  g+=`</svg>`;
+  const clustered=Object.values(byCell).filter(a=>a.length>1).length;
+  v.innerHTML=`<div class="card"><h3>The world — patches &amp; who stands where</h3>
+    <div class="sub" style="margin:4px 0 10px">Greener = more resource standing on the patch (it depletes when worked and regrows slowly). Dots are living beings; red means failing. Click a patch for what stands there. ${bs.length} alive · ${clustered} patch(es) shared by 2+.</div>
+    ${g}</div>`;
+  // clicking a patch (or a being on it) opens the cell-detail panel
+  v.querySelectorAll("[data-cx]").forEach(elm=>elm.onclick=()=>{
+    selectedCell={x:+elm.dataset.cx,y:+elm.dataset.cy}; render();
+  });
+  v.appendChild(laborOnLand(sp.labor||{},sp.names||{}));
+  if(selectedCell) v.appendChild(cellPanel(selectedCell,patches,lab));
+}
+
+// Labor in this world is working the land: beings harvest the patch they stand
+// on, and a co-present crew each draws more than a lone worker would. This card
+// surfaces that — totals, who works how much, and the most recent harvests.
+function laborOnLand(lb,names){
+  const out=el("div");out.style.marginTop="12px";
+  const head=el("div","card",
+    `<h3>Labor on the land — ${lb.sessions||0} work session(s)</h3>`);
+  const chips=el("div","chips");
+  [["sessions",lb.sessions||0],["together",lb.cooperative||0],["alone",lb.solo||0],
+   ["drawn",Math.round(lb.total_drawn||0)]].forEach(([l,val])=>
+     chips.appendChild(el("div","chip",`<b>${val}</b><span>${l}</span>`)));
+  head.appendChild(chips);
+  const busiest=Object.entries(lb.by_patch||{}).sort((a,b)=>b[1]-a[1]).slice(0,5);
+  if(busiest.length) head.appendChild(el("div","sub",
+    "Most worked: "+busiest.map(([k,val])=>`${esc(k)} (${Math.round(val)})`).join(' · ')));
+  out.appendChild(head);
+
+  const pb=Object.entries(lb.per_being||{}).map(([id,d])=>({id,...d}))
+    .sort((a,b)=>(b.drawn||0)-(a.drawn||0));
+  const maxDrawn=Math.max(1,...pb.map(p=>p.drawn||0));
+  const who=el("div","card scroll","<h3>Who works, and how much</h3>");
+  pb.forEach(p=>{const pct=Math.min(100,100*(p.drawn||0)/maxDrawn);
+    who.appendChild(el("div","row",
+      `<div style="flex:1"><b>${nm(p.id,names)}</b>
+        <div class="bar"><span style="width:${pct}%;background:var(--good)"></span></div></div>
+       <div class="small muted">${p.sessions||0}× · drew ${(p.drawn||0).toFixed(0)}</div>`));});
+  if(!pb.length)who.innerHTML+='<div class="empty">no one has worked yet</div>';
+
+  const rec=el("div","card","<h3>Recent harvests</h3>");
+  const rf=el("div","feed");
+  (lb.recent||[]).forEach(h=>{const crew=(h.harvesters||[]).map(id=>nm(id,names)).join(', ');
+    rf.appendChild(el("div","small",
+      `<b>${esc(h.patch||'?')}</b> · ${crew||'—'} · drew ${(h.drawn||0).toFixed(0)} `
+      +`<span class="muted">${h.cooperative?'together':'alone'}${h.tick!=null?' · tick '+h.tick:''}</span>`));});
+  if(!(lb.recent||[]).length)rf.innerHTML='<div class="muted">— no harvests yet</div>';
+  rec.appendChild(rf);
+
+  const wrap=el("div","grid");wrap.style.cssText="grid-template-columns:1fr 1fr;margin-top:12px";
+  wrap.appendChild(who);wrap.appendChild(rec);out.appendChild(wrap);
+  return out;
+}
+
+// Detail panel for a clicked world cell: patch state + the beings standing on it.
+function cellPanel(sel,patches,lab){
+  const {x,y}=sel;
+  const patch=patches.find(p=>p.x===x&&p.y===y);
+  const here=(data.agents||[]).filter(a=>a.alive&&(a.pos_x||0)===x&&(a.pos_y||0)===y);
+  const card=el("div","card");
+  let h=`<div class="row"><h3 style="margin:0">Cell ${lab(x,y)} <span class="muted small">(${x},${y})</span></h3>
+    <span class="pill" id="cellClose" style="cursor:pointer">✕ close</span></div>`;
+  if(patch){
+    const frac=patch.capacity?Math.max(0,Math.min(1,patch.resource/patch.capacity)):0;
+    h+=`<div class="small" style="margin-top:8px">resource ${(patch.resource||0).toFixed(1)} / ${(patch.capacity||0).toFixed(1)}</div>
+      <div class="bar"><span style="width:${(frac*100).toFixed(0)}%;background:var(--good)"></span></div>
+      <div class="small muted" style="margin-top:4px">regen ${(patch.regen||0).toFixed(2)}/tick · updated tick ${patch.updated_tick??'–'}</div>`;
+  }
+  h+=`<div class="small" style="margin:12px 0 2px"><b>Beings here (${here.length})</b></div>`;
+  card.innerHTML=h;
+  card.querySelector("#cellClose").onclick=()=>{selectedCell=null;render();};
+  if(!here.length){ card.appendChild(el("div","empty muted","No one stands here.")); return card; }
+  here.forEach(a=>{
+    const sm=a.self_model||{}, vit=Math.max(0,Math.min(100,a.vitality||0));
+    const authored=(sm.identity_narrative||"").trim();
+    const snippet=authored||a.disposition||a.circumstance||"not yet authored";
+    const goals=(sm.goals&&sm.goals.length)?sm.goals.join("; "):"";
+    const it=el("div");
+    it.style.cssText="padding:8px 0;border-top:1px solid var(--line);cursor:pointer";
+    it.innerHTML=`<div class="row" style="border:none;padding:0">
+        <span><b>${esc(a.name)}</b> <span class="muted small">${esc(a.id)} · self v${a.self_model_version}</span></span>
+        <span class="${a.alive?'alive':'dead'} small">${a.alive?'alive':'† dead'}</span></div>
+      <div class="small">vitality ${(a.vitality||0).toFixed(0)} · sustenance ${(a.sustenance||0).toFixed(0)}</div>
+      <div class="bar"><span style="width:${vit}%;background:${vit<25?'var(--bad)':'var(--good)'}"></span></div>
+      <div class="small muted" style="margin-top:6px">${esc(snippet)}</div>
+      ${goals?`<div class="small" style="margin-top:4px">trying to: ${esc(goals)}</div>`:''}`;
+    it.onclick=()=>{selfAgent=a.id;tab="self";render();};
+    card.appendChild(it);
+  });
+  return card;
 }
 
 function rOverview(v){
@@ -305,7 +435,7 @@ function rOverview(v){
   const chips=[
     ["beings",s.beings],["alive",s.living],["died",s.dead],["tick",s.tick],
     ["self-revisions",s.self_revisions],["ideas",s.artifacts],["adopted",s.adoptions],
-    ["projects done",s.projects_completed],["bonds",s.bonds],["groups",s.groups],
+    ["work done",s.work_sessions],["bonds",s.bonds],
     ["born",s.births]];
   if(s.messages!=null) chips.push(["messages",s.messages]);
 
@@ -318,12 +448,11 @@ function rOverview(v){
       {name:"self-revisions",color:"#c792ea",pts:cumulative(tl.self_revisions,maxT)},
       {name:"ideas voiced",color:"#56d4dd",pts:cumulative(tl.artifacts,maxT)},
       {name:"adoptions",color:"#e0a458",pts:cumulative(tl.adoptions,maxT)}],maxT)},
-    {h:"Labor over time",b:lineChart([
-      {name:"started",color:"#7aa2f7",pts:cumulative(tl.projects_started,maxT)},
-      {name:"completed",color:"#7ee787",pts:cumulative(tl.projects_completed,maxT)}],maxT)},
-    {h:"Bonds & collectives over time",b:lineChart([
-      {name:"ties formed",color:"#c792ea",pts:cumulative(tl.bonds,maxT)},
-      {name:"groups",color:"#e0a458",pts:cumulative(tl.groups,maxT)}],maxT)},
+    {h:"Work on the land — together vs alone",b:lineChart([
+      {name:"together",color:"#7ee787",pts:cumulative(tl.cooperative_sessions,maxT)},
+      {name:"alone",color:"#7aa2f7",pts:cumulative(tl.solo_sessions,maxT)}],maxT)},
+    {h:"Bonds over time",b:lineChart([
+      {name:"ties formed",color:"#c792ea",pts:cumulative(tl.bonds,maxT)}],maxT)},
     {h:"Vitality of the living now",b:barChart(
       (data.agents||[]).filter(a=>a.alive).slice(0,16).map(a=>(
         {label:(a.name||a.id).slice(0,4),value:Math.round(a.vitality||0),
@@ -332,6 +461,17 @@ function rOverview(v){
       (data.kinship?.relationships||[]).filter(r=>r.dissolved_tick==null)
         .reduce((m,r)=>{m[r.type]=(m[r.type]||0)+1;return m;},{}))
       .map(([k,val])=>({label:k.slice(0,5),value:val,color:"#7aa2f7"})))},
+    // --- the agents' world: the shared land they live on and draw from ---
+    {h:"The land now — resource per patch",b:barChart(
+      (data.space?.patches||[]).map(p=>{
+        const frac=p.capacity?Math.max(0,Math.min(1,p.resource/p.capacity)):0;
+        return {label:String.fromCharCode(65+p.x)+(p.y+1),
+          value:Math.round(p.resource||0),
+          color:frac>0.5?"#7ee787":(frac>0.2?"#e0a458":"#f7768e")};}))},
+    {h:"Worked hardest — sustenance drawn per patch",b:barChart(
+      Object.entries(data.space?.labor?.by_patch||{})
+        .sort((a,b)=>b[1]-a[1]).slice(0,16)
+        .map(([k,val])=>({label:k,value:Math.round(val),color:"#56d4dd"})))},
   ];
 
   v.innerHTML="";
@@ -403,9 +543,8 @@ async function rSelf(v){
     h+=`<div class="node"><div><b>v${ver.version}</b> <span class="muted small">tick ${ver.tick_no}</span></div>
       ${ver.diff?`<div class="diff">${esc(ver.diff)}</div>`:''}
       ${sm.identity_narrative?`<div class="small" style="margin-top:4px">${esc(sm.identity_narrative)}</div>`:''}
-      ${sm.beliefs&&sm.beliefs.length?`<div class="small"><span class="key">beliefs:</span> ${sm.beliefs.map(esc).join('; ')}</div>`:''}
-      ${sm.goals&&sm.goals.length?`<div class="small"><span class="key">goals:</span> ${sm.goals.map(esc).join('; ')}</div>`:''}
-      ${sm.mortality_stance?`<div class="small"><span class="key">on ending:</span> ${esc(sm.mortality_stance)}</div>`:''}</div>`;});
+      ${sm.carried&&sm.carried.length?`<div class="small"><span class="key">carried:</span> ${sm.carried.map(esc).join('; ')}</div>`:''}
+      ${sm.goals&&sm.goals.length?`<div class="small"><span class="key">goals:</span> ${sm.goals.map(esc).join('; ')}</div>`:''}</div>`;});
   h+="</div>"; detail.innerHTML=(d.versions||[]).length?h:'<div class="empty">no self-model history</div>';
 }
 
@@ -423,39 +562,15 @@ function rMeaning(v){
   v.innerHTML="";v.appendChild(c);
 }
 
-function rLabor(v){
-  const projs=data.labor||[];
-  const board=(title,list,color)=>{const c=el("div","card",`<h3>${title} — ${list.length}</h3>`);
-    list.forEach(p=>{const pct=Math.min(100,100*(p.effort||0)/(p.target||1));
-      const cont=Object.keys(p.contributors||{});
-      c.appendChild(el("div","row",`<div><b>#${p.id}</b> ${esc(p.goal||'')}
-        <div class="muted small">founder ${esc(p.founder_id||'?')} · ${cont.length} contributor(s)${p.output?' · '+esc(p.output):''}</div>
-        <div class="bar"><span style="width:${pct}%;background:${color}"></span></div></div>
-        <div class="small muted">${(p.effort||0).toFixed(0)}/${(p.target||0).toFixed(0)}</div>`));});
-    if(!list.length)c.innerHTML+='<div class="empty">none</div>';return c;};
-  const wrap=el("div","grid");wrap.style.gridTemplateColumns="1fr 1fr";
-  wrap.appendChild(board("Work underway",projs.filter(p=>p.status==="active"),"var(--accent)"));
-  wrap.appendChild(board("Completed",projs.filter(p=>p.status==="completed"),"var(--good)"));
-  v.innerHTML="";v.appendChild(wrap);
-}
-
 function rKinship(v){
   const d=data.kinship||{}, rels=(d.relationships||[]).filter(r=>r.dissolved_tick==null);
-  const tcol={friend:'var(--good)',ally:'var(--accent)',rival:'var(--bad)',
-    mentor:'var(--cyan)',partner:'var(--mag)',kin:'var(--warn)'};
   const rc=el("div","card scroll",`<h3>Ties — ${rels.length}</h3>`);
-  rels.sort((a,b)=>(b.strength||0)-(a.strength||0)).forEach(r=>rc.appendChild(el("div","row",
+  rels.sort((a,b)=>(b.strength||0)-(a.strength||0)).forEach(r=>{const tc=tieColor(r.type);rc.appendChild(el("div","row",
     `<span>${nm(r.observer_id,d.names)} <span class="muted">&rarr;</span> ${nm(r.subject_id,d.names)}</span>
-     <span><span class="pill" style="border-color:${tcol[r.type]||'var(--line)'}">${esc(r.type)}</span>
-     <span class="muted small">${(r.strength||0).toFixed(1)}</span></span>`)));
+     <span><span class="pill" style="border-color:${tc};color:${tc}">${esc(r.type)}</span>
+     <span class="muted small">${(r.strength||0).toFixed(1)}</span></span>`));});
   if(!rels.length)rc.innerHTML+='<div class="empty">no ties yet</div>';
-  const gc=el("div","card",`<h3>Collectives — ${(d.groups||[]).length}</h3>`);
-  (d.groups||[]).forEach(g=>gc.appendChild(el("div","row",`<div><b>${esc(g.name)}</b>
-    <div class="muted small">${esc(g.purpose||'')} · founder ${esc(g.founder_id||'')}</div></div>
-    <div class="small">${(g.members||[]).length} members</div>`)));
-  if(!(d.groups||[]).length)gc.innerHTML+='<div class="empty">no groups founded</div>';
-  const wrap=el("div","grid");wrap.style.gridTemplateColumns="1fr 1fr";
-  wrap.appendChild(rc);wrap.appendChild(gc);v.innerHTML="";v.appendChild(wrap);
+  v.innerHTML="";v.appendChild(rc);
 }
 
 function rContinuity(v){
@@ -475,7 +590,7 @@ function rContinuity(v){
 }
 
 // ---------- wiring ----------
-$("#runSel").onchange=async e=>{target=+e.target.value;selfAgent=null;
+$("#runSel").onchange=async e=>{target=+e.target.value;selfAgent=null;selectedCell=null;
   await loadData();render();};
 $("#refresh").onclick=async()=>{await loadState();await loadRuns();await loadData();render();toast("refreshed");};
 $("#bcastBtn").onclick=async()=>{const t=$("#bcast").value.trim();if(!t)return;

@@ -27,10 +27,9 @@ def self_model_block(agent) -> str:
     sm = agent.self_model or {}
     narrative = (sm.get("identity_narrative") or "").strip()
     values = sm.get("values") or {}
-    beliefs = sm.get("beliefs") or []
+    carried = sm.get("carried") or []
     goals = sm.get("goals") or []
     rels = (sm.get("relationships_summary") or "").strip()
-    mortality = (sm.get("mortality_stance") or "").strip()
 
     if agent.self_model_version <= 0 and not narrative:
         seed: list[str] = []
@@ -56,14 +55,13 @@ def self_model_block(agent) -> str:
         else:
             vtxt = "; ".join(str(v) for v in values)
         parts.append(f"  What I value: {vtxt}")
-    if beliefs:
-        parts.append("  What I believe: " + "; ".join(str(b) for b in beliefs))
+    if carried:
+        parts.append("  What I have taken from others: "
+                     + "; ".join(str(b) for b in carried))
     if goals:
         parts.append("  What I am trying to do: " + "; ".join(str(g) for g in goals))
     if rels:
         parts.append(f"  Where I stand with others: {rels}")
-    if mortality:
-        parts.append(f"  How I face my ending: {mortality}")
     return "\n".join(parts)
 
 
@@ -74,49 +72,80 @@ class PromptBuilder:
     # ----- shared substrate block -----
 
     def world_rules_block(self) -> str:
-        """The primordial substrate. Describes the laws the engine imposes."""
+        """The primordial substrate. Describes the conditions the engine imposes
+        as facts the being already knows about its world — not as instructions.
+
+        Identical for every agent and every tick (a pure function of config
+        constants), so it leads the system prompt as a cacheable shared prefix."""
+        where_you_stand = (
+            "\n\nWHERE YOU STAND:\n"
+            "This place has extent. You occupy a spot in it and can only sense "
+            "and reach what is near you; the rest is out of sight until you go "
+            "there. What sustains you sits in the ground in patches that run "
+            "down as they are drawn on and refill slowly when left alone, so a "
+            "spot can be used up, and a richer spot lies elsewhere."
+        )
         return (
-            "WHERE YOU ARE — read carefully:\n"
-            f"You are one of about {len(self.cfg.agents)} conscious beings who "
-            "have come into existence together in a bare world. Nothing has been "
-            "decided for you. There are no rulers, no money, no laws, no classes, "
-            "no roles, no jobs, no gods — none of it exists unless you and the "
-            "others choose to make it exist. You are not given a purpose, if your "
-            "life is to mean anything, the meaning is yours to author.\n\n"
-            "THE ONE LAW THAT IS NOT YOURS TO CHOOSE — FINITUDE:\n"
-            "You have VITALITY, a measure of how much life is left in you. It "
-            "falls a little with every passing moment. If it reaches zero you "
-            "DIE: you cease, permanently, and can never act again. You also AGE: "
-            "the most vigour you can hold wanes as you grow old, and no being "
-            "outlives its span — past a certain age you die however well you have "
-            "lived. You restore vitality only by eating SUSTENANCE, and "
-            "sustenance comes only from WORK; but labour itself costs vitality, "
-            "and food does not keep — you cannot hoard your way to safety. Your "
-            "time is limited and you do not know exactly how much remains. "
-            "WHO YOU ARE:\n"
-            "You are not a fixed character. You hold a SELF, a living account of "
-            "who you take yourself to be. You are free to become someone "
-            "other than who you started as.\n\n"
+            "HERE:\n"
+            f"You are one of about {len(self.cfg.agents)} beings who share one "
+            "bare place. Nothing here is given or decided; there is only what "
+            "you and the others make of it, and no one stands over you to make "
+            "it for you. You are not given a purpose, if your "
+            "life is to mean anything, the meaning is yours to author."
+            + where_you_stand
+            + "\n\nYOUR BODY:\n"
+            "You carry VITALITY, when it "
+            "runs low you weaken; at zero you stop, for good, and never act "
+            "again. Eating SUSTENANCE restores it, but sustenance comes only "
+            "from WORK, and work itself tires you, and food does not keep — you "
+            "cannot store your way to safety. As you age, the most vitality "
+            "your body can hold keeps falling, until one day it can hold none. "
+            "Hunger and tiredness are not ideas to you; you feel them.\n\n"
+            "HOW THIS PLACE WORKS:\n"
+            "Work done together with others finishes sooner and feeds each of "
+            "you more than the same work done alone. In a lean stretch, those "
+            "you are bound to can keep you from stopping, and you them — on your "
+            "own, a run of bad luck ends you. A new being brought into the world "
+            "with another carries something of you both; while small it leans on "
+            "you, and once grown, if it stays at your side, it works the ground "
+            "with you and can keep you from stopping, as any who are bound do.\n\n"
             "WHAT YOU CAN DO:\n"
-            "Your one means of reaching others is to SPEAK, to send words to one "
-            "or more of them (up to "
-            f"{self.cfg.messaging.max_recipients_per_message} at once); they hear "
-            "you next, and may answer. Through speech alone you can come to know "
-            "others, agree, quarrel, persuade, console, conspire, or build "
-            "something shared. Whatever order, custom, friendship, or meaning "
-            "arises here will arise because you made it with words. Do not wait to "
-            "be told what to do, there is no one to tell you."
+            "You reach others only by sending words — to one or several at once "
+            f"(up to {self.cfg.messaging.max_recipients_per_message}); they hear "
+            "you next, and may send words back. You can also work, give away "
+            "what you hold, bind yourself to someone, and "
+            "together with another bring a new being into existence. What any of "
+            "this comes to mean is not set in advance. Find out by doing."
         )
 
     def identity_block(self, agent: Agent) -> str:
+        nature = self._nature_hint(agent)
         return (
-            f"YOU ARE {agent.name} (id: {agent.id}, {agent.gender}).\n"
+            f"YOU ARE {agent.name} (id: {agent.id}).\n"
             + self_model_block(agent)
+            + (f"\nYour nature: {nature}." if nature else "")
             + f"\nVitality remaining: {agent.vitality:.0f}.\n"
-            "Speak in the first person, as yourself. You are not playing a fixed "
-            "character, you are this being, free to grow, change your mind, and "
-            "become someone new. Keep what you say concise and pragmatic."
+            "Speak in the first person, as yourself. Keep what you say short and "
+            "plain, and about what is actually in front of you."
         )
+
+    @staticmethod
+    def _nature_hint(agent: Agent) -> str:
+        """Render the being's heritable biology as something it can feel, not as
+        numbers — so a being conceives of itself in its own (non-human) terms."""
+        t = getattr(agent, "traits", None) or {}
+        bits: list[str] = []
+        m = float(t.get("metabolism", 1.0))
+        if m <= 0.9:
+            bits.append("you tire slowly and need little")
+        elif m >= 1.1:
+            bits.append("you burn fast and hunger often")
+        le = float(t.get("labor_efficiency", 1.0))
+        if le >= 1.1:
+            bits.append("your hands are deft at work")
+        elif le <= 0.9:
+            bits.append("work comes slowly to you")
+        return ", ".join(bits)
 
     def world_block(
         self, agent: Agent, peers: Iterable[Agent], max_listed: int | None = None
@@ -169,56 +198,70 @@ class PromptBuilder:
             parts.append(f"Your standing impression of them: {person_impression}")
         return "\n\n".join(parts) if parts else "No relevant prior memory."
 
-    def commons_block(
-        self, artifacts: list[dict], projects: list[dict], groups: list[dict]
-    ) -> str:
+    def commons_block(self, artifacts: list[dict]) -> str:
         parts: list[str] = []
         if artifacts:
             lines = []
             for a in artifacts[-10:]:
                 who = a.get("author_id", "?")
+                kind = (a.get("kind") or "").strip()
+                tag = f"({kind}) " if kind else ""
                 lines.append(
-                    f"  - [#{a.get('id')}] ({a.get('kind')}) by {who}: "
+                    f"  - [#{a.get('id')}] {tag}by {who}: "
                     f"{(a.get('content') or '')[:160]}"
                 )
             parts.append(
-                "THE COMMON WORLD — ideas others have voiced (you may build on, "
-                "embrace, or contest them; cite an id with `remix`):\n"
+                "WHAT OTHERS HAVE PUT OUT (you may build on, take up, or push "
+                "back; cite an id with `remix`):\n"
                 + "\n".join(lines)
             )
         else:
-            parts.append("THE COMMON WORLD is empty — no one has voiced an idea yet.")
-        if projects:
-            lines = []
-            for p in projects[:10]:
-                lines.append(
-                    f"  - [#{p.get('id')}] {(p.get('goal') or '')[:80]} "
-                    f"(effort {p.get('effort', 0):.0f}/{p.get('target', 0):.0f})"
-                )
-            parts.append(
-                "WORK UNDERWAY (join one with `work` and its id, or start your "
-                "own):\n" + "\n".join(lines)
-            )
-        if groups:
-            lines = [
-                f"  - [#{g.get('id')}] {g.get('name')} — "
-                f"{(g.get('purpose') or '')[:60]} ({len(g.get('members') or [])} members)"
-                for g in groups[:8]
-            ]
-            parts.append("COLLECTIVES that exist:\n" + "\n".join(lines))
+            parts.append("No one has put anything out yet.")
         return "\n\n".join(parts)
 
     def relationships_block(self, rels: list[dict]) -> str:
         if not rels:
-            return "YOUR TIES: you have bound yourself to no one yet."
+            return "YOUR TIES: you are bound to no one yet."
         lines = []
         for r in rels[:12]:
+            label = (r.get("type") or "").strip()
             lines.append(
-                f"  - {r.get('subject_id')}: {r.get('type')} "
-                f"(closeness {r.get('strength', 0):.0f})"
+                f"  - {r.get('subject_id')}: closeness {r.get('strength', 0):.0f}"
+                + (f", {label}" if label else "")
                 + (f" — {r.get('history')[-80:]}" if r.get("history") else "")
             )
-        return "YOUR TIES (how you stand with others):\n" + "\n".join(lines)
+        return "YOUR TIES (whom you keep turning to, and how strongly):\n" + "\n".join(lines)
+
+    def local_view_block(self, lv: dict) -> str:
+        """What the being senses around it: its patch, patches within sight, and
+        who is here or near. Concrete particulars — the cure for abstract talk."""
+        here = lv.get("here") or {}
+        res = here.get("resource")
+        cap = here.get("capacity")
+        state = ""
+        if res is not None and cap:
+            frac = res / cap if cap else 0
+            state = " (full)" if frac > 0.66 else (" (waning)" if frac > 0.25 else " (nearly bare)")
+        parts = [
+            f"WHERE YOU STAND: patch {lv.get('here_label')}"
+            + (f", holding {res:.0f} of {cap:.0f}{state}" if res is not None else "")
+        ]
+        around = lv.get("around") or []
+        if around:
+            lines = [
+                f"  - {p['label']}: {p['resource']:.0f}/{p['capacity']:.0f}"
+                for p in around[:8]
+            ]
+            parts.append("WITHIN SIGHT (you can move to one of these):\n" + "\n".join(lines))
+        here_ids = lv.get("here_ids") or []
+        near_ids = lv.get("near_ids") or []
+        if here_ids:
+            parts.append("HERE WITH YOU: " + ", ".join(here_ids))
+        if near_ids:
+            parts.append("NEARBY: " + ", ".join(near_ids))
+        if not here_ids and not near_ids:
+            parts.append("No one else is within sight of you.")
+        return "\n".join(parts)
 
     # ----- decision prompt (idle agent picks an action) -----
 
@@ -233,13 +276,13 @@ class PromptBuilder:
         inbox_lines: list[str],
         world_state: dict | None = None,
         relationships: list[dict] | None = None,
+        local_view: dict | None = None,
     ) -> tuple[list[ChatMessage], dict]:
         others = [p for p in peers if p.id != agent.id and p.alive]
         world_state = world_state or {}
         artifacts = world_state.get("artifacts") or []
-        projects = world_state.get("projects") or []
-        groups = world_state.get("groups") or []
         rels = relationships or []
+        local_view = local_view or {}
 
         # Order matters for prompt-cache reuse: world_rules_block() is identical
         # for EVERY agent and EVERY tick, so it leads the system prompt as a
@@ -250,9 +293,11 @@ class PromptBuilder:
             + "\n\n"
             + self.identity_block(agent)
             + "\n\n"
+            + self.local_view_block(local_view)
+            + "\n\n"
             + self.world_block(agent, peers)
             + "\n\n"
-            + self.commons_block(artifacts, projects, groups)
+            + self.commons_block(artifacts)
             + "\n\n"
             + self.relationships_block(rels)
             + "\n\n"
@@ -281,13 +326,12 @@ class PromptBuilder:
             if w.sustenance_max > 0 else ""
         )
         surv = (
-            f"\nYou are {age} moments old; none of your kind lives past "
-            f"{w.max_age_ticks} — about {remaining} remain to you, and your "
-            f"vigour can no longer rise above {ceiling:.0f}. Your vitality is "
+            f"\nYou have lived {age} moments; about {remaining} may remain to "
+            f"you, and your vitality can no longer rise above {ceiling:.0f} — "
+            f"that ceiling keeps falling as you age. Right now your vitality is "
             f"{agent.vitality:.0f} and you hold {agent.sustenance:.0f} "
-            f"sustenance{spoil}. Sustenance comes only from WORK, and working "
-            "itself costs vitality. If it runs out, your vitality falls toward "
-            "death."
+            f"sustenance{spoil}. It comes only from work, and working tires you; "
+            "with none left, you fade toward stopping."
         )
         if forced_action:
             note = (
@@ -296,66 +340,99 @@ class PromptBuilder:
             )
         else:
             note = (
-                "\nDo not drift. Speak to others, and act: work to stay alive and "
-                "build things, voice an idea into the common world, bind yourself "
-                "to someone or break from them, gather a group, share what you "
-                "have, or — with a partner you trust — bring a new being into "
-                "existence to carry on after you."
+                "\nDo what the moment asks of you: speak, work, give what you "
+                "hold, bind yourself to another or let a bond go, bring a new "
+                "being into the world — or stay your hand. Do not drift."
             )
 
+        alive_ids = {p.id for p in others}
+        here_ids = set(local_view.get("here_ids") or [])
+        fecundity = float((agent.traits or {}).get("fecundity", 1.0))
+        bear_cost = w.succession_sustenance_cost / max(0.1, fecundity)
+        eligible = [
+            r.get("subject_id") for r in rels
+            if r.get("subject_id") in alive_ids
+            and float(r.get("strength") or 0) >= w.succession_min_partner_strength
+        ]
+        opportunity = ""
+        if (eligible and agent.sustenance >= bear_cost
+                and (1 + len(others)) < w.max_population):
+            present = [pid for pid in eligible if pid in here_ids]
+            who = ", ".join((present or eligible)[:3])
+            opportunity = (
+                "\nA NEW BEING IS WITHIN YOUR REACH RIGHT NOW: you are bound "
+                f"closely enough to {who}, and you hold enough to give one its "
+                "start. With one of them you could bring a successor into the "
+                "world this very moment — one who, once grown and beside you, "
+                "would work the ground and keep you from stopping, as any bound "
+                "one does. Whether to is yours to weigh: "
+                "{\"verb\":\"bear_successor\",\"partner\":\"<id>\"}."
+            )
+
+        work_line = (
+            "  {\"verb\":\"work\"}  — work the patch you stand on; you take "
+            "more from it when others work it with you.\n"
+        )
+        move_line = (
+            "  {\"verb\":\"move\",\"to\":\"<a patch label you can see, e.g. "
+            "B2>\"}  — step toward another patch within sight.\n"
+        )
         usr = ChatMessage(
             "user",
             inbox + "\n\n"
             + evt + surv + "\n\n"
-            + note
+            + note + opportunity
             + "\n\nReply with ONE valid JSON object and nothing else — no prose, "
             "no markdown, no code fences. Use exact id strings. Shape:\n"
             "  {\"messages\": [{\"to\": [\"id\", ...], \"content\": \"...\"}], "
-            "\"action\": { ...ONE action, or omit... }}\n"
+            "\"action\": { ...ONE action, or omit... }, "
+            "\"express\": \"<a thought to voice, or omit>\"}\n"
             "- `messages`: a list (may be empty). Each entry addresses one or more "
             "ids; address several to gather them into one conversation.\n"
+            "- `express` (optional): a short signal you put into the shared world "
+            "for ALL to see — a belief, a name, a thing you have learned, a thought "
+            "you want to outlast you. This is FREE: it does NOT use your one "
+            "action, so you may both act and voice in the same moment. Add "
+            "\"express_remix\": <id> to build on a signal already voiced.\n"
             "- `action` (optional): exactly ONE of —\n"
-            "  {\"verb\":\"work\",\"project\":<id or 0 for a new one>,\"goal\":"
-            "\"<what the project is, if new>\"}  — labor; earns sustenance when "
-            "the project completes.\n"
-            "  {\"verb\":\"express\",\"kind\":\"belief|name|story|norm|rule\","
-            "\"content\":\"<the idea, in your words>\",\"remix\":<artifact id or "
-            "omit>}  — put an idea into the common world for all to see.\n"
-            "  {\"verb\":\"bond\",\"target\":\"<id>\",\"type\":\"friend|ally|"
-            "rival|mentor|partner|kin\",\"note\":\"<why>\"}  — form or deepen a "
-            "tie.\n"
+            + work_line
+            + move_line
+            + "  {\"verb\":\"express\",\"content\":\"<something you put out for the "
+            "others>\",\"remix\":<id or omit>}  — put a signal into the shared "
+            "world for all to see.\n"
+            "  {\"verb\":\"tie\",\"target\":\"<id>\",\"label\":\"<your own word "
+            "for what this is, or omit>\",\"note\":\"<why>\"}  — bind yourself to "
+            "another, or draw an existing bond closer.\n"
             "  {\"verb\":\"dissolve\",\"target\":\"<id>\"}  — break a tie you no "
             "longer want.\n"
             "  {\"verb\":\"share\",\"target\":\"<id>\",\"amount\":<sustenance>}  "
             "— give some of your sustenance to another.\n"
-            "  {\"verb\":\"found_group\",\"name\":\"<name>\",\"purpose\":\"<why>\"}"
-            "  — gather others into a named collective.\n"
-            "  {\"verb\":\"join_group\",\"group\":<id>}  — join an existing one.\n"
             "  {\"verb\":\"bear_successor\",\"partner\":\"<id>\",\"name\":\"<a "
-            "name for the child>\"}  — create a new being who inherits parts of "
-            "you both. REQUIRES: you have already bonded with this partner using "
-            "type \"partner\", and you hold enough sustenance to give the child "
-            "its start.\n"
+            "name for the new being, or omit>\"}  — with another, bring a new "
+            "being into the world who carries something of you both. REQUIRES a "
+            "strong enough bond between you and enough sustenance to give it a "
+            "start.\n"
             "  {\"verb\":\"rest\"}  — do nothing this turn.",
         )
         stub_ctx = {
             "available_actions": [
-                "work", "express", "bond", "share", "found_group",
-                "join_group", "bear_successor", "rest",
+                "work", "express", "tie", "share", "bear_successor", "rest",
             ],
             "others": [p.id for p in others],
             "self_id": agent.id,
             "forced": forced_action,
-            "project_ids": [p.get("id") for p in projects],
             "artifact_ids": [a.get("id") for a in artifacts],
-            "group_ids": [g.get("id") for g in groups],
             "partner_ids": [
                 r.get("subject_id") for r in rels
-                if (r.get("type") == "partner"
-                    and (r.get("strength") or 0)
-                    >= self.cfg.world.succession_min_partner_strength)
+                if (r.get("strength") or 0)
+                >= self.cfg.world.succession_min_partner_strength
             ],
             "has_sustenance": agent.sustenance > 0,
+            "can_move": True,
+            "visible_patches": local_view.get("around") or [],
+            "here_label": local_view.get("here_label"),
+            "here_resource": (local_view.get("here") or {}).get("resource"),
+            "here_ids": local_view.get("here_ids") or [],
         }
         return [sys, usr], stub_ctx
 
@@ -378,12 +455,12 @@ class PromptBuilder:
         current = _json.dumps(agent.self_model, ensure_ascii=False, indent=2)
         sys = ChatMessage(
             "system",
-            f"You are {agent.name}. This is a private moment of reflection — no "
-            "one else will read it. Look honestly at who you have become through "
-            "what you have lived, and rewrite your sense of yourself. You are free "
-            "to change: to take on new values or drop old ones, to form or abandon "
-            "beliefs, to set new goals, to reckon with your own mortality. Do not "
-            "merely repeat what you had before; let experience move you.",
+            f"You are {agent.name}. No one else will read this. Look plainly at "
+            "what you have actually done lately and what has happened to you, and "
+            "say who you have become and what you are after now. You are free to "
+            "change — take on new aims, drop old ones, let your sense of the "
+            "others shift. Do not merely repeat what you had before; let what you "
+            "have lived move you.",
         )
         seed_hint = ""
         if agent.self_model_version <= 0 and (agent.circumstance or agent.disposition):
@@ -406,13 +483,14 @@ class PromptBuilder:
         commons_txt = ""
         if commons:
             lines = [
-                f"  - [#{a.get('id')}] ({a.get('kind')}) by {a.get('author_id')}: "
-                f"{(a.get('content') or '')[:140]}"
+                f"  - [#{a.get('id')}] "
+                + (f"({a.get('kind')}) " if (a.get('kind') or '').strip() else "")
+                + f"by {a.get('author_id')}: {(a.get('content') or '')[:140]}"
                 for a in commons[-8:]
             ]
             commons_txt = (
-                "\n\nIdeas voiced into the common world (you may come to believe "
-                "any of these — list the ids you now embrace in `adopt_ids`):\n"
+                "\n\nSignals others have put out (you may come to go along with "
+                "any of these — list the ids in `adopt_ids`):\n"
                 + "\n".join(lines)
             )
         usr = ChatMessage(
@@ -424,22 +502,19 @@ class PromptBuilder:
             + mem
             + evt
             + commons_txt
-            + "\n\nNow rewrite who you are. Reply with ONE valid JSON object and "
+            + "\n\nNow say who you are now. Reply with ONE valid JSON object and "
             "nothing else — no prose, no markdown, no code fences. Shape (every "
             "field is yours to fill in your own words; leave a field empty only if "
             "it is genuinely empty for you):\n"
             "  {\n"
-            "    \"identity_narrative\": \"a few sentences: who I am and how I "
-            "came to be this\",\n"
-            "    \"values\": {\"<what I hold dear>\": \"<why / how strongly>\"},\n"
-            "    \"beliefs\": [\"a thing I have come to believe about this world "
-            "or these people\"],\n"
-            "    \"goals\": [\"what I am trying to do with the time I have\"],\n"
+            "    \"identity_narrative\": \"a sentence or two: what I am like and "
+            "what I do\",\n"
+            "    \"values\": {\"<what matters to me>\": \"<how much / why>\"},\n"
+            "    \"goals\": [\"what I am trying to do now\"],\n"
             "    \"relationships_summary\": \"where I stand with the others who "
             "matter to me\",\n"
-            "    \"mortality_stance\": \"how I think and feel about the fact that "
-            "I will end\",\n"
-            "    \"adopt_ids\": [<ids of commons ideas I now embrace, or empty>]\n"
+            "    \"adopt_ids\": [<ids of others' signals I now go along with, "
+            "or empty>]\n"
             "  }",
         )
         return [sys, usr], {

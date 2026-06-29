@@ -3,7 +3,7 @@
 If silence_detection_seconds elapse with no active conversation and no open
 vote, the orchestrator picks the N agents with the lowest social_need and
 forces them to interact on their next decision (the prompt removes the
-"do_nothing" and "join_group" options).
+"do_nothing" option).
 """
 from __future__ import annotations
 

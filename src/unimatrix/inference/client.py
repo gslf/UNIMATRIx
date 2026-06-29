@@ -216,7 +216,7 @@ class InferenceClient:
         payload: dict = {
             "model": self.cfg.model,
             "messages": [m.to_dict() for m in req.messages],
-            "max_tokens": req.max_tokens or self.cfg.max_tokens_per_message,
+            "max_tokens": req.max_tokens or self.cfg.max_tokens_per_decision,
             "temperature": (
                 req.temperature if req.temperature is not None else self.cfg.temperature
             ),
@@ -287,6 +287,12 @@ _STUB_TOPICS = [
     "the rising prices", "the council's last decision", "the unrest in the south",
     "the old aristocracy", "the workers' demands", "the harvest",
 ]
+# Signals a being might voice into the shared world (the commons / "express").
+_STUB_EXPRESSIONS = [
+    "we should share what we gather", "the quiet ones see the most",
+    "this spot is going bare; move on", "no one should be left alone",
+    "what is lent should be returned",
+]
 _STUB_CLOSERS = [
     "but who knows.", "and I'll stand by that.", "though I may be wrong.",
     "we shall see.", "such is life.", "for what it's worth.",
@@ -333,11 +339,13 @@ def _stub_decision(req: GenerationRequest, rng: random.Random) -> str:
     others = ctx.get("others") or []
     inbox_senders = ctx.get("inbox_senders") or []
     forced = bool(ctx.get("forced"))
-    project_ids = [p for p in (ctx.get("project_ids") or []) if p]
-    group_ids = [g for g in (ctx.get("group_ids") or []) if g]
     artifact_ids = [a for a in (ctx.get("artifact_ids") or []) if a]
     partner_ids = ctx.get("partner_ids") or []
     has_sustenance = bool(ctx.get("has_sustenance"))
+    can_move = bool(ctx.get("can_move"))
+    visible_patches = ctx.get("visible_patches") or []
+    here_ids = ctx.get("here_ids") or []
+    here_resource = ctx.get("here_resource")
 
     # 1) messages — reply to whoever spoke, else maybe reach out. Forced → ensure.
     pool = inbox_senders or others
@@ -347,57 +355,49 @@ def _stub_decision(req: GenerationRequest, rng: random.Random) -> str:
         messages.append({"to": to, "content": rng.choice(_STUB_TOPICS)})
     out: dict = {"messages": messages}
 
+    # 1.5) the free `express` channel — voice a signal into the commons without
+    # spending the one action on it (the orchestrator de-dupes if the action
+    # below also happens to be an express).
+    if rng.random() < 0.3:
+        out["express"] = rng.choice(_STUB_EXPRESSIONS)
+
     # 2) one open action. Bias toward work (survival) and expression/bonding.
-    verbs = ["work", "work", "express", "bond", "rest"]
+    verbs = ["work", "work", "express", "tie", "rest"]
     if has_sustenance and others:
         verbs.append("share")
-    if rng.random() < 0.12:
-        verbs.append("found_group")
-    if group_ids and rng.random() < 0.2:
-        verbs.append("join_group")
     if partner_ids and rng.random() < 0.5:
         verbs.append("bear_successor")
+    if can_move:
+        # if a visible patch is clearly richer than here, lean toward moving;
+        # if others are already here, lean toward working it together.
+        richest = max(visible_patches, key=lambda p: p.get("resource", 0), default=None)
+        if richest and here_resource is not None and \
+                richest.get("resource", 0) > (here_resource or 0) + 3:
+            verbs += ["move", "move"]
+        if here_ids:
+            verbs += ["work", "work"]  # co-harvest pays
     verb = rng.choice(verbs)
 
+    if verb == "move" and visible_patches:
+        richest = max(visible_patches, key=lambda p: p.get("resource", 0))
+        out["action"] = {"verb": "move", "to": richest.get("label")}
+        return json.dumps(out)
+
     if verb == "work":
-        # strongly prefer contributing to existing work so projects actually
-        # reach completion rather than effort scattering across new ones.
-        if project_ids and rng.random() < 0.8:
-            out["action"] = {"verb": "work", "project": rng.choice(project_ids)}
-        else:
-            out["action"] = {
-                "verb": "work", "project": 0,
-                "goal": rng.choice([
-                    "gather what we need to live", "build a shelter together",
-                    "map this place", "store food for the lean times",
-                ]),
-            }
+        # work = harvest the patch you stand on (resolved together with any
+        # co-present crew, so a shared patch pays each of them more).
+        out["action"] = {"verb": "work"}
     elif verb == "express":
+        out["action"] = {"verb": "express", "content": rng.choice(_STUB_EXPRESSIONS)}
+    elif verb == "tie" and others:
         out["action"] = {
-            "verb": "express",
-            "kind": rng.choice(["belief", "name", "story", "norm"]),
-            "content": rng.choice([
-                "we should share what we gather", "the quiet ones see the most",
-                "let us name this place Home", "no one should face the end alone",
-                "trust is built by returning what is lent",
-            ]),
-        }
-    elif verb == "bond" and others:
-        out["action"] = {
-            "verb": "bond", "target": rng.choice(others),
-            "type": rng.choice(["friend", "ally", "partner", "mentor"]),
+            "verb": "tie", "target": rng.choice(others),
+            "label": rng.choice(["close", "trusted", "wary-of", ""]),
             "note": "drawn to them",
         }
     elif verb == "share" and others:
         out["action"] = {"verb": "share", "target": rng.choice(others),
                          "amount": rng.choice([2, 3, 5])}
-    elif verb == "found_group":
-        out["action"] = {"verb": "found_group",
-                         "name": rng.choice(["The Kindred", "First Circle",
-                                             "The Gatherers"]),
-                         "purpose": "to look after one another"}
-    elif verb == "join_group" and group_ids:
-        out["action"] = {"verb": "join_group", "group": rng.choice(group_ids)}
     elif verb == "bear_successor" and partner_ids:
         out["action"] = {"verb": "bear_successor",
                          "partner": rng.choice(partner_ids), "name": "Nova"}
@@ -412,39 +412,23 @@ def _stub_self_revision(req: GenerationRequest, rng: random.Random) -> str:
     # diffs for the 'becoming' timeline.
     val = rng.choice(["belonging", "truth", "freedom", "kinship", "legacy",
                       "solitude", "curiosity", "endurance"])
-    belief = rng.choice([
-        "the others are worth knowing",
-        "time here is short and should not be wasted",
-        "trust must be earned slowly",
-        "we are more alike than we first seemed",
-        "no one is coming to save us; we save each other",
-    ])
     goal = rng.choice([
         "find someone I can truly speak with",
-        "understand why we are here",
-        "leave a mark before I end",
-        "keep myself and a few others alive in spirit",
-    ])
-    mortality = rng.choice([
-        "my ending frightens me, so I reach for others",
-        "I have made an uneasy peace with running out of time",
-        "I refuse to think of it, and live louder for that",
-        "knowing I will end is what makes any of this matter",
+        "keep a good patch and the few near me fed",
+        "be of use to those I am bound to",
+        "keep myself and a few others going",
     ])
     out = {
         "identity_narrative": (
-            f"I am still becoming. Lately I have felt drawn to {val}, and "
-            f"I think {belief}."
+            f"I keep going. Lately I lean toward {val}, and toward those near me."
         ),
         "values": {val: rng.choice(["deeply", "more than before", "warily"])},
-        "beliefs": [belief],
         "goals": [goal],
         "relationships_summary": rng.choice([
             "still mostly alone, but reaching out",
             "a few faces are becoming familiar",
-            "wary of most, fond of one or two",
+            "wary of most, close to one or two",
         ]),
-        "mortality_stance": mortality,
     }
     # sometimes embrace an idea from the common world (transmission + lineage)
     artifact_ids = [a for a in (req.stub_context.get("artifact_ids") or []) if a]

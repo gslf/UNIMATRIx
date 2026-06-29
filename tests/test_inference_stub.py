@@ -27,9 +27,8 @@ async def test_stub_decision_returns_json(stub_client: InferenceClient) -> None:
         messages=[ChatMessage("system", "x"), ChatMessage("user", "respond with json")],
         stub_kind="decision",
         stub_context={
-            "available_actions": ["do_nothing", "start_1to1", "start_group"],
+            "available_actions": ["do_nothing", "start_1to1"],
             "idle_peers": ["a", "b"],
-            "open_groups": [],
             "self_id": "me",
             "classes": ["people"],
             "roles": ["worker"],
@@ -38,50 +37,6 @@ async def test_stub_decision_returns_json(stub_client: InferenceClient) -> None:
     raw = await stub_client.generate(req)
     parsed = parse_json_lenient(raw)
     assert parsed and "action" in parsed
-
-
-@pytest.mark.asyncio
-async def test_stub_election_ballot_returns_candidate(stub_client: InferenceClient) -> None:
-    raw = await stub_client.generate(GenerationRequest(
-        messages=[ChatMessage("user", "vote for office")],
-        stub_kind="election_ballot",
-        stub_context={"candidates": ["agent_01", "agent_02", "agent_03"],
-                      "office": "senator", "self_id": "agent_05"},
-    ))
-    assert raw.strip() in ("agent_01", "agent_02", "agent_03")
-
-
-@pytest.mark.asyncio
-async def test_stub_election_reassign_returns_role(stub_client: InferenceClient) -> None:
-    raw = await stub_client.generate(GenerationRequest(
-        messages=[ChatMessage("user", "reassign role")],
-        stub_kind="election_reassign",
-        stub_context={"roles": ["worker", "clerk", "scholar"], "target": "agent_01"},
-    ))
-    assert raw.strip() in ("worker", "clerk", "scholar")
-
-
-@pytest.mark.asyncio
-async def test_stub_decision_new_actions(stub_client: InferenceClient) -> None:
-    """The decision stub must emit a valid action for the new catalog."""
-    req = GenerationRequest(
-        messages=[ChatMessage("user", "respond with json")],
-        stub_kind="decision",
-        stub_context={
-            "available_actions": ["praise", "steal", "gift", "do_nothing"],
-            "others": ["a", "b"],
-            "idle_peers": ["a"],
-            "officeholders": [],
-            "bankers": [],
-            "open_groups": [],
-            "self_id": "me",
-        },
-    )
-    raw = await stub_client.generate(req)
-    parsed = parse_json_lenient(raw)
-    assert parsed and parsed["action"] in (
-        "praise", "steal", "gift", "do_nothing"
-    )
 
 
 @pytest.mark.asyncio

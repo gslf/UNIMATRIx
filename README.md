@@ -35,13 +35,12 @@ The engine imposes only a minimal substrate and then gets out of the way.
 Beyond speaking, on any tick a being may take **one open action**:
 
 ```
-work           — labor on a project (alone or together); completed work yields sustenance
+work           — work the patch you stand on; a co-present crew each draws more
+move           — step toward a patch within sight (richer ground lies elsewhere)
 express        — voice an idea into the common world (a belief, name, story, norm…)
 bond           — form or deepen a typed tie (friend, ally, rival, mentor, partner, kin)
 dissolve       — break a tie
 share          — give some of your sustenance to another
-found_group    — gather others into a named collective
-join_group     — join one that exists
 bear_successor — with a trusted partner, create a new being who inherits part of you both
 rest           — do nothing
 ```
@@ -52,10 +51,10 @@ Out of these primitives, five dimensions of life **emerge and are recorded**:
   watch, diff by diff, a being *become itself*.
 - 💡 **Meaning & belief** — ideas are authored into the commons, then **adopted,
   remixed, and transmitted** between beings, with full lineage.
-- 🔨 **Labor & purpose** — multi-tick **projects** beings choose and pursue together,
-  the only source of the sustenance that keeps them alive.
-- 🤝 **Kinship & intimacy** — durable, typed **relationships** and self-formed
-  **collectives**.
+- 🔨 **Labor on the land** — beings **harvest** the patches they stand on; ground
+  depletes as it is worked and regrows slowly, and a co-present crew each draws more
+  than a lone worker — the only source of the sustenance that keeps them alive.
+- 🤝 **Kinship & intimacy** — durable, typed **relationships**.
 - ⚰️ **Mortality & continuity** — real **death**, and **succession**: bonded partners
   bear successors that inherit a blend of their selves, their memories, and their
   culture — producing lineages and evolution across generations.
@@ -105,7 +104,7 @@ A config is one JSON file in `config/`. Its blocks:
 | `inference` | LLM backend, endpoint, model, token / concurrency limits |
 | `memory` | short / medium / long-term sizes, embedding model |
 | `social` | the connection drive that keeps the world from going silent |
-| `world` | **the substrate** — vitality & death, the sustenance / labor economy, succession, and the self-revision cadence |
+| `world` | **the substrate** — vitality & death, the spatial grid of patches beings work (`world.ecology`), the sustenance / labor economy, succession, and the self-revision cadence |
 | `messaging` | message caps, reflection cadence |
 | `agents` | the beings' thin seeds: `id`, `name`, `gender`, `circumstance`, `disposition` |
 
@@ -124,9 +123,9 @@ a control for studying pure emergence.
 
 Every run is a self-contained **SQLite** database under `runs/`, alongside a
 Chroma vector store for memory, and registered in `runs/_registry.db`. It keeps
-the full history — self-model versions, words, projects, cultural artifacts and
-their adoptions, relationships, groups, lineage, deaths, and the public event
-log — which is everything the panel and the analysis read.
+the full history — self-model versions, words, the patches beings work, cultural
+artifacts and their adoptions, relationships, lineage, deaths, and the
+public event log — which is everything the panel and the analysis read.
 
 `analysis_scripts/analyze_run.py` turns a run DB into a four-dimension
 `metrics.json` + markdown digest:
