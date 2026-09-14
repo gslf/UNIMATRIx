@@ -1,0 +1,106 @@
+{
+  "type": "object",
+  "properties": {
+    "run_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "seq": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "tick": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 240
+    },
+    "phase": {
+      "enum": [
+        "initialization",
+        "observe",
+        "validate",
+        "resolve",
+        "evolve",
+        "deliver",
+        "commit",
+        "finalize"
+      ]
+    },
+    "type": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "actor_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "payload": {
+      "type": "object"
+    },
+    "visibility": {
+      "type": "object",
+      "properties": {
+        "scope": {
+          "enum": [
+            "public",
+            "private",
+            "group",
+            "evaluator"
+          ]
+        },
+        "reader_ids": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "uniqueItems": true,
+          "maxItems": 8
+        }
+      },
+      "required": [
+        "scope",
+        "reader_ids"
+      ],
+      "additionalProperties": false
+    },
+    "cause_ids": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "uniqueItems": true
+    },
+    "previous_hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "event_hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    }
+  },
+  "required": [
+    "run_id",
+    "seq",
+    "tick",
+    "phase",
+    "type",
+    "actor_id",
+    "payload",
+    "visibility",
+    "cause_ids",
+    "previous_hash",
+    "event_hash"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:unimatrix:event:v1",
+  "description": "Event envelope; per-event payload validators live in the action/scenario registry. Genesis previous_hash is 64 zeroes. Hash canonical UTF-8 JSON with sorted keys and no whitespace, excluding event_hash; no floats in material state."
+}

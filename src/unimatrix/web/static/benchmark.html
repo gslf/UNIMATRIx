@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>UNIMATRIx · Benchmarks</title>
+<link rel="stylesheet" href="/static/benchmark.css"><script src="/static/benchmark.js" defer></script>
+</head>
+<body>
+<header class="shell">
+  <div class="brand-row"><div><h1>UNIMATRIx <span>BENCHMARKS</span></h1><p class="muted">Fixed conditions. Comparable models. Inspectable decisions.</p></div><div class="controls"><a class="button" href="/recipe-lab">Recipe lab</a><span id="live-status" class="pill">Ready</span></div></div>
+  <div class="launch-row">
+    <label>Benchmark recipe <select id="recipe-select"></select></label>
+    <label>Candidate model <select id="model-select" aria-label="Candidate model"></select></label>
+    <button id="edit-model">Model settings</button><button id="add-model">Add model</button>
+    <label>Parallel requests <input id="parallelism" type="number" min="1" max="64" step="1" value="1" title="Maximum simultaneous requests across independent episodes"></label>
+    <button id="start" class="primary" disabled>Start benchmark</button>
+    <span id="launch-recipe" class="muted"></span>
+  </div>
+</header>
+<main>
+  <div id="error" role="alert" hidden></div><p id="notice" role="status" aria-live="polite"></p>
+  <section class="recipe-bar card">
+    <div><strong>Selected recipe</strong><p id="recipe-description" class="muted"></p></div>
+    <label>Compute reporting <select id="track"><option value="opaque_compute">Token usage optional</option><option value="accounted_compute">Token usage required</option></select></label>
+    <button id="refresh" title="Refresh results">Refresh</button><button id="delete-recipe" class="danger" disabled>Delete recipe</button><span id="deletion-note" class="muted small"></span>
+  </section>
+  <nav class="tabs" aria-label="Benchmark views">
+    <button class="tab active" data-view="leaderboard" aria-current="page">Leaderboard</button>
+    <button class="tab" data-view="runs">Runs <span id="run-count"></span></button>
+    <button class="tab" data-view="details">Run explorer</button>
+    <button class="tab" data-view="recipe">Recipe details</button>
+  </nav>
+  <section id="view-leaderboard" class="view">
+    <div class="section-title"><div><h2>Model leaderboard</h2><p class="muted">Complete runs only. The latest complete run of each candidate configuration is ranked.</p></div><span class="pill">Score / 100</span></div>
+    <div class="card table-wrap"><table><thead><tr><th>Rank</th><th>Model / snapshot</th><th>Score</th><th>95% interval</th><th>Episodes</th><th>Completed</th><th></th></tr></thead><tbody id="ranking"></tbody></table><div id="ranking-empty" class="empty" hidden><h3>No completed models yet</h3><p>Choose a recipe and candidate above, then start the benchmark. Its score appears here after every episode finishes.</p></div></div>
+    <p id="cohort-note" class="muted small"></p>
+    <div id="comparison-chart" class="card" hidden></div>
+  </section>
+  <section id="view-runs" class="view" hidden>
+    <div class="section-title"><div><h2>Benchmark runs</h2><p class="muted">All attempts for the selected recipe revision, including paused and failed runs.</p></div></div>
+    <div class="card table-wrap"><table><thead><tr><th>Model</th><th>Status</th><th>Progress</th><th>Score</th><th>Started</th><th></th></tr></thead><tbody id="run-list"></tbody></table><div id="runs-empty" class="empty" hidden>No runs for this recipe revision.</div></div>
+  </section>
+  <section id="view-details" class="view" hidden>
+    <div id="detail-empty" class="card empty">Select a model in the leaderboard or a run to inspect its results.</div>
+    <div id="run-detail" hidden>
+      <div class="section-title"><div><p class="eyebrow" id="detail-recipe"></p><h2 id="detail-title"></h2><p class="muted" id="detail-meta"></p></div><div class="controls"><button id="pause">Pause run</button><button id="resume">Resume run</button><a id="export" class="button" hidden>Export report</a></div></div>
+      <div id="run-failure" role="status" class="warning" hidden></div>
+      <progress id="run-progress" max="1" value="0" aria-label="Benchmark progress"></progress>
+      <div id="run-stats" class="stats"></div>
+      <nav class="subtabs" aria-label="Run views"><button class="tab active" data-detail="overview">Overview</button><button class="tab" data-detail="episodes">Episodes</button><button class="tab" data-detail="agents">Agents & decisions</button><button class="tab" data-detail="messages">Conversations</button><button class="tab" data-detail="events">Event timeline</button></nav>
+      <div id="detail-overview">
+        <div class="grid two"><div id="domain-chart" class="card"></div><div class="card"><h3>Candidate configuration</h3><pre id="candidate-json"></pre></div></div>
+        <div id="strata" class="grid charts"></div>
+      </div>
+      <div id="detail-episodes" hidden><div class="controls filter-row"><label>Domain <select id="domain-filter"><option value="">All domains</option></select></label></div><div class="card table-wrap episode-table"><table><thead><tr><th>Episode</th><th>Domain</th><th>Level</th><th>Seed</th><th>Role</th><th>Progress</th><th>Score</th><th></th></tr></thead><tbody id="episodes"></tbody></table></div></div>
+      <div id="episode-toolbar" class="card controls" hidden><label>Episode <select id="episode-select"></select></label><span id="episode-status" class="muted"></span></div>
+      <div id="detail-agents" hidden>
+        <div class="grid two"><section class="card"><h3>Agents at the selected tick</h3><label>World tick <input id="world-tick" type="range" min="0" max="240" value="0"><output id="world-tick-value">0</output></label><div id="agents"></div></section><section class="card"><h3 id="agent-title">Select an agent</h3><div id="agent-state"></div><div class="controls"><label>Decision tick <input id="decision-tick" type="number" min="0" max="239" value="0"></label><button id="load-decision">Inspect decision</button></div><p class="muted small">A decision at tick 0 produces world state 1. Observations are the exact inputs saved for this agent.</p><div id="decision"></div></section></div>
+        <div id="resource-chart" class="card"></div>
+      </div>
+      <div id="detail-messages" hidden><div class="controls filter-row"><label>Participant <select id="message-agent"><option value="">All agents</option></select></label></div><div id="messages" class="conversation-feed"></div><button id="more-messages" hidden>Load more messages</button></div>
+      <div id="detail-events" hidden><div id="events" class="timeline card"></div><button id="more-events" hidden>Load more events</button></div>
+      <div id="episode-metrics" class="grid charts" hidden></div>
+    </div>
+  </section>
+  <section id="view-recipe" class="view" hidden><div class="card"><h2 id="recipe-title"></h2><p id="recipe-summary"></p><div id="recipe-stats" class="stats"></div><p class="muted">This recipe is read from a versioned JSON file. Cases, peers, budgets and scoring weights are shared by every competitor. New or changed recipes have separate leaderboards.</p><details><summary>View recipe JSON</summary><pre id="recipe-json"></pre></details></div></section>
+</main>
+<dialog id="model-dialog">
+<form id="model-form">
+<div class="section-title"><div><p class="eyebrow">CANDIDATE</p><h2>Model settings</h2></div><button id="close-model" type="button" aria-label="Close model settings">×</button></div>
+<p class="muted">Save a candidate JSON file. The selected recipe defines the benchmark; the model context defines the token limit.</p>
+<div class="config-grid">
+<label>Configuration ID <input id="model-id" required pattern="[A-Za-z0-9][A-Za-z0-9_\-]{0,79}" placeholder="my-model"></label>
+<label>Model name <input id="model-name" required placeholder="model-name"></label>
+<label>Address <input id="model-address" type="url" required placeholder="http://localhost"></label>
+<label>Port <input id="model-port" type="number" min="1" max="65535" placeholder="Protocol default"></label>
+<label>Maximum context (tokens) <input id="model-context" type="number" min="1" step="1" required placeholder="Model context, e.g. 32768"></label>
+<label>Snapshot / version <input id="model-snapshot" required placeholder="exact-model-version"></label>
+<label>API key <input id="model-key" type="password" autocomplete="new-password" placeholder="Leave blank to keep the saved key"></label>
+</div>
+<p class="muted small">LM Studio: use http://host and its server port. Context includes prompt, reasoning and answer; generation stops when the context is full. Already loaded models must match this value. API keys are stored separately from results.</p>
+<details><summary>Advanced model settings</summary><div class="config-grid">
+<label>Compute reporting <select id="model-track"><option value="opaque_compute">Token usage optional</option><option value="accounted_compute">Token usage required</option></select></label>
+<label>Temperature <input id="model-temperature" type="number" step="any" value="0"></label>
+<label>Inference seed <input id="model-seed" type="number" step="1"></label>
+<label>Input price / million tokens <input id="model-input-price" type="number" min="0" step="any"></label>
+<label>Output price / million tokens <input id="model-output-price" type="number" min="0" step="any"></label>
+<label>Maximum input tokens (cost estimate) <input id="model-max-input" type="number" min="1" step="1"></label>
+<label>API key environment variable <input id="model-key-env"></label>
+<label>API key file <input id="model-key-file"></label>
+</div><label><input id="model-remove-key" type="checkbox"> Remove authentication from this configuration</label></details>
+<div class="controls"><label class="button">Import model JSON <input id="import-model" type="file" accept="application/json,.json" hidden></label><button type="submit" class="primary" id="save-model">Save model</button></div>
+<p id="model-error" role="alert"></p>
+</form>
+</dialog>
+</body></html>

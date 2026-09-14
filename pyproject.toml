@@ -1,11 +1,11 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=84"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "unimatrix"
-version = "1.1.0"
-description = "Multi-agent sociological simulation with LLM-driven agents"
+version = "3.0.0.dev0"
+description = "Deterministic material worlds and social evaluation for LLM agents"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
@@ -16,18 +16,25 @@ dependencies = [
   "fastapi>=0.110",
   "uvicorn>=0.27",
   "httpx>=0.27",
-  "rich>=13.7",
-  "matplotlib>=3.8",
-  "networkx>=3.2",
-  "chromadb>=0.4",
+  "jsonschema>=4.23",
+  "lmstudio>=1.6.0b1",
 ]
 
 [project.optional-dependencies]
-embed = ["sentence-transformers>=2.5"]
-dev = ["pytest>=8.0", "pytest-asyncio>=0.23"]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "hypothesis>=6.100", "ruff>=0.12"]
 
 [project.scripts]
 unimatrix = "unimatrix.main:cli"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+unimatrix = ["web/static/*", "actions/*.json", "benchmark/*.json", "benchmark/plans/*.json"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I"]

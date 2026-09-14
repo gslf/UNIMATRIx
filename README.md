@@ -1,157 +1,83 @@
-<div align="center">
+# UNIMATRIx v3.0.0
 
-# ::] UNIMATRIx v2.0.1
+A local model benchmarking system with fixed, versioned benchmark recipes and an
+interactive run explorer.
 
-**A sandbox for watching what AI agents actually become.**
-
-A simulation where LLM-driven *beings* are born into a bare world with almost no
-rules, and must author their own identities and their own society. There is no scripted hierarchy, economy, or government.
-
-![The UNIMATRIx control panel](res/img/ss.png)
-
-</div>
-
----
-
-## The idea
-
-If you give AI agents only existence and finitude — and take everything else away, **who do they decide to be, and what do they build together?**
-
-Each being starts as a *thin seed*, from there it writes and rewrites
-its story, values, beliefs, goals, bonds, and how it faces its own ending. 
-
-## How the world works
-
-The engine imposes only a minimal substrate and then gets out of the way.
-
-| Law | What it means |
-| --- | --- |
-| ⏳ **Finitude** | Every being has **vitality** that falls each tick. At zero it **dies** — permanently, never to act again. Time is scarce and its length unknown. |
-| 🌾 **Sustenance** | Vitality is restored only by **sustenance**, and sustenance comes only from **work**. Survival depends on labor. |
-| 🗣️ **Speech** | The one way to reach another being is to **speak**. Every relationship, idea, and institution that arises does so because someone made it with words. |
-| 🪞 **The self** | Each being holds an evolving **self-model** it authors from experience, and may become someone wholly different from who it began as. |
-| 📜 **The commons** | A shared, public space where beings inscribe ideas for all to see — the medium for emergent culture. |
-
-Beyond speaking, on any tick a being may take **one open action**:
-
-```
-work           — labor on a project (alone or together); completed work yields sustenance
-express        — voice an idea into the common world (a belief, name, story, norm…)
-bond           — form or deepen a typed tie (friend, ally, rival, mentor, partner, kin)
-dissolve       — break a tie
-share          — give some of your sustenance to another
-found_group    — gather others into a named collective
-join_group     — join one that exists
-bear_successor — with a trusted partner, create a new being who inherits part of you both
-rest           — do nothing
-```
-
-Out of these primitives, five dimensions of life **emerge and are recorded**:
-
-- 🪞 **Self-evolution** — every rewrite of a being's identity is versioned; you can
-  watch, diff by diff, a being *become itself*.
-- 💡 **Meaning & belief** — ideas are authored into the commons, then **adopted,
-  remixed, and transmitted** between beings, with full lineage.
-- 🔨 **Labor & purpose** — multi-tick **projects** beings choose and pursue together,
-  the only source of the sustenance that keeps them alive.
-- 🤝 **Kinship & intimacy** — durable, typed **relationships** and self-formed
-  **collectives**.
-- ⚰️ **Mortality & continuity** — real **death**, and **succession**: bonded partners
-  bear successors that inherit a blend of their selves, their memories, and their
-  culture — producing lineages and evolution across generations.
-
-## Quick start
-
-Requires **Python 3.11+**.
+![UNIMATRIx Screenshot](res/img/ss.png)
 
 ```bash
-# from the repo root
-py -3 -m venv .venv
-.venv/Scripts/activate            # Windows
-# source .venv/bin/activate       # Linux / macOS
-
-pip install -e .
+uv sync --extra dev
+uv run unimatrix serve
 ```
 
-**Run with no model (stub backend)** — deterministic fake replies, no GPU, no
-network. Good for seeing the machinery turn:
+Open [the dashboard](http://127.0.0.1:8001/). Add or import a **candidate model JSON**,
+select a **Benchmark recipe**, then click **Start [recipe name]**. The benchmark
+runs automatically using the selected recipe.
+
+- **Leaderboard:** completed competitors under the same recipe revision, engine
+  fingerprint and compute reporting track. The latest complete run of each exact
+  candidate configuration is ranked; incomplete runs never receive a score.
+- **Runs:** every attempt, progress, failures, pause and resume.
+- **Run explorer:** domain scores, score breakdowns, individual episodes, resource
+  charts, agent snapshots, saved observations and responses, conversations and events.
+- **Recipe details:** the actual read-only JSON defining the benchmark conditions.
+- **Recipe lab:** a separate [research page](http://127.0.0.1:8001/recipe-lab) for building
+  recipe drafts, running calibration and intervention evaluations, and inspecting findings.
+  **Open explorer** shows live study and episode progress, agent decisions, model calls,
+  conversations and events. **Guide** and section **Info** buttons explain options and metrics.
+
+## Authored recipes
+
+The bundled [Standard v1](src/unimatrix/benchmark/plans/standard-v1.json) contains
+192 explicit cases: eight domains, three levels, four seeds and two roles.
+[Compact v1](src/unimatrix/benchmark/plans/compact-v1.json) contains eight cases and
+has its own leaderboard. Both fix seven scripted peers; only the candidate changes.
+These initial recipes are experimental, not empirically certified benchmarks.
+
+Create subsequent recipes in **Recipe lab**, or write JSON files in `config/recipes/`. Give each one a
+new `id` and `name`. The cases are an explicit list, not generated by a script at
+startup. To select a new standard version:
 
 ```bash
-python -m unimatrix.main --backend stub
+uv run unimatrix serve --default-recipe my-recipe-v2
 ```
 
-Open <http://localhost:8001/>, pick `standard.json` from the **start** dropdown,
-and click **start**. Stop anytime; the panel keeps running so you can start
-again or browse past runs.
+The recipe selector controls both the displayed results and the next benchmark.
+The Start button shows the selected recipe name. `--default-recipe` sets the initial
+selection; archived revisions are available for inspection only.
+A recipe's content and the engine fingerprint determine its leaderboard revision.
+Changing a recipe cannot mix new scores into the previous ranking. Historical runs
+retain their complete original recipe and remain visible even if its source file is
+changed or removed. Resume requires the original engine fingerprint.
 
-**Run with a real model.** Point `inference.endpoint` at any OpenAI-compatible
-chat server — [LM Studio](https://lmstudio.ai/), vLLM, llama.cpp, … — in
-`config/standard.json`, then simply:
+## Candidate models
+
+The model dialog reads and writes `config/models/*.json`. It exposes address,
+port, model name, snapshot, optional API key and advanced inference settings.
+The client calls `ADDRESS/v1/chat/completions`. API keys entered in the dialog are
+stored in separate private files and are not copied into the run records or reports.
+Changing credentials creates a new private file so historical runs keep their source.
+Environment variable credentials (`api_key_env`) are also supported.
+
+Use `--models-dir`, `--recipes-dir` and `--runs-dir` to select other directories.
+This is a local researcher interface; the server binds to loopback by default.
 
 ```bash
-python -m unimatrix.main
+uv run unimatrix recipes
+uv run unimatrix run --model config/models/my-model.json
+uv run unimatrix run --model config/models/my-model.json --recipe compact-v1
+uv run unimatrix replay --run runs/benchmarks/RUN_ID/episodes/EPISODE_ID --verify-hashes
 ```
 
-Overrides without editing the config: `--backend`, `--endpoint`, `--model`,
-`--host`, `--port`.
+A benchmark directory contains `benchmark.json`, per-episode SQLite evidence and,
+after full completion, `report.json`. The dashboard can export the completed report.
+No provider requests are made merely by selecting a recipe or inspecting saved data.
 
-## Configuration
-
-A config is one JSON file in `config/`. Its blocks:
-
-| Block | Controls |
-| --- | --- |
-| `simulation` | name, RNG seed, tick interval, checkpoint cadence |
-| `inference` | LLM backend, endpoint, model, token / concurrency limits |
-| `memory` | short / medium / long-term sizes, embedding model |
-| `social` | the connection drive that keeps the world from going silent |
-| `world` | **the substrate** — vitality & death, the sustenance / labor economy, succession, and the self-revision cadence |
-| `messaging` | message caps, reflection cadence |
-| `agents` | the beings' thin seeds: `id`, `name`, `gender`, `circumstance`, `disposition` |
-
-A seed is deliberately minimal — diversity without a script:
-
-```json
-{ "id": "agent_05", "name": "Eskar", "gender": "m",
-  "circumstance": "You woke certain only that you would one day end.",
-  "disposition": "A preoccupation with what lasts." }
-```
-
-Set `world.blank_slate: true` to start every being identical (no seed at all) —
-a control for studying pure emergence.
-
-## What gets recorded
-
-Every run is a self-contained **SQLite** database under `runs/`, alongside a
-Chroma vector store for memory, and registered in `runs/_registry.db`. It keeps
-the full history — self-model versions, words, projects, cultural artifacts and
-their adoptions, relationships, groups, lineage, deaths, and the public event
-log — which is everything the panel and the analysis read.
-
-`analysis_scripts/analyze_run.py` turns a run DB into a four-dimension
-`metrics.json` + markdown digest:
+[Recipe lab guide](docs/recipe-lab.md) · [Model and recipe format](docs/benchmark.md) · [Validation](docs/validation.md)
 
 ```bash
-python analysis_scripts/analyze_run.py runs/<run>.db
+uv run pytest
+uv run ruff check src tests --exclude tests/fixtures
 ```
 
-## Project layout
-
-```
-src/unimatrix/
-  config/         configuration schema + loader
-  agents/         the Agent, its self-model, and all prompt builders
-  orchestrator/   the tick loop, action interpreter, finitude & self-revision
-  messaging/      asynchronous speech + reflection
-  memory/         short / medium / long-term memory + impressions
-  inference/      LLM client (OpenAI-compatible + a stub backend)
-  persistence/    SQLite schema, store, and run registry
-  web/            FastAPI server + the single control-panel page
-  session.py      run lifecycle      ·   main.py  entry point
-config/           simulation configs
-analysis_scripts/ off-line analysis of a run
-```
-
-## License
-
-See [LICENSE](LICENSE).
+[MIT License](LICENSE).

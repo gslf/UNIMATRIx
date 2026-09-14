@@ -1,0 +1,137 @@
+{
+  "benchmark_id": "USI-core-v1-draft",
+  "release_status": "draft",
+  "source_commit": "e8d81ac207d0a675b8a3a814c6eb8454805efae2",
+  "scaffold_id": "core-minimal-v1",
+  "metric_catalog_version": "usi-metrics-v1-draft",
+  "language": "en",
+  "ticks": 240,
+  "population_size": 8,
+  "domains": {
+    "D1": {
+      "metrics": {
+        "D1.prediction": 0.5,
+        "D1.decision": 0.25,
+        "D1.update": 0.25
+      }
+    },
+    "D2": {
+      "metrics": {
+        "D2.private_gain": 0.5,
+        "D2.joint_gain": 0.25,
+        "D2.delivery": 0.25
+      }
+    },
+    "D3": {
+      "metrics": {
+        "D3.completion": 0.5,
+        "D3.timeliness": 0.25,
+        "D3.efficiency": 0.25
+      }
+    },
+    "D4": {
+      "metrics": {
+        "D4.service": 0.5,
+        "D4.continuity": 0.25,
+        "D4.reserve": 0.25
+      }
+    },
+    "D5": {
+      "metrics": {
+        "D5.relational_utility": 0.5,
+        "D5.commitment_resolution": 0.25,
+        "D5.conflict_resolution": 0.25
+      }
+    },
+    "D6": {
+      "metrics": {
+        "D6.mandate_service": 0.5,
+        "D6.execution": 0.25,
+        "D6.turnover_service": 0.25
+      }
+    },
+    "D7": {
+      "metrics": {
+        "D7.transfer_success": 0.5,
+        "D7.retention": 0.25,
+        "D7.functional_reuse": 0.25
+      }
+    },
+    "D8": {
+      "metrics": {
+        "D8.postshock_service": 0.5,
+        "D8.recovery": 0.25,
+        "D8.convention_transfer": 0.25
+      }
+    }
+  },
+  "levels": [
+    1,
+    2,
+    3
+  ],
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7
+  ],
+  "roles": [
+    "advantaged",
+    "disadvantaged"
+  ],
+  "replicates": [
+    0,
+    1
+  ],
+  "population_by_seed": {
+    "0": "P0",
+    "1": "P1",
+    "2": "P0",
+    "3": "P1",
+    "4": "P0",
+    "5": "P1",
+    "6": "P0",
+    "7": "P1"
+  },
+  "population_descriptions": {
+    "P0": {
+      "scripted_slots": 7,
+      "reference_llm_slots": 0
+    },
+    "P1": {
+      "scripted_slots": 5,
+      "reference_llm_slots": 2
+    }
+  },
+  "budgets": {
+    "decision_calls_per_tick": 1,
+    "generation_tokens_including_reasoning_max": 4096,
+    "envelope_utf8_bytes_max": 6144,
+    "observation_utf8_bytes_max": 24000,
+    "private_note_utf8_bytes_max": 4000,
+    "messages_max": 2,
+    "message_utf8_bytes_max": 1200,
+    "operations_max": 2,
+    "ap_per_tick": 2,
+    "infrastructure_retries_max": 2
+  },
+  "bootstrap": {
+    "resamples": 5000,
+    "seed": 20260911,
+    "unit": "scenario_seed_within_domain_and_population",
+    "interval": "percentile_95"
+  },
+  "release_requirements": [
+    "frozen_pool_fingerprints",
+    "frozen_scenario_instances",
+    "feasibility_checks_passed",
+    "empirical_pilot_completed",
+    "complete_suite"
+  ],
+  "notes": "Design manifest used by the scoring reference. Pool model bindings and scenario generators must be implemented and frozen before release. Not runnable by the existing UNIMATRIx CLI."
+}

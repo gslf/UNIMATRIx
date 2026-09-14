@@ -1,2 +1,3 @@
 """Unimatrix — multi-agent sociological simulation."""
-__version__ = "1.0.1"
+
+__version__ = "3.0.0.dev0"

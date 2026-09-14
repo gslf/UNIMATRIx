@@ -1,290 +1,58 @@
-"""FastAPI control server.
-"""
-from __future__ import annotations
+"""Local benchmark dashboard."""
 
-import asyncio
-import json
-import shutil
-from contextlib import contextmanager
+from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Iterator
 
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse
-from pydantic import BaseModel, Field
+from fastapi import FastAPI
+from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
-from ..orchestrator import Orchestrator
-from ..persistence import Registry, RunStore, utc_now_iso
-from ..session import SessionError, SessionManager
-
-
-class BroadcastIn(BaseModel):
-    message: str = Field(..., min_length=1, max_length=4000)
-
-
-class StartIn(BaseModel):
-    config: str = Field(..., min_length=1, max_length=200)
-
-
-def _idle_state(session: SessionManager) -> dict:
-    """State payload returned when no simulation is running."""
-    recent_lines = getattr(session.console, "recent_log_lines", None)
-    events = recent_lines(1000) if callable(recent_lines) else []
-    return {
-        "running": False, "run_id": None, "paused": False, "tick_no": 0,
-        "population": {"alive": 0, "dead": 0}, "recent_messages": [],
-        "broadcast_queue_length": 0, "metrics": {},
-        "recent_events": events, "configs": session.list_configs(),
-    }
-
-
-def _parse_json(raw, default):
-    try:
-        return json.loads(raw) if raw else default
-    except (TypeError, ValueError):
-        return default
+from .benchmark import build_router
+from .research import build_research_router
 
 
 def build_app(
-    session: SessionManager,
-    registry: Registry,
-    runs_dir: Path,
-    static_dir: Path,
-) -> FastAPI:
-    app = FastAPI(title="Unimatrix")
+    runs_dir="runs/benchmarks",
+    models_dir="config/models",
+    recipes_dir="config/recipes",
+    default_recipe="standard-v1",
+    **legacy,
+):
+    recipes_dir = legacy.pop("plans_dir", recipes_dir)
+    default_recipe = legacy.pop("default_plan", default_recipe)
+    if legacy:
+        raise TypeError("Unknown server options: " + ", ".join(legacy))
+    router = build_router(runs_dir, models_dir, recipes_dir, default_recipe)
 
-    def _require_orch() -> Orchestrator:
-        orch = session.orchestrator
-        if orch is None or not session.is_active:
-            raise HTTPException(409, "no active simulation")
-        return orch
+    research = build_research_router(runs_dir, models_dir, recipes_dir, default_recipe)
 
-    @contextmanager
-    def open_run_store(run_id: int) -> Iterator[RunStore]:
-        """Yield a RunStore for the requested run — the live orchestrator's open
-        connection for the active run, else a fresh (WAL) read connection."""
-        orch = session.orchestrator
-        if orch is not None and run_id == orch.run_id:
-            yield orch.store
-            return
-        info = registry.get(run_id)
-        if info is None:
-            raise HTTPException(404, f"run {run_id} not found")
-        db_path = Path(info["db_path"])
-        if not db_path.exists():
-            raise HTTPException(410, f"run {run_id} db file missing at {db_path}")
-        store = RunStore(db_path)
-        try:
-            yield store
-        finally:
-            store.close()
+    @asynccontextmanager
+    async def lifespan(app):
+        yield
+        await router.shutdown_tasks()
+        await research.shutdown_tasks()
 
-    # ----- the control panel -----
+    app = FastAPI(title="UNIMATRIx", lifespan=lifespan)
+    static = Path(__file__).with_name("static")
+    app.mount("/static", StaticFiles(directory=static), name="static")
+    app.include_router(router)
+    app.include_router(research)
+    app.include_router(research.legacy_router, include_in_schema=False)
 
-    @app.get("/", response_class=HTMLResponse)
-    async def index() -> HTMLResponse:
-        return HTMLResponse(
-            (static_dir / "index.html").read_text(encoding="utf-8"),
-            headers={"cache-control": "no-store, no-cache, must-revalidate, max-age=0"},
-        )
+    @app.get("/")
+    def index():
+        return FileResponse(static / "benchmark.html")
 
-    # ----- simulation lifecycle -----
+    @app.get("/recipe-lab")
+    def recipe_lab():
+        return FileResponse(static / "recipe-lab.html")
 
-    @app.get("/configs")
-    async def list_available_configs() -> JSONResponse:
-        return JSONResponse({"configs": session.list_configs()})
+    @app.get("/recipe-lab/evaluations/{ident}")
+    def evaluation_explorer(ident: str):
+        return FileResponse(static / "evaluation-explorer.html")
 
-    @app.post("/sim/start")
-    async def sim_start(body: StartIn) -> JSONResponse:
-        try:
-            run_id = await session.start(body.config)
-        except SessionError as exc:
-            raise HTTPException(exc.status, exc.message)
-        return JSONResponse({"running": True, "run_id": run_id})
-
-    @app.post("/sim/stop")
-    async def sim_stop() -> JSONResponse:
-        return JSONResponse({"running": False, "stopped": await session.stop()})
-
-    @app.get("/state")
-    async def state() -> JSONResponse:
-        orch = session.orchestrator
-        if orch is None or not session.is_active:
-            return JSONResponse(_idle_state(session))
-        snap = orch.snapshot()
-        snap["running"] = True
-        snap["configs"] = session.list_configs()
-        recent_lines = getattr(orch.console, "recent_log_lines", None)
-        snap["recent_events"] = (
-            recent_lines(1000) if callable(recent_lines)
-            else await asyncio.to_thread(orch.store.recent_events, 1000)
-        )
-        return JSONResponse(snap)
-
-    @app.get("/diag")
-    async def diag() -> JSONResponse:
-        return JSONResponse(_require_orch().diagnostics())
-
-    @app.post("/broadcast")
-    async def broadcast(body: BroadcastIn) -> JSONResponse:
-        orch = _require_orch()
-        status = await orch.queue_broadcast("HUMAN", body.message)
-        return JSONResponse(
-            {"status": status, "queue_length": orch.snapshot()["broadcast_queue_length"]}
-        )
-
-    @app.post("/pause")
-    async def pause() -> JSONResponse:
-        _require_orch().pause()
-        return JSONResponse({"paused": True})
-
-    @app.post("/resume")
-    async def resume() -> JSONResponse:
-        _require_orch().resume()
-        return JSONResponse({"paused": False})
-
-    @app.post("/checkpoint")
-    async def checkpoint() -> JSONResponse:
-        cid = await _require_orch().force_checkpoint()
-        return JSONResponse({"checkpoint_id": cid})
-
-    # ----- run index -----
-
-    @app.get("/runs")
-    async def list_runs() -> JSONResponse:
-        return JSONResponse(registry.list_runs())
-
-    @app.post("/runs/{run_id}/resume")
-    async def runs_resume(run_id: int) -> JSONResponse:
-        try:
-            await session.resume(run_id)
-        except SessionError as exc:
-            raise HTTPException(exc.status, exc.message)
-        return JSONResponse({"running": True, "run_id": run_id})
-
-    @app.post("/runs/{run_id}/end")
-    async def runs_end(run_id: int) -> JSONResponse:
-        info = registry.get(run_id)
-        if info is None:
-            raise HTTPException(404, f"run {run_id} not found")
-        orch = session.orchestrator
-        if orch is not None and run_id == orch.run_id and session.is_active:
-            raise HTTPException(409, "this run is currently live; use /sim/stop")
-        registry.update_status(run_id, "ended", utc_now_iso())
-        return JSONResponse({"ended": True})
-
-    @app.delete("/runs/{run_id}")
-    async def delete_run(run_id: int) -> JSONResponse:
-        info = registry.get(run_id)
-        if info is None:
-            raise HTTPException(404, f"run {run_id} not found")
-        orch = session.orchestrator
-        if orch is not None and run_id == orch.run_id and session.is_active:
-            raise HTTPException(409, "cannot delete the currently running run")
-        db_path = Path(info["db_path"])
-        for p in (db_path, Path(str(db_path) + "-wal"), Path(str(db_path) + "-shm")):
-            try:
-                p.unlink(missing_ok=True)
-            except OSError:
-                pass
-        subdir = runs_dir / db_path.stem
-        if subdir.is_dir():
-            shutil.rmtree(subdir, ignore_errors=True)
-        registry.delete(run_id)
-        return JSONResponse({"deleted": True})
-
-    # ----- way of life: read-only data per run -----
-
-    def _names(s: RunStore) -> dict:
-        return {a["agent_id"]: a.get("name") for a in s.list_agents()}
-
-    @app.get("/runs/{run_id}/beings")
-    async def run_beings(run_id: int) -> JSONResponse:
-        def _impl() -> dict:
-            with open_run_store(run_id) as s:
-                beings = [{
-                    "id": a["agent_id"], "name": a.get("name") or a["agent_id"],
-                    "gender": a.get("gender"), "alive": bool(a.get("alive", 1)),
-                    "vitality": a.get("vitality"), "sustenance": a.get("sustenance"),
-                    "self_model_version": a.get("self_model_version") or 0,
-                    "self_model": _parse_json(a.get("self_model_json"), {}),
-                    "born_tick": a.get("born_tick") or 0,
-                    "parent_ids": _parse_json(a.get("parent_ids"), []),
-                    "circumstance": a.get("circumstance"),
-                    "disposition": a.get("disposition"),
-                } for a in s.list_agents()]
-                return {"beings": beings}
-        return JSONResponse(await asyncio.to_thread(_impl))
-
-    @app.get("/runs/{run_id}/self/{agent_id}")
-    async def run_self(run_id: int, agent_id: str) -> JSONResponse:
-        def _impl() -> dict:
-            with open_run_store(run_id) as s:
-                ag = s.get_agent(agent_id)
-                return {"agent_id": agent_id,
-                        "name": (ag or {}).get("name") or agent_id,
-                        "versions": s.list_self_models(agent_id)}
-        return JSONResponse(await asyncio.to_thread(_impl))
-
-    @app.get("/runs/{run_id}/meaning")
-    async def run_meaning(run_id: int) -> JSONResponse:
-        def _impl() -> dict:
-            with open_run_store(run_id) as s:
-                names = _names(s)
-                arts = s.list_artifacts(2000)
-                for a in arts:
-                    a["author_name"] = names.get(a.get("author_id"))
-                return {"artifacts": arts, "adoptions": s.list_adoptions(),
-                        "names": names}
-        return JSONResponse(await asyncio.to_thread(_impl))
-
-    @app.get("/runs/{run_id}/labor")
-    async def run_labor(run_id: int) -> JSONResponse:
-        def _impl() -> dict:
-            with open_run_store(run_id) as s:
-                projects = s.list_projects(limit=2000)
-                for p in projects:
-                    p["contributors"] = s.project_contributors(p["id"])
-                return {"projects": projects}
-        return JSONResponse(await asyncio.to_thread(_impl))
-
-    @app.get("/runs/{run_id}/kinship")
-    async def run_kinship(run_id: int) -> JSONResponse:
-        def _impl() -> dict:
-            with open_run_store(run_id) as s:
-                return {"relationships": s.list_relationships(),
-                        "groups": s.list_groups(), "names": _names(s)}
-        return JSONResponse(await asyncio.to_thread(_impl))
-
-    @app.get("/runs/{run_id}/continuity")
-    async def run_continuity(run_id: int) -> JSONResponse:
-        def _impl() -> dict:
-            with open_run_store(run_id) as s:
-                return {"deaths": s.list_deaths(), "lineage": s.list_lineage(),
-                        "names": _names(s)}
-        return JSONResponse(await asyncio.to_thread(_impl))
-
-    @app.get("/runs/{run_id}/timeline")
-    async def run_timeline(run_id: int) -> JSONResponse:
-        def _ticks(rows, key):
-            return [int(r[key]) for r in rows if r.get(key) is not None]
-
-        def _impl() -> dict:
-            with open_run_store(run_id) as s:
-                agents = s.list_agents()
-                projects = s.list_projects(limit=5000)
-                return {
-                    "founders": sum(1 for a in agents if not (a.get("born_tick") or 0)),
-                    "self_revisions": s.self_model_ticks(),
-                    "artifacts": _ticks(s.list_artifacts(5000), "tick_no"),
-                    "adoptions": _ticks(s.list_adoptions(), "tick_no"),
-                    "projects_started": _ticks(projects, "tick_started"),
-                    "projects_completed": _ticks(projects, "tick_completed"),
-                    "bonds": _ticks(s.list_relationships(), "formed_tick"),
-                    "groups": _ticks(s.list_groups(), "tick_founded"),
-                    "births": _ticks(s.list_lineage(), "tick_no"),
-                    "deaths": _ticks(s.list_deaths(), "tick_no"),
-                }
-        return JSONResponse(await asyncio.to_thread(_impl))
+    @app.get("/research", include_in_schema=False)
+    def legacy_research_page():
+        return RedirectResponse("/recipe-lab", status_code=307)
 
     return app

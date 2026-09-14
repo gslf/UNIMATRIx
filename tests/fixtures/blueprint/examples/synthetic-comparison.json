@@ -1,0 +1,13 @@
+{
+  "left": "SYNTHETIC-A",
+  "right": "SYNTHETIC-B",
+  "data_kind": "synthetic",
+  "certified": false,
+  "paired_delta": 1.5,
+  "paired_ci95": [
+    1.5,
+    1.5
+  ],
+  "matched_episodes": 768,
+  "warning": "A paired difference under the supplied design; not evidence of general intelligence."
+}

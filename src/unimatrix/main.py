@@ -1,123 +1,106 @@
-from __future__ import annotations
+"""Start the local dashboard or execute an authored benchmark recipe."""
 
 import argparse
 import asyncio
-import importlib.resources as ir
-import signal
+import json
 import sys
 from pathlib import Path
 
-import uvicorn
 
-
-def _force_utf8_stdio() -> None:
-    for stream in (sys.stdout, sys.stderr):
-        try:
-            stream.reconfigure(encoding="utf-8", errors="replace")
-        except Exception:
-            pass
-
-
-from .log_console import LoggingConsole
-from .persistence import Registry
-from .session import SessionManager
-from .web import build_app
-
-
-async def _run(args: argparse.Namespace) -> int:
-    console = LoggingConsole()
-
-    runs_dir = Path(args.runs_dir)
-    runs_dir.mkdir(parents=True, exist_ok=True)
-    configs_dir = Path(args.configs_dir)
-
-    registry = Registry(runs_dir)
-    session = SessionManager(
-        configs_dir=configs_dir,
-        runs_dir=runs_dir,
-        console=console,
-        registry=registry,
-        defaults={
-            "backend": args.backend,
-            "endpoint": args.endpoint,
-            "model": args.model,
-        },
-    )
-
-    static_dir = Path(ir.files("unimatrix.web") / "static")  # type: ignore[arg-type]
-    app = build_app(session, registry, runs_dir, static_dir)
-
-    config = uvicorn.Config(
-        app, host=args.host, port=args.port, log_level=args.log_level, lifespan="off"
-    )
-    server = uvicorn.Server(config)
-
-    loop = asyncio.get_running_loop()
-
-    def _signal_handler() -> None:
-        console.log("[bold red]shutdown signal received[/]")
-        server.should_exit = True
-
-    for sig_name in ("SIGINT", "SIGTERM"):
-        sig = getattr(signal, sig_name, None)
-        if sig is not None:
-            try:
-                loop.add_signal_handler(sig, _signal_handler)
-            except NotImplementedError:
-                pass
-
-    console.log(
-        f"[bold green]Unimatrix online[/] — UI at http://{args.host}:{args.port}/"
-    )
-    console.log(
-        f"[dim]No simulation running. Pick a config in {configs_dir}/ "
-        "and click Start in the control panel.[/]"
-    )
-    if not configs_dir.exists():
-        console.log(
-            f"[yellow]warning[/]: configs dir {configs_dir} does not exist; "
-            "create it and drop JSON configs in to use the Start button."
-        )
-
-    try:
-        await server.serve()
-    except KeyboardInterrupt:
-        _signal_handler()
-    finally:
-        if session.is_active:
-            console.log("[bold]server stopping — winding down active simulation…[/]")
-            try:
-                await session.stop()
-            except Exception as exc:
-                console.log(f"[red]error during simulation shutdown[/]: {exc!r}")
-        console.log("[bold]bye[/]")
-    return 0
-
-
-def cli() -> int:
-    _force_utf8_stdio()
+def cli(argv=None):
+    argv = list(sys.argv[1:] if argv is None else argv)
+    # Keep the bench spelling as an alias, without the retired planning commands.
+    if argv and argv[0] == "bench":
+        argv = argv[1:]
+    # Accept previous command spellings without advertising them in the help text.
+    if argv and argv[0] == "plans":
+        argv[0] = "recipes"
+    aliases = {
+        "--plan": "--recipe",
+        "--plans-dir": "--recipes-dir",
+        "--default-plan": "--default-recipe",
+    }
+    argv = [
+        aliases.get(arg.split("=", 1)[0], arg.split("=", 1)[0])
+        + ("=" + arg.split("=", 1)[1] if "=" in arg else "")
+        for arg in argv
+    ]
     parser = argparse.ArgumentParser(prog="unimatrix")
-    parser.add_argument(
-        "--configs-dir", default="config",
-        help="directory holding *.json simulation configs (default: ./config)",
-    )
-    parser.add_argument("--runs-dir", default="runs")
-    parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=8001)
-    parser.add_argument(
-        "--backend", choices=("vllm", "llama_cpp", "stub"), default=None,
-        help="override config inference.backend at start time",
-    )
-    parser.add_argument("--endpoint", default=None,
-                        help="override config inference.endpoint at start time")
-    parser.add_argument("--model", default=None,
-                        help="override config inference.model at start time")
-    parser.add_argument("--log-level", default="info")
-    args = parser.parse_args()
+    commands = parser.add_subparsers(dest="command", required=True)
+    serve = commands.add_parser("serve", help="Open the benchmark dashboard server")
+    serve.add_argument("--runs-dir", default="runs/benchmarks")
+    serve.add_argument("--models-dir", default="config/models")
+    serve.add_argument("--recipes-dir", default="config/recipes")
+    serve.add_argument("--default-recipe", default="standard-v1")
+    serve.add_argument("--host", default="127.0.0.1")
+    serve.add_argument("--port", default=8001, type=int)
+    run = commands.add_parser("run", help="Execute every case in an existing benchmark recipe")
+    run.add_argument("--model", required=True, help="Candidate model JSON file")
+    run.add_argument("--recipe", default="standard-v1", help="Existing benchmark recipe ID")
+    run.add_argument("--recipes-dir", default="config/recipes")
+    run.add_argument("--runs-dir", default="runs/benchmarks")
+    listing = commands.add_parser("recipes", help="List existing benchmark recipes")
+    listing.add_argument("--recipes-dir", default="config/recipes")
+    replay = commands.add_parser("replay", help="Verify a recorded episode")
+    replay.add_argument("--run", required=True, help="Episode folder containing episode.db")
+    replay.add_argument("--verify-hashes", action="store_true")
+    args = parser.parse_args(argv)
     try:
-        return asyncio.run(_run(args))
-    except KeyboardInterrupt:
-        return 130
+        if args.command == "serve":
+            import uvicorn
+
+            from .web.server import build_app
+
+            uvicorn.run(
+                build_app(args.runs_dir, args.models_dir, args.recipes_dir, args.default_recipe),
+                host=args.host,
+                port=args.port,
+            )
+            return 0
+        if args.command == "replay":
+            from .persistence.event_store import EventStore
+
+            store = EventStore(Path(args.run) / "episode.db", read_only=True)
+            try:
+                result = store.verify()
+            finally:
+                store.close()
+        else:
+            from .benchmark.recipes import RecipeRepository, recipe_fields
+
+            recipes = RecipeRepository(args.recipes_dir)
+            if args.command == "recipes":
+                result = [
+                    dict(id=p["id"], name=p["name"], cases=len(p["cases"]))
+                    for p in recipes.all().values()
+                ]
+            else:
+                from .benchmark.service import BenchmarkService
+                from .benchmark.validation import validate_policy
+
+                candidate = json.loads(Path(args.model).read_text())
+                validate_policy(candidate)
+                if not isinstance(candidate, dict):
+                    raise ValueError("--model requires a candidate model JSON object")
+
+                async def execute():
+                    service = BenchmarkService(args.runs_dir, recipes)
+                    run = await service.start(
+                        candidate, Path(args.model).stem, recipes.get(args.recipe)
+                    )
+                    try:
+                        await service.active[run["id"]][0]
+                    finally:
+                        await service.shutdown()
+                    return recipe_fields(service.summary(service.read(run["id"])))
+
+                result = asyncio.run(execute())
+        print(json.dumps(result, indent=2))
+        return 1 if isinstance(result, dict) and result.get("status") == "failed" else 0
+    except (ValueError, OSError, TypeError) as error:
+        from .benchmark.recipes import recipe_text
+
+        parser.error(recipe_text(str(error)))
 
 
 if __name__ == "__main__":

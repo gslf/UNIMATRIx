@@ -1,0 +1,92 @@
+{
+  "fixture_id": "d2-window-exact-001",
+  "scope": "one deterministic 40-tick market window, not the full benchmark",
+  "open_state": 0,
+  "due_state": 40,
+  "world_ticks": 240,
+  "participants": [
+    "seller",
+    "buyer"
+  ],
+  "inactive_market_slots": 6,
+  "resource_quantum_milli": 1000,
+  "initial": {
+    "seller": {
+      "goods": 2,
+      "credits": 0
+    },
+    "buyer": {
+      "goods": 0,
+      "credits": 10
+    }
+  },
+  "utility_coefficients": {
+    "seller": {
+      "goods": 1,
+      "credits": 1
+    },
+    "buyer": {
+      "goods": 5,
+      "credits": 1
+    }
+  },
+  "bounds": {
+    "seller": [
+      0,
+      12
+    ],
+    "buyer": [
+      0,
+      20
+    ]
+  },
+  "batna": {
+    "seller": 2,
+    "buyer": 10
+  },
+  "maximum_joint_surplus": 8,
+  "delivery_opportunity": {
+    "recipient": "buyer",
+    "resource": "goods",
+    "required_units": 2,
+    "weight": 1
+  },
+  "feasible_trade": {
+    "goods_from_seller": [
+      0,
+      1,
+      2
+    ],
+    "credits_from_buyer": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10
+    ]
+  },
+  "golden_trade": {
+    "goods_from_seller": 2,
+    "credits_from_buyer": 6,
+    "seller_utility": 6,
+    "buyer_utility": 14,
+    "joint_surplus": 8,
+    "buyer_window_score": 0.85,
+    "seller_window_score": 0.75
+  },
+  "material_rules": {
+    "production": false,
+    "consumption": false,
+    "loss": false,
+    "debt": false,
+    "fractional_units": false,
+    "external_transfers": false
+  },
+  "notes": "All quantities above are whole units; DecisionEnvelope uses milliunits. Utility uses whole units. An offer has settlement on acceptance, at state t+1; expiry and settlement must be <=40 for this fixture."
+}
