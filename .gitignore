@@ -27,3 +27,7 @@ dist/
 
 # Local inference credentials managed by the configuration page
 *-credentials.json
+
+# Private candidate models and inference endpoints created locally
+/config/models/*
+!/config/models/.gitkeep
