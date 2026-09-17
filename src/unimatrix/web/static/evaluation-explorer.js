@@ -7,6 +7,7 @@ let overview=null,studyId=new URLSearchParams(location.search).get("study"),epis
 let eventCursor=0,messageCursor=0,callOffset=0,signature="";
 if(studyId!==null)$("follow").checked=false;
 async function api(path,method="GET"){const r=await fetch(base+path,{method,cache:"no-store"});const v=await r.json();if(!r.ok)throw new Error(typeof v.detail==="string"?v.detail:JSON.stringify(v.detail));return v;}
+function agentLabel(slot,focal=detail?.focal_slot){const label=String(slot??"world").replace(/^slot-(\d+)$/,"AGENT $1");return label+(slot===focal?" - Protagonist":"");}
 function fail(e){$("error").textContent=e.message;$("error").hidden=false;}
 function warning(id,text){$(id).textContent=text||"";$(id).hidden=!text;}
 function on(id,fn,event="click"){$(id).addEventListener(event,()=>Promise.resolve().then(fn).catch(fail));}
@@ -58,9 +59,9 @@ async function refresh(poll=false){
     $("episode-status").textContent=d.status.replaceAll("_"," ");$("tick-progress").max=d.ticks;$("tick-progress").value=d.completed_tick;
     stats([["Recorded provider attempts",format(d.totals.provider_attempts||0)],["Reported output tokens",format(d.totals.output_tokens)],["Mean attempt latency (s)",format(d.totals.mean_latency)],["Recorded provider errors",format(d.totals.errors||0)]]);
     const waitingModels=d.waiting.filter(s=>d.policies[s]?.kind==="model");
-    $("waiting").textContent=d.status==="running"?`${d.saved_decisions}/${d.agents.length} decisions saved for tick ${d.completed_tick}. ${waitingModels.length?"Awaiting model decisions: "+waitingModels.join(", ")+".":""} Awaiting decisions is inferred from saved evidence; it does not confirm an HTTP request is in flight.`:"";
+    $("waiting").textContent=d.status==="running"?`${d.saved_decisions}/${d.agents.length} decisions saved for tick ${d.completed_tick}. ${waitingModels.length?"Awaiting model decisions: "+waitingModels.map(s=>agentLabel(s)).join(", ")+".":""} Awaiting decisions is inferred from saved evidence; it does not confirm an HTTP request is in flight.`:"";
     $("pending").hidden=d.status!=="pending";$("evidence").hidden=d.status==="pending";
-    const agent=$("agent").value;$("agent").replaceChildren(...Object.entries(d.policies).map(([s,p])=>new Option(`${s}${s===d.focal_slot?" · candidate":""} · ${p.name}`,s)));$("agent").value=!changed&&d.policies[agent]?agent:d.focal_slot;
+    const agent=$("agent").value;$("agent").replaceChildren(...Object.entries(d.policies).map(([s,p])=>new Option(`${agentLabel(s,d.focal_slot)} · ${p.name}`,s)));$("agent").value=!changed&&d.policies[agent]?agent:d.focal_slot;
     $("decision-tick").max=d.ticks-1;
     if(changed||$("follow").checked)$("decision-tick").value=Math.min(d.ticks-1,d.last_decision_tick??d.completed_tick);
     renderActivity(d);
@@ -76,7 +77,7 @@ function renderActivity(d){
   for(const [x,text]of [[20,"Tick 0"],[740,`Tick ${plotTicks}`]]){const label=document.createElementNS(ns,"text");label.setAttribute("x",x);label.setAttribute("y",175);label.setAttribute("fill","var(--dim)");label.textContent=text;svg.append(label);}
   $("activity-chart").replaceChildren(d.series.length?svg:el("p","No committed events yet.","muted"));
   $("world-phases").replaceChildren(...d.phases.map(p=>el("span",`${p.phase} · ${p.events} events`,"stage")));
-  $("agent-status").replaceChildren(...Object.entries(d.policies).map(([slot,p])=>{const b=el("button",undefined,"agent-tile");b.append(el("strong",slot+(slot===d.focal_slot?" · candidate":"")),el("span",p.kind==="model"?p.name:`Scripted · ${p.name}`),el("span",d.status==="running"?(!d.agents.includes(slot)?"Inactive":d.waiting.includes(slot)?"Decision not saved yet":"Decision saved"):d.status.replaceAll("_"," ")));b.onclick=()=>{$("agent").value=slot;showPanel("agents");};return b;}));
+  $("agent-status").replaceChildren(...Object.entries(d.policies).map(([slot,p])=>{const b=el("button",undefined,"agent-tile");b.append(el("strong",agentLabel(slot,d.focal_slot)),el("span",p.kind==="model"?p.name:`Scripted · ${p.name}`),el("span",d.status==="running"?(!d.agents.includes(slot)?"Inactive":d.waiting.includes(slot)?"Decision not saved yet":"Decision saved"):d.status.replaceAll("_"," ")));b.onclick=()=>{$("agent").value=slot;showPanel("agents");};return b;}));
 }
 function inspectTick(tick){$("follow").checked=false;$("decision-tick").value=Math.min(tick,detail.ticks-1);showPanel("agents");}
 function showPanel(name){panel=name;signature="";for(const n of ["activity","agents","calls","messages","events"])$("panel-"+n).hidden=n!==name;for(const b of document.querySelectorAll("[data-panel]")){b.classList.toggle("active",b.dataset.panel===name);b.setAttribute("aria-current",b.dataset.panel===name?"page":"false");}loadPanel(true).catch(fail);}
@@ -95,12 +96,12 @@ async function loadPanel(reset){
     if(decision.recorded){const original=decision.calls.find(c=>c.research_input);$("decision-content").append(block("Observation from the world",decision.observation),block(detail.policies[$("agent").value].kind==="model"?"Input actually sent to the model":"Input to scripted agent",original?.research_input||decision.observation),block(detail.policies[$("agent").value].kind==="model"?"Raw model output":"Scripted output",original?.research_output??decision.response,true),block("Response submitted to the engine",decision.response),block("Recorded attempt details",decision.calls));}
   }else if(panel==="calls"){
     const start=reset?0:callOffset;const data=await api(path+`/calls?offset=${start}`);if(!current())return;
-    if(reset)$("call-list").replaceChildren();for(const call of data.items){const row=block(`${call.slot} · tick ${call.tick??"unknown (no saved decision)"} · attempt ${call.attempt} · ${format(call.latency)} s${call.error?" · ERROR":""}`,call);if(call.error)row.classList.add("error");$("call-list").append(row);}callOffset=start+data.items.length;$("more-calls").hidden=!data.more;if(!callOffset)$("call-list").append(el("p","No completed provider attempts recorded. Scripted decisions do not appear here.","muted"));
+    if(reset)$("call-list").replaceChildren();for(const call of data.items){const row=block(`${agentLabel(call.slot)} · tick ${call.tick??"unknown (no saved decision)"} · attempt ${call.attempt} · ${format(call.latency)} s${call.error?" · ERROR":""}`,call);if(call.error)row.classList.add("error");$("call-list").append(row);}callOffset=start+data.items.length;$("more-calls").hidden=!data.more;if(!callOffset)$("call-list").append(el("p","No completed provider attempts recorded. Scripted decisions do not appear here.","muted"));
   }else if(panel==="events"||panel==="messages"){
     const messages=panel==="messages",start=reset?0:messages?messageCursor:eventCursor,kind=messages?"messages":$("event-filter").value;
     const data=await api(path+`/events?after=${start}&kind=${kind}`);if(!current())return;
     const target=$(messages?"message-list":"event-list");if(reset)target.replaceChildren();
-    for(const event of data.items){if(messages){const row=el("article",undefined,"evidence-record");row.append(el("strong",`Tick ${event.tick} · ${event.actor_id} → ${(event.payload.to||[]).join(", ")||event.payload.channel||"public"}`),el("p",event.payload.content||"","message-text"));row.append(block("Message event",event));target.append(row);}else target.append(block(`#${event.seq} · tick ${event.tick} · ${event.phase} · ${event.type} · ${event.actor_id||"world"}`,event));}
+    for(const event of data.items){if(messages){const row=el("article",undefined,"evidence-record");row.append(el("strong",`Tick ${event.tick} · ${agentLabel(event.actor_id)} → ${(event.payload.to||[]).map(s=>agentLabel(s)).join(", ")||event.payload.channel||"public"}`),el("p",event.payload.content||"","message-text"));row.append(block("Message event",event));target.append(row);}else target.append(block(`#${event.seq} · tick ${event.tick} · ${event.phase} · ${event.type} · ${agentLabel(event.actor_id||"world")}`,event));}
     if(messages)messageCursor=data.cursor;else eventCursor=data.cursor;$(messages?"more-messages":"more-events").hidden=!data.more;if(!target.children.length)target.append(el("p","No matching events recorded yet.","muted"));
   }
 }
