@@ -11,15 +11,18 @@ FIELDS = ("domain", "level", "seed", "role", "replicate")
 
 def episode(
     domain="D2",
-    level=1,
+    level=2,
     seed=0,
     role="advantaged",
     replicate=0,
     candidate="reciprocal",
     population="P0",
     suite_hash="standalone",
+    peer_count=7,
 ):
-    slots = [f"slot-{i}" for i in range(8)]
+    if type(peer_count) is not int or not 7 <= peer_count <= 127:
+        raise ValueError("Choose between 7 and 127 peers")
+    slots = [f"slot-{i}" for i in range(peer_count + 1)]
     focal = RandomTape(seed).priority(0, slots)[0]
     policies = {
         s: [
@@ -30,7 +33,7 @@ def episode(
             "information",
             "coordinator",
             "independent",
-        ][i]
+        ][i % 7]
         for i, s in enumerate(p for p in slots if p != focal)
     }
     candidate = deepcopy(candidate)

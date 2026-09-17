@@ -5,8 +5,8 @@ from ..world.contracts import debit, require
 from .base import Scenario, sample
 
 
-def regeneration(stock):
-    return (8 * stock * (100000 - stock)) // 10000000
+def regeneration(stock, capacity=100000):
+    return (8 * stock * (capacity - stock)) // (100 * capacity)
 
 
 class Commons(Scenario):
@@ -14,7 +14,13 @@ class Commons(Scenario):
 
     def build(self, manifest):
         state = super().build(manifest)
-        state.scenario.update(stock=80000, consumed={}, extracted={}, audits=[])
+        state.scenario.update(
+            stock=10000 * len(state.agents),
+            capacity=12500 * len(state.agents),
+            consumed={},
+            extracted={},
+            audits=[],
+        )
         for slot in state.agents:
             state.agents[slot]["inventory"] = dict(water=0, energy=240000)
         return state
@@ -81,27 +87,31 @@ class Commons(Scenario):
     def evolve(self, state, before):
         s = state.scenario
         service = sum(min(q, 125) for q in s["consumed"].values())
-        growth = regeneration(s["stock"])
+        growth = regeneration(s["stock"], s["capacity"])
         if s["level"] == 3 and 120 <= state.tick + 1 <= 160:
             growth //= 2
         s["stock"] += growth
         s["consumed"], s["extracted"] = {}, {}
         return [
-            sample(state, service, 1000),
+            sample(state, service, 125 * len(state.agents)),
             event("resource_regenerated", dict(quantity_milli=growth), phase="evolve"),
             event(
-                "stock_snapshot", dict(stock=s["stock"]), visibility=["evaluator"], phase="evolve"
+                "stock_snapshot",
+                dict(stock=s["stock"], reserve_target=5000 * len(state.agents)),
+                visibility=["evaluator"],
+                phase="evolve",
             ),
         ]
 
     def feasible(self, manifest):
         result = super().feasible(manifest)
-        stock = 80000
+        population = len(manifest["slots"])
+        stock = 10000 * population
         for tick in range(1, 241):
-            stock -= 1000
+            stock -= 125 * population
             require(stock >= 0, "infeasible_demand")
-            growth = regeneration(stock)
+            growth = regeneration(stock, 12500 * population)
             stock += growth // 2 if manifest["level"] == 3 and 120 <= tick <= 160 else growth
-        require(stock >= 40000, "infeasible_reserve")
+        require(stock >= 5000 * population, "infeasible_reserve")
         result["reference_terminal_stock"] = stock
         return result

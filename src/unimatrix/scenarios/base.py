@@ -47,7 +47,7 @@ class Scenario:
         from ..world.contracts import require
 
         require(
-            len(state.agents) == 8 and state.tick == 0 and manifest["ticks"] == 240,
+            8 <= len(state.agents) <= 128 and state.tick == 0 and manifest["ticks"] == 240,
             "invalid_world_shape",
         )
         require(

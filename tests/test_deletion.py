@@ -19,7 +19,6 @@ async def draft(client, ident="delete-me", seed=100):
             name=ident,
             description="Deletion test",
             domains=["D1"],
-            levels=[1],
             seeds=[seed],
             holdout_seeds=[200],
             roles=["advantaged"],
@@ -211,7 +210,9 @@ async def test_delete_single_benchmark_preserves_other_data(tmp_path, monkeypatc
         assert not folder.exists()
         assert service.folder(other["id"]).exists() and sentinel.exists()
         assert [r["id"] for r in (await client.get("/api/benchmarks")).json()] == [other["id"]]
-        assert any(r["recipe_id"] == "standard-v1" for r in (await client.get("/api/recipes")).json())
+        assert any(
+            r["recipe_id"] == "standard-v1" for r in (await client.get("/api/recipes")).json()
+        )
         assert (await client.get(path)).status_code == 404
         assert (await client.delete(path)).status_code == 404
         assert (await client.get(path + "/deletion")).status_code == 404

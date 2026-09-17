@@ -29,9 +29,11 @@ runs automatically using the selected recipe.
 ## Authored recipes
 
 The bundled [Standard v1](src/unimatrix/benchmark/plans/standard-v1.json) contains
-192 explicit cases: eight domains, three levels, four seeds and two roles.
+64 explicit cases: eight domains, four seeds and two roles.
 [Compact v1](src/unimatrix/benchmark/plans/compact-v1.json) contains eight cases and
-has its own leaderboard. Both fix seven scripted peers; only the candidate changes.
+has its own leaderboard. Both default to seven scripted peers. In the Lab, choose 7–127 peers and assign
+each a scripted policy or a model with its own personality system prompt.
+All new recipes use one fixed set of scenario rules (the former level 2).
 These initial recipes are experimental, not empirically certified benchmarks.
 
 Create subsequent recipes in **Recipe lab**, or write JSON files in `config/recipes/`. Give each one a

@@ -48,7 +48,7 @@ class SocialWorld(Scenario):
     def feasible(self, manifest):
         state = self.build(manifest)
         require(
-            2 <= manifest["initial_population"] <= len(state.agents) <= 16, "invalid_population"
+            2 <= manifest["initial_population"] <= len(state.agents) <= 128, "invalid_population"
         )
         require(
             all(q >= 0 for a in state.agents.values() for q in a["inventory"].values()),

@@ -49,12 +49,10 @@ def validate_plan(spec):
         or spec["budgets"] not in (BUDGETS, dict(BUDGETS, generation_tokens_per_decision=4096))
     ):
         raise ValueError("This engine requires 240 ticks and the supported fixed decision budgets")
-    if not isinstance(spec["peers"], list) or len(spec["peers"]) != 7:
-        raise ValueError("Exactly seven fixed peer policies are required")
+    if not isinstance(spec["peers"], list) or not 7 <= len(spec["peers"]) <= 127:
+        raise ValueError("Choose between 7 and 127 peer policies")
     for peer in spec["peers"]:
         validate_policy(peer)
-    if sum(isinstance(p, dict) for p in spec["peers"]) not in (0, 2):
-        raise ValueError("This engine supports zero or two fixed reference models")
     domains = spec["domains"]
     if (
         not isinstance(domains, dict)
@@ -137,11 +135,19 @@ def bind_candidate(spec, candidate):
     validate_plan(spec)
     validate_policy(candidate)
     spec = deepcopy(spec)
+    if any(c["level"] != 2 for c in spec["cases"]):
+        raise ValueError("This recipe uses retired difficulty settings; rebuild it in the Lab")
     scoring = scoring_spec(spec)
     pool = next(iter(scoring["population_by_seed"].values()))
     manifests = []
     for case in spec["cases"]:
-        item = episode(**case, candidate=candidate, population=pool, suite_hash=digest(scoring))
+        item = episode(
+            **case,
+            candidate=candidate,
+            population=pool,
+            suite_hash=digest(scoring),
+            peer_count=len(spec["peers"]),
+        )
         peers = [s for s in item["slots"] if s != item["focal_slot"]]
         for slot, config in zip(peers, spec["peers"]):
             item["policies"][slot] = deepcopy(config)

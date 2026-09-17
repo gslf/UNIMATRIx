@@ -61,6 +61,10 @@ def bound_packet(packet):
                 else:
                     packet[field].pop()
                 packet["omitted"][field] += 1
+    # Large societies expose a rotating neighborhood within the fixed observation budget.
+    while packet["peers"] and section_bytes(packet, "self") > SECTIONS["self"][0]:
+        packet["peers"].pop()
+        packet["omitted"]["peers"] = packet["omitted"].get("peers", 0) + 1
     # Keep the full private note in state. Only its displayed UTF-8 prefix is
     # shortened when JSON escaping or the field header exhausts the quota.
     note = packet["private_note"]
@@ -142,5 +146,9 @@ def observe(state, slot, scenario):
         private_note=note,
         omitted=dict(inbox=omitted, retrieval=omitted_hits, objects=omitted_objects),
     )
+    if section_bytes(packet, "self") > SECTIONS["self"][0]:
+        peers = packet["peers"]
+        start = (state.tick + ranks[slot]) % len(peers)
+        packet["peers"] = peers[start:] + peers[:start]
     packet["events"], packet["omitted"]["events"] = fit(memory[-8:], 1500)
     return bound_packet(packet)

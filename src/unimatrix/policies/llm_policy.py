@@ -10,6 +10,7 @@ import lmstudio
 
 from ..benchmark.runner import InfrastructureFailure
 from ..core.ids import canonical, digest
+from ..core.visibility import PROTOCOL
 
 
 class ContextConfigurationError(ValueError):
@@ -25,6 +26,10 @@ class LLMPolicy:
         self.fingerprint = digest(config)
         self.client = client or httpx.AsyncClient(timeout=httpx.Timeout(60, read=None))
 
+    def system_prompt(self):
+        personality = self.config.get("system_prompt")
+        return PROTOCOL + "\n\nAgent personality:\n" + personality if personality else None
+
     async def decide(self, observation, budget):
         if "context_tokens" in self.config:
             return await self._decide_with_context(observation)
@@ -38,7 +43,10 @@ class LLMPolicy:
             headers["Authorization"] = "Bearer " + key
         body = dict(
             model=self.config["model"],
-            messages=[dict(role="user", content=canonical(observation))],
+            messages=(
+                [dict(role="system", content=self.system_prompt())] if self.system_prompt() else []
+            )
+            + [dict(role="user", content=canonical(observation))],
             temperature=self.config.get("temperature", 0),
             # Constrain only JSON syntax; envelope validity remains a scored outcome.
             # LM Studio supports json_schema but rejects json_object.
@@ -80,6 +88,7 @@ class LLMPolicy:
         choice = data["choices"][0]
         raw = choice["message"].get("content") or ""
         return raw, dict(
+            system_prompt=self.system_prompt(),
             purpose="decision",
             generated_tokens=generated,
             input_tokens=usage.get("prompt_tokens"),
@@ -129,8 +138,12 @@ class LLMPolicy:
                         raise ContextConfigurationError(
                             "model_seed_mismatch: reload the model with the configured seed"
                         )
+                prompt = canonical(observation)
+                if self.system_prompt():
+                    prompt = lmstudio.Chat(self.system_prompt())
+                    prompt.add_user_message(canonical(observation))
                 result = await model.respond(
-                    canonical(observation),
+                    prompt,
                     response_format={"type": "object"},
                     config={
                         # This bound is derived solely from context. stopAtLimit
@@ -155,6 +168,7 @@ class LLMPolicy:
             raise InfrastructureFailure("missing_generation_accounting")
         stats = result.stats.to_dict()
         return "".join(answer), dict(
+            system_prompt=self.system_prompt(),
             purpose="decision",
             generated_tokens=generated,
             input_tokens=result.stats.prompt_tokens_count,

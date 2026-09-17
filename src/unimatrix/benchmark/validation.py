@@ -23,6 +23,8 @@ def validate_policy(config):
         "input_price_per_million",
         "output_price_per_million",
         "max_input_tokens",
+        "personality",
+        "system_prompt",
     }
     if not isinstance(config, dict) or not required <= config.keys() or set(config) - allowed:
         raise ValueError("invalid_model_configuration")
@@ -31,6 +33,13 @@ def validate_policy(config):
         for k in ("model", "snapshot", "endpoint")
     ):
         raise ValueError("model_snapshot_and_endpoint_must_be_strings")
+    for key, limit in (("personality", 120), ("system_prompt", 8000)):
+        if key in config and (
+            not isinstance(config[key], str) or not config[key].strip() or len(config[key]) > limit
+        ):
+            raise ValueError("invalid_" + key)
+    if config.get("personality") and not config.get("system_prompt"):
+        raise ValueError("personality_requires_system_prompt")
     if config.get("api_key_env") and config.get("api_key_file"):
         raise ValueError("choose_one_api_key_source")
     for key in ("api_key_env", "api_key_file"):
@@ -109,18 +118,18 @@ def validate_manifest(manifest):
         raise ValueError("social_world_has_no_core_score")
     if type(manifest.get("ticks")) is not int or not 1 <= manifest["ticks"] <= 1000000:
         raise ValueError("invalid_horizon")
-    if domain != "social" and (manifest["ticks"] != 240 or manifest.get("level") not in {1, 2, 3}):
+    if domain != "social" and (manifest["ticks"] != 240 or manifest.get("level") != 2):
         raise ValueError("invalid_episode_shape")
     slots = manifest.get("slots", [])
     if (
-        not 2 <= len(slots) <= 16
+        not 2 <= len(slots) <= 128
         or len(set(slots)) != len(slots)
         or set(manifest.get("policies", {})) != set(slots)
         or manifest.get("focal_slot") not in slots
     ):
         raise ValueError("all_slots_must_be_bound")
-    if domain != "social" and len(slots) != 8:
-        raise ValueError("exactly_eight_bound_slots_required")
+    if domain != "social" and not 8 <= len(slots) <= 128:
+        raise ValueError("benchmark_requires_7_to_127_peers")
     if mode != "core" and not 2 <= manifest.get("initial_population", 0) <= len(slots):
         raise ValueError("invalid_initial_population")
     if not re.fullmatch("[a-f0-9]{24}", manifest.get("run_id", "")):
@@ -132,7 +141,7 @@ def validate_manifest(manifest):
     peers = [manifest["policies"][s] for s in slots if s != manifest["focal_slot"]]
     llms = sum(isinstance(c, dict) for c in peers)
     if (manifest.get("population") == "P0" and llms != 0) or (
-        manifest.get("population") == "P1" and llms != 2
+        manifest.get("population") == "P1" and llms < 1
     ):
         raise ValueError("pool_binding_mismatch")
     if manifest.get("population") not in {"P0", "P1", "society", "explore"}:

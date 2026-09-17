@@ -18,12 +18,13 @@ from unimatrix.world.recipes import execute
 def test_market_fixture_exhaustive():
     m = get_scenario("D2").build(episode()).scenario["markets"][0]
     seller, buyer = m["seller"], m["buyer"]
-    assert len(enumerate_market(m)) == 33
-    assert m["gmax"] == 8
-    assert m["bounds"][buyer] == [0, 20]
+    assert len(m["parties"]) == 3
+    assert len(enumerate_market(m)) == 396
+    assert m["gmax"] == 11
+    assert m["bounds"][buyer] == [0, 23]
     assert m["bounds"][seller] == [0, 12]
     assert utility(m, seller, {"goods": 0, "credits": 6000}) == 6
-    assert utility(m, buyer, {"goods": 2000, "credits": 4000}) == 14
+    assert utility(m, buyer, {"goods": 2000, "credits": 4000}) == 17
 
 
 def test_ecology_maximum_and_reference_feasible():

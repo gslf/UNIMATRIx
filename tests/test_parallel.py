@@ -193,7 +193,6 @@ async def test_parallelism_is_saved_by_both_launch_interfaces(tmp_path, monkeypa
                 name="Parallel test",
                 description="Test",
                 domains=["D1"],
-                levels=[1],
                 seeds=[100, 101],
                 roles=["advantaged"],
             ),

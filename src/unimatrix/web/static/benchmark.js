@@ -140,12 +140,12 @@ async function loadRun(token=revision){
   $("strata").replaceChildren();for(const [name,values]of Object.entries(result.report?.strata||{})){const card=node("div",undefined,"card");bars(card,"Score by "+name,Object.entries(values));$("strata").append(card);}
   const previous=$("domain-filter").value;$("domain-filter").replaceChildren(new Option("All domains",""),...[...new Set(result.episodes.map(e=>e.domain))].map(d=>new Option(d+" · "+domains[d],d)));$("domain-filter").value=previous;
   renderEpisodes();
-  const started=result.episodes.filter(e=>e.status!=="pending");$("episode-select").replaceChildren(...started.map(e=>new Option(`#${e.index} · ${e.domain} · L${e.level} · seed ${e.seed} · ${e.role}`,e.run_id)));
+  const started=result.episodes.filter(e=>e.status!=="pending");$("episode-select").replaceChildren(...started.map(e=>new Option(`#${e.index} · ${e.domain} · seed ${e.seed} · ${e.role}`,e.run_id)));
   if(!started.some(e=>e.run_id===episodeId))episodeId=started[0]?.run_id||"";$("episode-select").value=episodeId;
   await showDetail(detailView,false);
 }
 function renderEpisodes(){
-  $("episodes").replaceChildren();for(const e of runDetail.episodes.filter(e=>!$("domain-filter").value||e.domain===$("domain-filter").value)){const row=node("tr");cell(row,`#${e.index}`);cell(row,e.domain);cell(row,e.level);cell(row,e.seed);cell(row,e.role);cell(row,`${e.completed_tick}/240 · ${e.status}`);cell(row,fmt(e.score));const b=button("Explore",async()=>{episodeId=e.run_id;$("episode-select").value=episodeId;episode=null;await showDetail("agents");});b.disabled=e.status==="pending";cell(row,b);$("episodes").append(row);}
+  $("episodes").replaceChildren();for(const e of runDetail.episodes.filter(e=>!$("domain-filter").value||e.domain===$("domain-filter").value)){const row=node("tr");cell(row,`#${e.index}`);cell(row,e.domain);cell(row,e.seed);cell(row,e.role);cell(row,`${e.completed_tick}/240 · ${e.status}`);cell(row,fmt(e.score));const b=button("Explore",async()=>{episodeId=e.run_id;$("episode-select").value=episodeId;episode=null;await showDetail("agents");});b.disabled=e.status==="pending";cell(row,b);$("episodes").append(row);}
 }
 async function showDetail(name, reload=true){
   detailView=name;for(const key of ["overview","episodes","agents","messages","events"])$("detail-"+key).hidden=key!==name;

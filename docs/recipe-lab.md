@@ -9,9 +9,10 @@ weights, all nine peer policies, intervention combinations, findings and workflo
 ## Build, test, inspect, version
 
 1. Start from a named recipe, enter a new recipe ID and name, then select domains,
-   difficulty levels, scenario seeds, starting roles and inference replicates.
-   Reserve a separate holdout seed set. Advanced settings select seven fixed peers
-   and the three metric weights within each domain.
+   scenario seeds, starting roles and inference replicates.
+   Reserve a separate holdout seed set. Choose 7–127 peers, each with a scripted policy or a saved model. Model peers
+   have individual personality names and editable system prompts, with presets.
+   Advanced settings select the three metric weights within each domain.
 2. **Build draft** creates a balanced Cartesian list of explicit cases and saves
    development and optional holdout JSON. It makes no inference calls. The engine
    budgets and bootstrap settings are inherited from the base recipe. Notes identify
@@ -106,7 +107,7 @@ With eight cases per study, that is 96 episodes. With scripted peers there are a
 most 11,520 provider decisions and 34,560 attempts including retries. Fixed reference
 models increase calls in every study. A evaluation is limited to 20,000 episodes.
 
-Use a small baseline pilot first. Then increase domains, levels, roles and seeds,
+Use a small baseline pilot first. Then increase domains, roles and seeds,
 compare several normal models, and inspect paired memory/communication effects.
 Use label/order interventions to investigate presentation sensitivity. The in-page
 manual provides four complete workflows and explains how to interpret each finding.
@@ -141,3 +142,28 @@ note. Inspect individual systems before interpreting pooled floors or ceilings.
 Model score spread excludes baselines and requires two normal models. These checks
 do not certify a recipe's validity or automatically optimize its weights. After tuning
 against holdout results, reserve new seeds for any further confirmation.
+
+## Society size and personalities
+
+New designs use the fixed scenario rules formerly called level 2. The Lab no
+longer offers difficulty selection. Old saved evaluations retain their evidence;
+rebuild old recipes in the Lab before starting a new evaluation. Standard now
+contains 64 cases; Compact contains 8. Changed recipe and runtime hashes separate
+these results from older leaderboards.
+
+Societies contain one Protagonist and 7–127 peers. Eight total agents is the
+minimum supported by the recovery scenario. Any number of peers may use models.
+A personality is stored in the peer configuration as `personality` and
+`system_prompt`, and is sent as a system message on every provider request, along
+with the decision protocol. Native LM Studio and OpenAI-compatible requests both
+use it. The same model can appear several times with different personalities.
+The recipe freezes these configurations across competitors; changing a prompt
+changes execution identities and requires a new preview.
+
+The shared resource stock, regeneration capacity, demand target and reserve score
+scale with population. Other scenarios retain their defined tasks and roles;
+adding peers does not multiply every task or guarantee every peer a specialized
+role. Large societies receive a rotating neighborhood when the full peer list
+exceeds the observation budget; `omitted.peers` records the number omitted. All
+agents still execute and participate in the simulation. Model peer costs are
+included in the evaluation preview, including scripted Protagonist studies.

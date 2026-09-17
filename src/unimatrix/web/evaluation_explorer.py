@@ -22,6 +22,8 @@ def policy_info(policy):
     return dict(
         kind="model",
         name=policy["model"],
+        personality=policy.get("personality"),
+        system_prompt=policy.get("system_prompt"),
         snapshot=policy["snapshot"],
         context_tokens=policy.get("context_tokens"),
         endpoint=urlunsplit((endpoint.scheme, host, endpoint.path, "", "")),

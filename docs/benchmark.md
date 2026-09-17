@@ -77,13 +77,14 @@ Each recipe contains:
 | `description` | Purpose and scope |
 | `engine` | `unimatrix-3` |
 | `ticks` | 240 transitions per episode in the current engine |
-| `peers` | Exactly seven fixed policy names or model configurations |
+| `peers` | 7–127 fixed policy names or model configurations |
 | `cases` | Explicit objects with `domain`, `level`, `seed`, `role`, `replicate` |
 | `domains` | The three supported metric IDs and weights for each included domain |
 | `budgets` | The supported decision, context, envelope and retry limits |
 | `bootstrap` | Fixed resampling seed and count for confidence intervals |
 
-The current engine supports zero or two reference models among the seven peers.
+Any number of peers may use models. Model configurations may include a personality
+name and a system prompt; a named personality requires a nonempty prompt.
 Reference configurations belong to the recipe and cannot be changed by competitors.
 The candidate occupies the same deterministic focal slot for every model tested
 on a particular case. Replicates adjust an explicitly configured candidate
@@ -98,14 +99,15 @@ bytes and three attempts per decision. These bound world input and structured
 actions, not reasoning. The legacy society per-tick generation budget is no longer
 divided among agents. Unsupported
 values are rejected; changing their semantics requires an engine revision as well
-as a new recipe. Cases may select any subset of D1–D8 and levels 1–3; duplicate cases
+as a new recipe. Cases may select any subset of D1–D8. The serialized `level` field is retained
+for historical data compatibility and is fixed to 2 in all new recipes; duplicate cases
 are rejected. Each included domain must have cases, and its metric weights must
 sum to one.
 
 ## Scores and comparable results
 
-The aggregate score is 0–100. Metrics are weighted within an episode, levels are
-weighted equally within a domain, and domains are weighted equally overall.
+The aggregate score is 0–100. Metrics are weighted within an episode, cases are weighted equally within a
+domain, and domains are weighted equally overall.
 The score requires every case to finish. Missing cases and infrastructure failures
 are never converted into zero scores. Invalid model decisions consume their turn
 under the same rules as every other candidate.

@@ -17,12 +17,12 @@ class Design(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     description: str = Field(min_length=1, max_length=2000)
     domains: list[str] = Field(min_length=1, max_length=8)
-    levels: list[int] = Field(min_length=1, max_length=3)
+    levels: list[int] = Field(default_factory=lambda: [2], exclude=True)
     seeds: list[int] = Field(min_length=1, max_length=32)
     holdout_seeds: list[int] = Field(default_factory=list, max_length=32)
     roles: list[str] = Field(min_length=1, max_length=2)
     replicates: int = Field(1, ge=1, le=4)
-    peers: list[str | dict] | None = Field(default=None, min_length=7, max_length=7)
+    peers: list[str | dict] | None = Field(default=None, min_length=7, max_length=127)
     weights: dict[str, dict[str, float]] | None = None
 
     @model_validator(mode="after")
@@ -33,8 +33,8 @@ class Design(BaseModel):
                 raise ValueError("Duplicate values in " + key)
         if set(self.domains) - {f"D{i}" for i in range(1, 9)}:
             raise ValueError("Choose domains D1–D8")
-        if set(self.levels) - {1, 2, 3}:
-            raise ValueError("Choose levels 1–3")
+        if self.levels != [2]:
+            raise ValueError("Difficulty selection has been retired; rebuild with the fixed rules")
         if set(self.roles) - {"advantaged", "disadvantaged"}:
             raise ValueError("Unknown starting role")
         if set(self.seeds) & set(self.holdout_seeds):
@@ -63,7 +63,7 @@ def build_design(design, plans):
                 dict(zip(["domain", "level", "seed", "role", "replicate"], values))
                 for values in itertools.product(
                     design.domains,
-                    sorted(design.levels),
+                    [2],
                     sorted(seeds),
                     design.roles,
                     range(design.replicates),
@@ -81,10 +81,6 @@ def build_design(design, plans):
         notes.append("Use at least four development seeds to assess variation across instances.")
     if len(design.roles) < 2:
         notes.append("Only one starting role is covered; role asymmetry will not be measured.")
-    if len(design.levels) < 3:
-        notes.append(
-            "Some difficulty levels are omitted. This is useful for a pilot, but limits coverage."
-        )
     if not holdout:
         notes.append("Reserve disjoint holdout seeds before using results to tune this plan.")
     if len(design.domains) < 8:

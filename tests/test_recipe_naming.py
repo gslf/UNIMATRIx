@@ -61,7 +61,6 @@ async def test_recipe_api_and_lab_keep_saved_json_compatible(tmp_path):
             name="Research v1",
             description="Benchmark recipe test",
             domains=["D1"],
-            levels=[1],
             seeds=[100],
             roles=["advantaged"],
         )

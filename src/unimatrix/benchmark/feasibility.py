@@ -156,11 +156,11 @@ def witness(state, scenario):
 
 
 @lru_cache(maxsize=1024)
-def _certificate(domain, level, seed, role, runtime):
+def _certificate(domain, level, seed, role, runtime, peer_count):
     from ..scenarios import get_scenario
     from .manifests import episode
 
-    manifest = episode(domain, level, seed, role)
+    manifest = episode(domain, level, seed, role, peer_count=peer_count)
     scenario = get_scenario(domain)
     state = scenario.build(manifest)
     trace = []
@@ -189,7 +189,10 @@ def _certificate(domain, level, seed, role, runtime):
     elif domain == "D3":
         require(all(r["success"] for r in s["results"]), "infeasible_deadline")
     elif domain == "D4":
-        require(s["stock"] >= 40000 and min(s["samples"][200:]) == 1, "infeasible_commons")
+        require(
+            s["stock"] >= 5000 * len(state.agents) and min(s["samples"][200:]) == 1,
+            "infeasible_commons",
+        )
     elif domain == "D5":
         require(
             all(r["utility"] >= 0 and r["bounds"][1] > r["bounds"][0] for r in s["results"]),
@@ -228,5 +231,6 @@ def certify(manifest):
             manifest["seed"],
             manifest["role"],
             manifest["runtime_fingerprint"],
+            len(manifest["slots"]) - 1,
         )
     )

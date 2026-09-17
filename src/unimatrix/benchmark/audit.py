@@ -25,7 +25,7 @@ def run(seeds=range(8)):
     violations = []
     for domain in [f"D{i}" for i in range(1, 9)]:
         scenario = get_scenario(domain)
-        for level in [1, 2, 3]:
+        for level in [2]:
             for seed in seeds:
                 for role in ["advantaged", "disadvantaged"]:
                     manifest = episode(domain, level, seed, role)

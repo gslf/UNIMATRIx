@@ -14,12 +14,12 @@ class Config(BaseModel):
     domain: Literal["D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8", "social"]
     seed: int = 0
     ticks: int = Field(240, ge=1, le=1000000)
-    level: int = Field(1, ge=1, le=3)
+    level: Literal[2] = Field(2, exclude=True)
     role: Literal["advantaged", "disadvantaged"] = "advantaged"
     candidate: str | dict = "reciprocal"
     policies: list[str | dict] | None = None
-    population: int = Field(8, ge=2, le=16)
-    capacity: int = Field(8, ge=2, le=16)
+    population: int = Field(8, ge=2, le=128)
+    capacity: int = Field(8, ge=2, le=128)
     generation_tokens_per_tick: int = Field(32768, ge=256, le=65536)
 
     @model_validator(mode="after")
@@ -31,16 +31,17 @@ class Config(BaseModel):
         if self.mode == "core" and (
             self.domain == "social"
             or self.ticks != 240
-            or self.population != 8
-            or self.capacity != 8
+            or self.population != self.capacity
             or self.policies
             or self.generation_tokens_per_tick != 32768
         ):
-            raise ValueError("Core requires a benchmark domain, 240 ticks and eight fixed slots")
+            raise ValueError(
+                "Core requires a benchmark domain, 240 ticks and a fully populated society"
+            )
         if self.domain != "social" and (
-            self.ticks != 240 or self.capacity != 8 or self.population != 8
+            self.ticks != 240 or self.population != self.capacity or self.capacity < 8
         ):
-            raise ValueError("Benchmark scenarios require 240 ticks and eight slots")
+            raise ValueError("Benchmark scenarios require 240 ticks and 8–128 active agents")
         if self.policies and len(self.policies) != self.capacity:
             raise ValueError("One policy per slot is required, including vacant slots")
         for policy in [self.candidate, *(self.policies or [])]:
@@ -51,7 +52,14 @@ class Config(BaseModel):
         from ..benchmark.manifests import episode
         from ..core.ids import digest
 
-        manifest = episode(self.domain, self.level, self.seed, self.role, candidate=self.candidate)
+        manifest = episode(
+            self.domain,
+            self.level,
+            self.seed,
+            self.role,
+            candidate=self.candidate,
+            peer_count=max(7, self.capacity - 1),
+        )
         manifest.update(mode=self.mode, ticks=self.ticks)
         if self.mode != "core":
             slots = [f"slot-{i}" for i in range(self.capacity)]

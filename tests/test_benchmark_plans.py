@@ -10,7 +10,7 @@ def test_candidates_share_all_cases_peers_and_scoring_rules():
     spec = PlanRepository().get("standard-v1")
     a = bind_candidate(spec, "passive")
     b = bind_candidate(spec, "reciprocal")
-    assert len(a["episodes"]) == len(spec["cases"]) == 192
+    assert len(a["episodes"]) == len(spec["cases"]) == 64
     assert a["suite"] == b["suite"]
     for left, right, case in zip(a["episodes"], b["episodes"], spec["cases"]):
         for key in ("domain", "level", "seed", "role", "replicate"):

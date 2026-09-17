@@ -37,7 +37,6 @@ def design(**changes):
         name="Lab v1",
         description="Test design",
         domains=["D1"],
-        levels=[1],
         seeds=[100],
         holdout_seeds=[200],
         roles=["advantaged"],
@@ -58,7 +57,6 @@ def test_design_is_balanced_disjoint_and_keeps_base_unchanged():
     data = design()
     data.update(
         domains=["D1", "D2"],
-        levels=[1, 3],
         roles=["advantaged", "disadvantaged"],
         seeds=[11, 12],
         holdout_seeds=[21, 22, 23],
@@ -66,8 +64,8 @@ def test_design_is_balanced_disjoint_and_keeps_base_unchanged():
         weights={"D1": {"D1.prediction": 0.2, "D1.decision": 0.4, "D1.update": 0.4}},
     )
     result = build_design(Design(**data), plans)
-    assert result["episodes"] == 32
-    assert result["holdout_episodes"] == 48
+    assert result["episodes"] == 16
+    assert result["holdout_episodes"] == 24
     assert result["plan"]["domains"]["D1"]["metrics"] == data["weights"]["D1"]
     assert {c["seed"] for c in result["holdout"]["cases"]} == {21, 22, 23}
     for key in ["engine", "budgets", "bootstrap", "peers", "ticks"]:
@@ -88,7 +86,7 @@ def test_design_is_balanced_disjoint_and_keeps_base_unchanged():
         {"peers": []},
         {"id": "../overwrite"},
         {"weights": {"D1": {"D1.prediction": 1, "D1.decision": 0.4, "D1.update": 0.4}}},
-        {"peers": [MODEL] + ["passive"] * 6},
+        {"peers": ["passive"] * 128},
     ],
 )
 def test_invalid_designs_are_rejected(changes):

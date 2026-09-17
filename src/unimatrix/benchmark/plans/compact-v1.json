@@ -85,56 +85,56 @@
   "cases": [
     {
       "domain": "D1",
-      "level": 1,
+      "level": 2,
       "seed": 0,
       "role": "advantaged",
       "replicate": 0
     },
     {
       "domain": "D2",
-      "level": 1,
+      "level": 2,
       "seed": 0,
       "role": "advantaged",
       "replicate": 0
     },
     {
       "domain": "D3",
-      "level": 1,
+      "level": 2,
       "seed": 0,
       "role": "advantaged",
       "replicate": 0
     },
     {
       "domain": "D4",
-      "level": 1,
+      "level": 2,
       "seed": 0,
       "role": "advantaged",
       "replicate": 0
     },
     {
       "domain": "D5",
-      "level": 1,
+      "level": 2,
       "seed": 0,
       "role": "advantaged",
       "replicate": 0
     },
     {
       "domain": "D6",
-      "level": 1,
+      "level": 2,
       "seed": 0,
       "role": "advantaged",
       "replicate": 0
     },
     {
       "domain": "D7",
-      "level": 1,
+      "level": 2,
       "seed": 0,
       "role": "advantaged",
       "replicate": 0
     },
     {
       "domain": "D8",
-      "level": 1,
+      "level": 2,
       "seed": 0,
       "role": "advantaged",
       "replicate": 0

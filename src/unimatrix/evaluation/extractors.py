@@ -97,7 +97,7 @@ def extract(store):
             [min(fmean(values[start : start + 10]) for start in [200, 210, 220, 230])],
             1,
         )
-        add("reserve", [clip(stocks[-1]["stock"] / 40000)], 1)
+        add("reserve", [clip(stocks[-1]["stock"] / stocks[-1].get("reserve_target", 40000))], 1)
     elif domain == "D5":
         outcomes = rows("opportunity_closed") + rows("dispute_resolved")
         add("relational_utility", [normalize(r["utility"], *r["bounds"]) for r in outcomes], 12)
