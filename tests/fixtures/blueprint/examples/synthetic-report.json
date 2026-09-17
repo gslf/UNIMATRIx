@@ -1,0 +1,78 @@
+{
+  "candidate_id": "SYNTHETIC-A",
+  "data_kind": "synthetic",
+  "certified": false,
+  "release_status": "draft",
+  "benchmark_id": "USI-core-v1-draft",
+  "suite_hash": "b5cae6a038c1547ba1eeb64f0e2e0f24559343ce3606c03d7a4942966d405ab6",
+  "scaffold_id": "core-minimal-v1",
+  "budget_track": "accounted_compute",
+  "completed_episodes": 768,
+  "ticks_per_episode": 240,
+  "usi": 69.35,
+  "ci95": [
+    69.03125,
+    69.6875
+  ],
+  "domains": {
+    "D1": {
+      "score": 66.2,
+      "ci95": [
+        65.3,
+        67.1
+      ]
+    },
+    "D2": {
+      "score": 67.1,
+      "ci95": [
+        66.2,
+        68.0
+      ]
+    },
+    "D3": {
+      "score": 68.0,
+      "ci95": [
+        67.1,
+        68.9
+      ]
+    },
+    "D4": {
+      "score": 68.9,
+      "ci95": [
+        68.0,
+        69.8
+      ]
+    },
+    "D5": {
+      "score": 69.8,
+      "ci95": [
+        68.9,
+        70.7
+      ]
+    },
+    "D6": {
+      "score": 70.7,
+      "ci95": [
+        69.8,
+        71.6
+      ]
+    },
+    "D7": {
+      "score": 71.6,
+      "ci95": [
+        70.7,
+        72.5
+      ]
+    },
+    "D8": {
+      "score": 72.5,
+      "ci95": [
+        71.6,
+        73.4
+      ]
+    }
+  },
+  "bootstrap_resamples": 5000,
+  "interval_scope": "Sampled seed clusters within fixed domains and populations; not construct validity.",
+  "warning": "Scoring reference only. Synthetic examples are not real model evaluations. This draft cannot certify a release."
+}

@@ -1,0 +1,118 @@
+{
+  "type": "object",
+  "properties": {
+    "data_kind": {
+      "enum": [
+        "synthetic",
+        "empirical"
+      ]
+    },
+    "candidate_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "benchmark_id": {
+      "const": "USI-core-v1-draft"
+    },
+    "suite_hash": {
+      "type": "string",
+      "pattern": "^[a-f0-9]{64}$"
+    },
+    "scaffold_id": {
+      "const": "core-minimal-v1"
+    },
+    "budget_track": {
+      "enum": [
+        "accounted_compute",
+        "opaque_compute"
+      ]
+    },
+    "runs": {
+      "type": "array",
+      "minItems": 768,
+      "maxItems": 768,
+      "items": {
+        "type": "object",
+        "properties": {
+          "domain": {
+            "enum": [
+              "D1",
+              "D2",
+              "D3",
+              "D4",
+              "D5",
+              "D6",
+              "D7",
+              "D8"
+            ]
+          },
+          "level": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 3
+          },
+          "seed": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 7
+          },
+          "role": {
+            "enum": [
+              "advantaged",
+              "disadvantaged"
+            ]
+          },
+          "replicate": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 1
+          },
+          "population": {
+            "enum": [
+              "P0",
+              "P1"
+            ]
+          },
+          "status": {
+            "const": "completed"
+          },
+          "scores": {
+            "type": "object",
+            "minProperties": 3,
+            "maxProperties": 3,
+            "additionalProperties": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          }
+        },
+        "required": [
+          "domain",
+          "level",
+          "seed",
+          "role",
+          "replicate",
+          "population",
+          "status",
+          "scores"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "data_kind",
+    "candidate_id",
+    "benchmark_id",
+    "suite_hash",
+    "scaffold_id",
+    "budget_track",
+    "runs"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:unimatrix:normalized-results:v1",
+  "description": "Normalized scoring input, not raw engine telemetry. Cross-field catalog IDs, completeness and uniqueness are checked by score.py. Production extractors must retain raw values, evidence and model fingerprints separately."
+}

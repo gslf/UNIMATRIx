@@ -16,4 +16,14 @@ runs/
 .DS_Store
 chroma_*/
 .claude/*
+.codex/*
+.agents/*
 analysis_scripts/
+
+build/
+dist/
+.ruff_cache/
+.hypothesis/
+
+# Local inference credentials managed by the configuration page
+*-credentials.json

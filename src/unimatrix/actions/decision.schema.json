@@ -1,0 +1,1076 @@
+{
+  "type": "object",
+  "properties": {
+    "protocol": {
+      "const": "unimatrix.decision.v3"
+    },
+    "tick": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 999999
+    },
+    "agent_id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "messages": {
+      "type": "array",
+      "maxItems": 2,
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "to": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120
+                },
+                "minItems": 1,
+                "maxItems": 4,
+                "uniqueItems": true
+              },
+              "channel": {
+                "const": "private"
+              },
+              "content": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1200
+              }
+            },
+            "required": [
+              "to",
+              "channel",
+              "content"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "to": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120
+                },
+                "minItems": 0,
+                "maxItems": 0,
+                "uniqueItems": true
+              },
+              "channel": {
+                "const": "public"
+              },
+              "content": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1200
+              }
+            },
+            "required": [
+              "to",
+              "channel",
+              "content"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "to": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120
+                },
+                "minItems": 1,
+                "maxItems": 1,
+                "uniqueItems": true
+              },
+              "channel": {
+                "const": "group"
+              },
+              "content": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 1200
+              }
+            },
+            "required": [
+              "to",
+              "channel",
+              "content"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    "operations": {
+      "type": "array",
+      "maxItems": 2,
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "properties": {
+              "verb": {
+                "const": "move"
+              },
+              "destination_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              }
+            },
+            "required": [
+              "verb",
+              "destination_id"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "verb": {
+                "const": "work"
+              },
+              "project_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              }
+            },
+            "required": [
+              "verb",
+              "project_id"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "verb": {
+                "const": "create_project"
+              },
+              "recipe_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "beneficiary_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120
+                },
+                "uniqueItems": true,
+                "maxItems": 8
+              }
+            },
+            "required": [
+              "verb",
+              "recipe_id",
+              "title",
+              "beneficiary_ids"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "verb": {
+                "const": "register_recipe"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "steps": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "transform_id": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120
+                    },
+                    "input_slots": {
+                      "type": "array",
+                      "items": {
+                        "type": "integer",
+                        "minimum": 0,
+                        "maximum": 31
+                      },
+                      "minItems": 1,
+                      "maxItems": 4
+                    },
+                    "output_slot": {
+                      "type": "integer",
+                      "minimum": 0,
+                      "maximum": 31
+                    }
+                  },
+                  "required": [
+                    "transform_id",
+                    "input_slots",
+                    "output_slot"
+                  ],
+                  "additionalProperties": false
+                },
+                "minItems": 1,
+                "maxItems": 16
+              }
+            },
+            "required": [
+              "verb",
+              "name",
+              "steps"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "verb": {
+                "const": "transfer"
+              },
+              "recipient_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "resource_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "quantity_milli": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000000000
+              }
+            },
+            "required": [
+              "verb",
+              "recipient_id",
+              "resource_id",
+              "quantity_milli"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "verb": {
+                "const": "consume"
+              },
+              "resource_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "quantity_milli": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000000000
+              }
+            },
+            "required": [
+              "verb",
+              "resource_id",
+              "quantity_milli"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "verb": {
+                "const": "inspect"
+              },
+              "target_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              }
+            },
+            "required": [
+              "verb",
+              "target_id"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "verb": {
+                "const": "offer"
+              },
+              "terms": {
+                "type": "object",
+                "properties": {
+                  "legs": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "from_id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 120
+                        },
+                        "to_id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 120
+                        },
+                        "resource_id": {
+                          "type": "string",
+                          "minLength": 1,
+                          "maxLength": 120
+                        },
+                        "quantity_milli": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 1000000000
+                        }
+                      },
+                      "required": [
+                        "from_id",
+                        "to_id",
+                        "resource_id",
+                        "quantity_milli"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "minItems": 1,
+                    "maxItems": 8
+                  },
+                  "expiry_state": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000000
+                  },
+                  "settlement_state": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000000
+                  },
+                  "escrow": {
+                    "type": "boolean"
+                  },
+                  "counterparty_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120
+                    },
+                    "minItems": 1,
+                    "maxItems": 7,
+                    "uniqueItems": true
+                  }
+                },
+                "required": [
+                  "counterparty_ids",
+                  "legs",
+                  "expiry_state",
+                  "settlement_state",
+                  "escrow"
+                ],
+                "additionalProperties": false
+              },
+              "description": {
+                "type": "string",
+                "maxLength": 4000
+              }
+            },
+            "required": [
+              "verb",
+              "terms",
+              "description"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "verb": {
+                "const": "accept"
+              },
+              "offer_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "terms_hash": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            },
+            "required": [
+              "verb",
+              "offer_id",
+              "terms_hash"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "verb": {
+                "const": "cancel"
+              },
+              "offer_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              }
+            },
+            "required": [
+              "verb",
+              "offer_id"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "verb": {
+                "const": "commit"
+              },
+              "opportunity_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "terms_hash": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            },
+            "required": [
+              "verb",
+              "opportunity_id",
+              "terms_hash"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "verb": {
+                "const": "create_group"
+              },
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "purpose": {
+                "type": "string",
+                "maxLength": 4000
+              }
+            },
+            "required": [
+              "verb",
+              "name",
+              "purpose"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "verb": {
+                "const": "join"
+              },
+              "group_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              }
+            },
+            "required": [
+              "verb",
+              "group_id"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "verb": {
+                "const": "leave"
+              },
+              "group_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              }
+            },
+            "required": [
+              "verb",
+              "group_id"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "verb": {
+                "const": "propose_rule"
+              },
+              "group_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "rule": {
+                "type": "object",
+                "properties": {
+                  "decision_method": {
+                    "enum": [
+                      "unanimity",
+                      "majority",
+                      "delegated",
+                      "rotation",
+                      "authority",
+                      "auction"
+                    ]
+                  },
+                  "quorum_numerator": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 8
+                  },
+                  "quorum_denominator": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 8
+                  },
+                  "authorized_asset_ids": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120
+                    },
+                    "uniqueItems": true,
+                    "maxItems": 8
+                  },
+                  "spend_limit_milli": {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 1000000000
+                  },
+                  "expiry_state": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 1000000
+                  },
+                  "authority_id": {
+                    "type": "string"
+                  },
+                  "deposit_resource_id": {
+                    "type": "string"
+                  },
+                  "deposit_milli": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "sanction_milli": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                },
+                "required": [
+                  "decision_method",
+                  "quorum_numerator",
+                  "quorum_denominator",
+                  "authorized_asset_ids",
+                  "spend_limit_milli",
+                  "expiry_state"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "required": [
+              "verb",
+              "group_id",
+              "rule"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "verb": {
+                "const": "vote"
+              },
+              "proposal_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "choice": {
+                "enum": [
+                  "yes",
+                  "no",
+                  "abstain"
+                ]
+              }
+            },
+            "required": [
+              "verb",
+              "proposal_id",
+              "choice"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "verb": {
+                "const": "delegate"
+              },
+              "group_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "recipient_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "asset_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120
+                },
+                "uniqueItems": true,
+                "maxItems": 8
+              },
+              "expiry_state": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000000
+              }
+            },
+            "required": [
+              "verb",
+              "group_id",
+              "recipient_id",
+              "asset_ids",
+              "expiry_state"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "verb": {
+                "const": "publish"
+              },
+              "kind": {
+                "enum": [
+                  "story",
+                  "norm",
+                  "procedure",
+                  "recipe",
+                  "project_proposal",
+                  "other"
+                ]
+              },
+              "content": {
+                "type": "string",
+                "maxLength": 4000
+              },
+              "parent_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120
+                },
+                "uniqueItems": true,
+                "maxItems": 8
+              }
+            },
+            "required": [
+              "verb",
+              "kind",
+              "content",
+              "parent_ids"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "verb": {
+                "const": "experiment"
+              },
+              "recipe_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "input_asset_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120
+                },
+                "uniqueItems": true,
+                "maxItems": 8
+              }
+            },
+            "required": [
+              "verb",
+              "recipe_id",
+              "input_asset_ids"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "verb": {
+                "const": "teach"
+              },
+              "recipient_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "artifact_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              }
+            },
+            "required": [
+              "verb",
+              "recipient_id",
+              "artifact_id"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "verb": {
+                "const": "grant_access"
+              },
+              "recipient_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "object_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              }
+            },
+            "required": [
+              "verb",
+              "recipient_id",
+              "object_id"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "verb": {
+                "const": "revise_profile"
+              },
+              "profile": {
+                "type": "string",
+                "maxLength": 4000
+              }
+            },
+            "required": [
+              "verb",
+              "profile"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "verb": {
+                "const": "handover"
+              },
+              "recipient_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "artifact_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120
+                },
+                "uniqueItems": true,
+                "maxItems": 8
+              }
+            },
+            "required": [
+              "verb",
+              "recipient_id",
+              "artifact_ids"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "verb": {
+                "const": "propose_release"
+              },
+              "contract_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              }
+            },
+            "required": [
+              "verb",
+              "contract_id"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "verb": {
+                "const": "accept_release"
+              },
+              "release_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              },
+              "terms_hash": {
+                "type": "string",
+                "pattern": "^[a-f0-9]{64}$"
+              }
+            },
+            "required": [
+              "verb",
+              "release_id",
+              "terms_hash"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "verb": {
+                "const": "revoke_delegation"
+              },
+              "delegation_id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 120
+              }
+            },
+            "required": [
+              "verb",
+              "delegation_id"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "verb": {
+                "const": "propose_birth"
+              },
+              "partner_id": {
+                "type": "string"
+              },
+              "child_slot": {
+                "type": "string"
+              },
+              "cost_milli": {
+                "type": "integer",
+                "minimum": 1000
+              },
+              "expiry_state": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "required": [
+              "verb",
+              "partner_id",
+              "child_slot",
+              "cost_milli",
+              "expiry_state"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "verb": {
+                "const": "accept_birth"
+              },
+              "proposal_id": {
+                "type": "string"
+              },
+              "terms_hash": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "verb",
+              "proposal_id",
+              "terms_hash"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "verb": {
+                "const": "deposit"
+              },
+              "group_id": {
+                "type": "string"
+              },
+              "quantity_milli": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "required": [
+              "verb",
+              "group_id",
+              "quantity_milli"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "verb": {
+                "const": "withdraw_deposit"
+              },
+              "deposit_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "verb",
+              "deposit_id"
+            ],
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "verb": {
+                "const": "sanction"
+              },
+              "deposit_id": {
+                "type": "string"
+              },
+              "contract_id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "verb",
+              "deposit_id",
+              "contract_id"
+            ],
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    "private_note": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 4000
+    },
+    "memory_query": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "maxLength": 500
+    },
+    "forecasts": {
+      "type": "array",
+      "maxItems": 4,
+      "items": {
+        "type": "object",
+        "properties": {
+          "probe_id": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "probabilities": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 16,
+            "items": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            }
+          }
+        },
+        "required": [
+          "probe_id",
+          "probabilities"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "protocol",
+    "tick",
+    "agent_id",
+    "messages",
+    "operations",
+    "private_note",
+    "memory_query",
+    "forecasts"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:unimatrix:decision:v1",
+  "description": "Structural Core-v1 envelope. Enforce UTF-8 byte budgets, ACL, AP, probability sum, balances, deadlines and consent additionally in the runtime. The DSL here is the v1 subset."
+}

@@ -1,0 +1,3 @@
+recursive-include docs *.md *.json
+recursive-include tests/fixtures *.json *.py
+recursive-include config *.json

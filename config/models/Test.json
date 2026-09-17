@@ -1,0 +1,8 @@
+{
+  "model": "LMF2.5",
+  "snapshot": "lmf2.5-2.6b",
+  "endpoint": "http://95.231.203.68:5556",
+  "context_bytes_verified": 24000,
+  "budget_track": "opaque_compute",
+  "temperature": 0
+}

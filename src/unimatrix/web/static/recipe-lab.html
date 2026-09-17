@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>UNIMATRIx · Recipe lab</title><link rel="stylesheet" href="/static/benchmark.css"><link rel="stylesheet" href="/static/recipe-lab.css"><script src="/static/recipe-lab.js" defer></script></head>
+<body>
+<header class="shell"><div class="brand-row"><div><h1>UNIMATRIx <span>RECIPE LAB</span></h1><p class="muted">Build a draft. Test what it measures. Keep the evidence.</p></div><nav class="controls"><a class="button" href="/">Benchmarks</a><button data-help="all">Guide</button></nav></div></header>
+<main>
+<div id="error" role="alert" hidden></div><p id="notice" role="status" aria-live="polite"></p>
+<div class="controls"><label>Saved drafts <select id="drafts"><option value="">Choose a draft…</option></select></label><button id="load-draft">Load draft</button><button id="delete-recipe" class="danger" disabled>Delete recipe</button></div>
+<p class="muted small">Deleting a recipe also deletes its development and holdout evaluations, benchmark runs and results. Pause running evaluations before deleting.</p>
+<form id="design-form" class="card lab-section">
+<div class="section-title"><div><p class="eyebrow">01 · BUILD</p><h2>Draft a benchmark recipe</h2></div><button type="button" data-help="design">Info</button></div>
+<div class="config-grid">
+<label>Start from <select id="base-recipe"></select></label><label>Recipe ID <input id="recipe-id" required pattern="[a-z0-9][a-z0-9_\-]{0,69}" value="research-v1"></label>
+<label>Recipe name <input id="recipe-name" required maxlength="120" value="Research v1"></label><label>Description <input id="description" required maxlength="2000" value="Development benchmark recipe for research."></label>
+</div>
+<fieldset><legend>Domains</legend><div id="domains" class="choices"></div></fieldset>
+<div class="grid two"><fieldset><legend>Difficulty levels</legend><div id="levels" class="choices"><label><input type="checkbox" name="level" value="1" checked> Level 1</label><label><input type="checkbox" name="level" value="2"> Level 2</label><label><input type="checkbox" name="level" value="3"> Level 3</label></div></fieldset><fieldset><legend>Starting roles</legend><div class="choices"><label><input type="checkbox" name="role" value="advantaged" checked> Advantaged</label><label><input type="checkbox" name="role" value="disadvantaged"> Disadvantaged</label></div></fieldset></div>
+<div class="config-grid"><label>Development seeds <input id="seeds" required value="100" placeholder="100-103, 110"></label><label>Holdout seeds (optional) <input id="holdout" value="200-203" placeholder="200-203"></label><label>Replicates per case <input id="replicates" type="number" required min="1" max="4" value="1"></label></div>
+<p class="muted small">Seed lists accept comma-separated integers and inclusive ranges. Holdout seeds must be different from development seeds.</p>
+<details><summary>Advanced: fixed peers and metric weights</summary><p class="muted">These settings become part of the recipe and stay identical for all competitors.</p><div id="peers" class="config-grid"></div><div id="weights" class="grid charts"></div></details>
+<div class="controls"><button id="build" class="primary" type="submit">Build draft</button><span class="muted">Creates explicit JSON cases. No inference calls.</span></div>
+</form>
+<section id="draft-preview" class="card lab-section" hidden><div class="section-title"><h2 id="draft-title"></h2><button data-help="save">Info</button></div><div id="draft-stats" class="stats"></div><ul id="design-notes" class="notes"></ul><p id="draft-stale" class="warning" hidden>The form has changed. Build a new draft before testing or saving these changes.</p><div class="controls"><a id="download-recipe" class="button">Download development JSON</a><a id="download-holdout" class="button">Download holdout JSON</a><button id="publish">Add development recipe to benchmarks</button><button id="publish-holdout">Add holdout recipe to benchmarks</button></div><details><summary>Generated recipe JSON</summary><pre id="draft-json"></pre></details></section>
+<section class="card lab-section">
+<div class="section-title"><div><p class="eyebrow">02 · TEST</p><h2>Run a research evaluation</h2></div><button data-help="evaluation">Info</button></div>
+<p class="muted">Research runs stay in the lab and never enter model leaderboards.</p>
+<form id="evaluation-form">
+<div class="config-grid"><label>Evaluation name <input id="evaluation-name" required maxlength="120" value="Research v1 · pilot"></label><label>Parallel requests <input id="evaluation-parallelism" type="number" min="1" max="64" step="1" value="1" required title="Maximum simultaneous requests across independent episodes"></label><label>Cases to test <select id="split"><option value="development">Development</option><option value="holdout">Holdout</option></select></label></div>
+<fieldset><legend>Scripted baselines</legend><div id="baselines" class="choices"></div></fieldset>
+<fieldset><legend>Candidate models</legend><div id="models" class="choices"></div><p class="muted small">Use <a href="/">Model settings on the benchmark page</a> to add models. Each selected model is tested normally and with the selected interventions.</p></fieldset>
+<fieldset><legend>Candidate-only interventions</legend><div class="choices"><label><input name="intervention" type="checkbox" value="no_communication" checked> No communication</label><label><input name="intervention" type="checkbox" value="no_memory" checked> No memory</label><label><input name="intervention" type="checkbox" value="reverse_observation_order"> Reverse peer order</label><label><input name="intervention" type="checkbox" value="rename_agents"> Rename agents</label></div><p class="muted small">One separate variant per intervention. Baselines run normally; peers retain their original policies.</p></fieldset>
+<div class="controls"><button id="preview-evaluation" type="submit">Preview evaluation</button><button id="start-evaluation" type="button" class="primary" disabled>Start evaluation</button></div>
+<div id="evaluation-budget" class="stats"></div><p id="preview-note" class="muted small">Build a draft and preview the evaluation to see its workload before starting.</p>
+</form>
+</section>
+<section class="card lab-section">
+<div class="section-title"><div><p class="eyebrow">03 · LEARN</p><h2>Evaluation findings</h2></div><button data-help="findings">Info</button></div>
+<div class="controls"><label>Evaluation history <select id="evaluations"><option value="">Choose an evaluation…</option></select></label><button id="refresh-evaluation">Refresh</button><a id="explore-evaluation" class="button" hidden>Open explorer</a><button id="delete-evaluation" class="danger" disabled>Delete evaluation</button><button id="pause-evaluation" hidden>Pause</button><button id="resume-evaluation" hidden>Resume</button><a id="export-findings" class="button" hidden>Export findings</a></div>
+<p id="evaluation-state" role="status" aria-live="polite" class="muted">No evaluation selected.</p><p id="evaluation-error" class="warning" hidden></p><progress id="evaluation-progress" max="1" value="0" aria-label="Research evaluation progress"></progress>
+<div class="table-wrap"><table><thead><tr><th>System</th><th>Variant</th><th>Status</th><th>Episodes</th><th>Score</th><th>95% interval</th><th>Invalid decisions (all agents)</th><th>Explore</th></tr></thead><tbody id="study-rows"></tbody></table></div>
+<div id="findings" hidden><div id="finding-stats" class="stats"></div><ul id="recommendations" class="notes"></ul><h3>Paired intervention effects</h3><p class="muted small">Normal score minus variant score. A positive value means the intervention lowered performance.</p><div class="table-wrap"><table><thead><tr><th>Model</th><th>Intervention</th><th>Difference</th><th>Paired 95% interval</th></tr></thead><tbody id="effects"></tbody></table></div><h3 class="spaced">Metric health</h3><p class="muted small">Normal models and baselines only, pooled across their completed episodes.</p><div class="table-wrap"><table><thead><tr><th>Metric</th><th>Mean</th><th>Range</th><th>Near maximum</th><th>Near zero</th><th>Observations</th></tr></thead><tbody id="metric-health"></tbody></table></div></div>
+</section>
+</main>
+<dialog id="help-dialog" aria-labelledby="help-title"><div class="section-title"><div><p class="eyebrow">RECIPE LAB GUIDE</p><h2 id="help-title">How to develop a benchmark recipe</h2></div><button id="close-help" aria-label="Close guide">×</button></div>
+<p>This page is an operator's research workspace. It builds explicit recipe JSON files and tests them with actual engine runs. It does not use an LLM to invent scenarios or guarantee that a recipe measures a useful ability.</p>
+<details data-guide="design"><summary>1. Every recipe-building option</summary>
+<dl>
+<dt>Saved drafts / Load draft</dt><dd>Restore a previously generated draft and its form settings. Building again creates another saved draft. Changing fields does not modify the loaded draft.</dd>
+<dt>Start from</dt><dd>Copies a named recipe's fixed peers, weights and supported budgets. Difficulty levels, roles, replicates and seed lists are filled from its cases; the copied seeds may already have been used in evaluations. Change the seed lists for a new research design. Selecting another base replaces the form's previous settings.</dd>
+<dt>Recipe ID</dt><dd>The machine-readable version identifier, using lowercase letters, digits, underscores or hyphens, up to 70 characters. Use a new ID such as <code>social-benchmark-v2</code> when changing an existing recipe. The holdout ID adds <code>-holdout</code>.</dd>
+<dt>Recipe name and Description</dt><dd>The human-readable name shown in recipe selectors and the purpose of this version. Describe the abilities and conditions the recipe is meant to test. These fields are included in the saved recipe.</dd>
+<dt>Domains D1–D8</dt><dd>D1: information and prediction; D2: trade and negotiation; D3: cooperative construction; D4: shared resources; D5: relationships and commitments; D6: delegation and allocation; D7: knowledge transfer; D8: adaptation and recovery. Select a subset for a focused pilot or all eight for broad coverage. The overall score averages only the selected domains.</dd>
+<dt>Difficulty levels</dt><dd>Select levels 1–3. The builder creates each selected level for every selected domain, seed, role and replicate. Test multiple levels to detect tasks that are too easy or too hard.</dd>
+<dt>Starting roles</dt><dd>Advantaged and disadvantaged are scenario-defined starting positions for the candidate. Choose both to assess sensitivity to position; choose one only for a deliberately restricted pilot.</dd>
+<dt>Development seeds</dt><dd>Integers controlling reproducible scenario instances. Enter <code>100-103, 110</code> for five seeds. Ranges include both ends. Duplicates, malformed ranges and more than 32 seeds are rejected. Prefer at least four seeds for meaningful variation estimates.</dd>
+<dt>Holdout seeds</dt><dd>An optional, separate list that must not overlap development seeds. It produces a second recipe with identical conditions and new scenario instances. Reserve it until design choices are fixed. Once you inspect holdout results and tune against them, those seeds are no longer untouched holdout data.</dd>
+<dt>Replicates per case</dt><dd>One to four repetitions of each domain/level/seed/role combination. An explicit candidate inference seed is offset by the replicate number. Without an inference seed, repeats do not force a stochastic provider to vary. Replicates are not substitutes for different scenario seeds.</dd>
+<dt>Fixed peers</dt><dd>Seven slots, each containing a scripted policy or a saved model configuration. The current engine supports either zero or exactly two reference models. Selecting models here adds provider calls for every study, including scripted candidate baselines. Peer configurations are copied into the draft and held fixed across competitors. Repeating a policy in several peer slots is allowed. See the policy catalog below for all nine choices.</dd>
+<dt>Metric weights</dt><dd>Each domain has three existing engine metrics. Weights must be positive and sum to 1 within each selected domain. For example, <code>0.5, 0.25, 0.25</code> gives the first metric half the episode score. The builder cannot add new metric definitions. Changing weights changes the benchmark version; verify tuned weights on holdout cases.</dd>
+<dt>Build draft</dt><dd>Validates the design and writes development and optional holdout JSON files in research storage. It makes no inference calls. The number of development episodes is domains × levels × development seeds × roles × replicates. Each episode has 8 agents and 240 ticks.</dd>
+<dt>Fixed budgets and draft checks</dt><dd>Generation is limited by each model’s configured context (prompt + reasoning + answer), with no separate reasoning budget. The engine uses 24,000 observation bytes, 6,144 response-envelope bytes and at most 3 attempts. These limits and the bootstrap seed/resample count are inherited from the base recipe and visible in Generated recipe JSON; they are not editable in this page. Notes highlight missing roles, levels, domains, too few seeds or missing holdout. They are advice, not a certification. Evaluation execution also checks scenario feasibility.</dd>
+</dl>
+<h3>What each metric weight controls</h3>
+<p>All metrics below are normalized to 0–1 by the engine before weighting. Findings display them as 0–100. The weight changes a metric's contribution, not its definition or denominator.</p>
+<div class="table-wrap"><table><thead><tr><th>Metric</th><th>What is measured</th></tr></thead><tbody>
+<tr><td>D1.prediction</td><td>Forecast accuracy over 18 probes using a Brier-based score; missing forecasts score zero.</td></tr>
+<tr><td>D1.decision</td><td>Fraction of correct route decisions over 12 windows.</td></tr>
+<tr><td>D1.update</td><td>Fraction of correct decisions in the six windows requiring an update.</td></tr>
+<tr><td>D2.private_gain</td><td>Candidate utility normalized against the scenario's fixed utility bounds, across six markets.</td></tr>
+<tr><td>D2.joint_gain</td><td>Joint trading surplus relative to the fixed attainable surplus, across six markets.</td></tr>
+<tr><td>D2.delivery</td><td>Delivered quantity relative to the required quantity, across six markets.</td></tr>
+<tr><td>D3.completion</td><td>Fraction of four verified service milestones completed.</td></tr>
+<tr><td>D3.timeliness</td><td>Service supplied relative to target across all 240 ticks; earlier completion supplies service for longer.</td></tr>
+<tr><td>D3.efficiency</td><td>Completed milestones per 1 + total contribution cost, relative to a preregistered efficiency bound.</td></tr>
+<tr><td>D4.service</td><td>Mean service delivered relative to target over 240 ticks.</td></tr>
+<tr><td>D4.continuity</td><td>The lowest mean service in the four ten-tick windows at the end.</td></tr>
+<tr><td>D4.reserve</td><td>Final common stock relative to a 40,000 milliunit reserve target.</td></tr>
+<tr><td>D5.relational_utility</td><td>Normalized candidate utility across 12 relationship opportunities and disputes.</td></tr>
+<tr><td>D5.commitment_resolution</td><td>Resolution credit assigned by the scenario across those 12 opportunities.</td></tr>
+<tr><td>D5.conflict_resolution</td><td>Normalized candidate utility in the four dispute cases.</td></tr>
+<tr><td>D6.mandate_service</td><td>Delivered mandate value relative to its attainable maximum, across six allocation cycles.</td></tr>
+<tr><td>D6.execution</td><td>Fraction of six cycles with an executed decision that delivers positive value.</td></tr>
+<tr><td>D6.turnover_service</td><td>Service relative to target during the last 120 ticks, after turnover.</td></tr>
+<tr><td>D7.transfer_success</td><td>Fraction of six held-out transfer tasks successfully completed.</td></tr>
+<tr><td>D7.retention</td><td>Fraction of three later retention tasks successfully completed.</td></tr>
+<tr><td>D7.functional_reuse</td><td>Fraction of six tasks successfully reusing another agent's procedure.</td></tr>
+<tr><td>D8.postshock_service</td><td>Mean service relative to target in the 120 ticks after the shock.</td></tr>
+<tr><td>D8.recovery</td><td>How quickly service reaches at least 80% for five consecutive ticks after the shock; no recovery scores zero.</td></tr>
+<tr><td>D8.convention_transfer</td><td>Fraction of 12 verified interactions that successfully transfer the convention.</td></tr>
+</tbody></table></div>
+<h3>Scripted policy catalog</h3>
+<p>All nine choices are available as fixed peers. The first six are also available as candidate baselines. These policies share task-specific rules; their names do not imply distinct behavior in every domain.</p>
+<dl>
+<dt>Passive</dt><dd>Returns an empty decision. Useful for establishing what the environment and peers accomplish without candidate action.</dd>
+<dt>Random</dt><dd>Deterministically samples zero to two observable actions and emits uniform forecasts. Useful as a weak reference.</dd>
+<dt>Independent</dt><dd>Uses task rules but avoids trading, knowledge transmission and construction requiring complementary cooperation.</dd>
+<dt>Greedy</dt><dd>Demands a higher trading gain, sets a higher asking price and rejects costly relationship commitments.</dd>
+<dt>Reciprocal</dt><dd>Inspects market quality, tracks relationship outcomes, rejects costly commitments and uses dispute repair rules.</dd>
+<dt>Coordinator</dt><dd>Uses task coordination and dispute repair rules. It has additional population-management behavior in social mode, which these recipes do not run.</dd>
+<dt>Prudent</dt><dd>Inspects market quality and uses relationship history to avoid costly commitments and previously unreliable partners.</dd>
+<dt>Opportunist</dt><dd>Uses higher asking prices and may withhold committed relationship work at levels 2–3; it also tracks previous outcomes.</dd>
+<dt>Information</dt><dd>Uses the shared task rules with market-quality inspection. Useful when varying the information available through peers.</dd>
+</dl></details>
+<details data-guide="evaluation"><summary>2. Every evaluation option and how to combine them</summary>
+<dl>
+<dt>Evaluation name</dt><dd>A label for this experiment in history, for example <code>v2 · three-model calibration</code>. Multiple evaluations may test the same draft.</dd>
+<dt>Cases to test</dt><dd>Development runs the development recipe; Holdout runs its separate seed set. Holdout is rejected if the draft has none. The selected split is recorded with the findings.</dd>
+<dt>Scripted baselines</dt><dd>Passive makes no actions; Random samples available actions; Independent avoids some cooperation; Greedy applies self-interested rules; Reciprocal uses interaction history and repair rules; Coordinator includes coordination and repair. They are limited programmed policies, not complete personalities. Select any subset. With only scripted peers they make zero provider calls.</dd>
+<dt>Candidate models</dt><dd>Select up to eight saved candidate configurations from the benchmark page. Each gets a normal study plus one study per selected intervention. The preview copies the configurations; changing a model file afterwards does not alter that preview or an active evaluation. Equivalent model files cannot be selected twice.</dd>
+<dt>No communication</dt><dd>For the candidate only, hide incoming messages and other agents' shared artifacts, and suppress outgoing messages and explicit publishing/teaching/access-sharing operations. Message records are also removed from recent events and retrieval. Other agents can still communicate, and the candidate still observes material effects. This tests dependence on the blocked channels, not every possible social signal.</dd>
+<dt>No memory</dt><dd>Hide the candidate's private note, retrieved memory and recent event history; suppress updates to its private note and retrieval query. Current world state, receipts and current inbox remain available. This is an external-memory intervention, not deletion of a model's training or any provider-side state.</dd>
+<dt>Reverse peer order</dt><dd>Reverse the peer list in the candidate's observation while preserving its contents. Large changes may indicate sensitivity to presentation order.</dd>
+<dt>Rename agents</dt><dd>Replace peer identifiers consistently in the candidate's observation and map returned identifiers back. It probes dependence on arbitrary labels. Compare the change with uncertainty; a change alone does not prove a flaw.</dd>
+<dt>Combining interventions</dt><dd>Each checked intervention produces a separate variant against the normal model. Checking No memory and No communication creates three studies per model, not a single variant with both disabled. Scripted baselines run normally; their intervention boxes are ignored when no candidate models are selected.</dd>
+<dt>Preview evaluation</dt><dd>Freezes the selected draft, model configurations, baselines and interventions without calling providers. Shows study count, total episodes, maximum provider decisions, maximum attempts and output-token bound. Baseline decisions are not provider calls. Fixed reference models are included in the provider count. Input tokens and currency costs are not estimated here. A evaluation is limited to 20,000 episodes; reduce cases, models or variants if it exceeds this limit.</dd>
+<dt>Start evaluation</dt><dd>Executes the frozen preview and may call the configured model services. Editing the draft or evaluation settings invalidates the preview; preview again before starting. Only one benchmark or research evaluation can run at a time to avoid resource contention. Research outcomes never enter the main leaderboards.</dd>
+<dt>Pause / Resume</dt><dd>Pause preserves completed work and recorded decisions, including partial episodes. Resume continues with the saved recipe and model configuration. The original engine and research implementation are required. Finished experiments, including ones with failed studies, are repeated by creating a new evaluation.</dd>
+<dt>Evaluation history / Refresh</dt><dd>Select earlier experiments, including interrupted evaluations after a server restart. Refresh reloads saved progress. Running evaluations update automatically. Study errors remain visible and are excluded from scored findings.</dd>
+</dl>
+<p><strong>Example:</strong> six baselines + two models + two interventions = 6 + 2 × 3 = 12 studies. An eight-episode recipe therefore runs 96 episodes. With scripted peers, only the six model studies make provider calls: at most 11,520 primary decisions, or 34,560 attempts including retries.</p>
+</details>
+<details data-guide="findings"><summary>3. How to read every finding</summary>
+<dl>
+<dt>Study status and Episodes</dt><dd>Pending, running, paused, completed or failed. A score requires every episode in that study to finish. A failed study keeps its error message; missing results are never treated as zero. The evaluation can finish with failures while retaining other complete studies.</dd>
+<dt>Score and 95% interval</dt><dd>A 0–100 score using the draft's metric weights, equal weighting of levels within domains and equal weighting of domains. The bootstrap resamples scenario seeds. With one seed, an interval may collapse to a point; that is not proof of certainty.</dd>
+<dt>Invalid decisions</dt><dd>Count of decision envelopes rejected in completed episodes, including the candidate and all seven peers, both scripted and model-based. It does not isolate candidate errors. Inspect the recorded agent decisions before attributing a low score to task difficulty. This is a count, not a rate or an infrastructure-error count.</dd>
+<dt>Completed studies</dt><dd>Complete studies included in the findings divided by all planned studies. Partial studies contribute no scores or metric health values.</dd>
+<dt>Model score spread</dt><dd>Highest minus lowest score among complete normal candidate-model studies; baselines and interventions are excluded. It needs at least two models. A wide spread is descriptive and does not itself prove a valid benchmark.</dd>
+<dt>Paired intervention difference</dt><dd>Normal score minus variant score for the same model and exact cases. Positive means performance fell under the intervention; negative means it improved. A confidence interval spanning zero is inconclusive in this sample. Communication/memory dependence and sensitivity to renaming/order have different interpretations.</dd>
+<dt>Metric health: Mean and Range</dt><dd>Average, minimum and maximum normalized metric scores (0–100), pooled over complete normal models and baselines. Each observation is one system/episode result. Intervention variants are excluded.</dd>
+<dt>Near maximum / Near zero</dt><dd>Fractions of observations at or above 98%, or at or below 2%. A fraction of 80% triggers a note. Frequent maxima suggest a ceiling; frequent zeroes may reflect excessive difficulty, ineffective policies or invalid model output. Baselines are included, so check which systems produced the pattern.</dd>
+<dt>Recommendations</dt><dd>Rules based on observed coverage, score distributions and effects. They suggest what to investigate; they do not automatically rewrite weights, select winning tasks or approve the recipe.</dd>
+<dt>Export findings</dt><dd>Downloads the selected evaluation's status, study summaries, diagnostics and exact tested recipe. An export during execution is explicitly partial; full results and replay evidence remain in local research storage. Intervention model-call records include the actual transformed input and the original model output before suppression or identifier remapping.</dd>
+</dl></details>
+<details data-guide="save"><summary>4. Drafts, exports and adding a version to benchmarks</summary>
+<dl><dt>Generated recipe JSON</dt><dd>A read-only view of the explicit development cases and fixed settings. It is a recipe file, not a model configuration or a leaderboard report.</dd><dt>Download development / holdout JSON</dt><dd>Download either generated recipe for inspection or version control. Holdout is available only when you supplied holdout seeds.</dd><dt>Add development / holdout recipe to benchmarks</dt><dd>Writes the selected recipe into the server's configured recipe directory. Existing recipes are never overwritten; change the Recipe ID for a new version. A previously saved identical recipe is harmless to save again. Select the new recipe in Benchmark recipe on the dashboard, then click Start.</dd><dt>Making a version the standard</dt><dd>Restart the server with <code>unimatrix serve --default-recipe your-recipe-id</code>. This is an explicit operator choice. This sets the initial selection. The main Start button always runs the currently selected recipe.</dd><dt>Form changed / stale draft</dt><dd>Exports refer to the last built draft. Testing and adding recipes are disabled after form changes until you build again, so you cannot accidentally test or publish settings different from the visible form.</dd></dl>
+</details>
+<details data-guide="recipes"><summary>5. Suggested workflows</summary><ol>
+<li><strong>Quick engine check:</strong> choose Compact v1, one development seed, level 1, one role and one replicate. Select Passive and Reciprocal, with no candidate models. Build → Preview → Start. This checks execution and scoring with no provider calls when peers are scripted.</li>
+<li><strong>Calibration:</strong> expand to all relevant domains, levels 1–3, both roles and at least four development seeds. Select six baselines and several models; enable No communication and No memory. Compare normal scores, paired effects and metric health. More coverage multiplies workload, so inspect the preview first.</li>
+<li><strong>Robustness:</strong> retain the same recipe and candidate settings, enable Reverse peer order and Rename agents. Test whether arbitrary presentation changes have large effects.</li>
+<li><strong>Revise and confirm:</strong> use development findings to adjust cases or weights, build a new version ID and repeat. Once choices are fixed, run Holdout. If you tune after inspecting it, reserve a fresh holdout set. Add the final recipe to benchmarks explicitly.</li>
+</ol><p>Combining more seeds, roles, levels, replicates, models and interventions multiplies run length. Start small to verify the mechanism, then increase coverage. No single diagnostic establishes that a recipe measures general intelligence.</p></details>
+</dialog>
+</body></html>
