@@ -14,7 +14,7 @@ async def draft(client, ident="delete-me", seed=100):
     response = await client.post(
         "/api/recipe-lab/drafts",
         json=dict(
-            base_recipe="compact-v1",
+            base_recipe="standard-v1",
             id=ident,
             name=ident,
             description="Deletion test",
@@ -56,7 +56,7 @@ async def test_delete_evaluation_leaves_recipe_models_and_other_evidence(tmp_pat
     root = tmp_path / "runs"
     app = build_app(root, tmp_path / "models", tmp_path / "recipes")
     async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app), base_url="http://test"
+        transport=httpx.ASGITransport(app=app), base_url="http://localhost", headers={"X-Unimatrix-Request": "1"}
     ) as client:
         record = await draft(client)
         folder, _ = await evidence(client, root, record, "a" * 24)
@@ -67,9 +67,9 @@ async def test_delete_evaluation_leaves_recipe_models_and_other_evidence(tmp_pat
         assert (await client.get("/api/recipe-lab/drafts/" + record["id"])).status_code == 200
         assert (await client.get("/api/recipe-lab/evaluations/" + "a" * 24)).status_code == 404
         assert (await client.delete("/api/recipe-lab/evaluations/" + "a" * 24)).status_code == 404
-        assert (await client.get("/api/recipe-lab/campaigns")).json() == (
-            await client.get("/api/recipe-lab/evaluations")
-        ).json()
+        assert [e["id"] for e in (await client.get("/api/recipe-lab/evaluations")).json()] == [
+            "b" * 24
+        ]
 
 
 @pytest.mark.asyncio
@@ -83,7 +83,7 @@ async def test_recipe_deletion_cascades_all_revisions_splits_and_previews(tmp_pa
     recipes = tmp_path / "recipes"
     app = build_app(root, models, recipes)
     async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app), base_url="http://test"
+        transport=httpx.ASGITransport(app=app), base_url="http://localhost", headers={"X-Unimatrix-Request": "1"}
     ) as client:
         first = await draft(client)
         second = await draft(client, seed=101)
@@ -100,10 +100,10 @@ async def test_recipe_deletion_cascades_all_revisions_splits_and_previews(tmp_pa
                 f"/api/recipe-lab/drafts/{first['id']}/publish", json={"split": split}
             )
             assert response.status_code == 200
-        # Authored filenames are not necessarily equal to recipe IDs.
+
         (recipes / "delete-me.json").rename(recipes / "custom-filename.json")
         benchmark = root / ("d" * 24)
-        write_json(benchmark / "benchmark.json", {"plan_id": "delete-me"})
+        write_json(benchmark / "benchmark.json", {"recipe_id": "delete-me"})
         path = (
             f"/api/recipe-lab/drafts/{first['id']}"
             if source == "draft"
@@ -131,7 +131,7 @@ async def test_deletion_refuses_active_runner_and_linked_directories(tmp_path):
     root = tmp_path / "runs"
     app = build_app(root, tmp_path / "models", tmp_path / "recipes")
     async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app), base_url="http://test"
+        transport=httpx.ASGITransport(app=app), base_url="http://localhost", headers={"X-Unimatrix-Request": "1"}
     ) as client:
         record = await draft(client)
         folder, _ = await evidence(client, root, record, "a" * 24)
@@ -158,14 +158,14 @@ async def test_default_recipe_deletion_is_blocked_without_partial_cascade(tmp_pa
     root, recipes = tmp_path / "runs", tmp_path / "recipes"
     app = build_app(root, tmp_path / "models", recipes)
     async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app), base_url="http://test"
+        transport=httpx.ASGITransport(app=app), base_url="http://localhost", headers={"X-Unimatrix-Request": "1"}
     ) as client:
         record = await draft(client)
         await client.post(f"/api/recipe-lab/drafts/{record['id']}/publish", json={})
         folder, _ = await evidence(client, root, record, "a" * 24)
     app = build_app(root, tmp_path / "models", recipes, default_recipe="delete-me")
     async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app), base_url="http://test"
+        transport=httpx.ASGITransport(app=app), base_url="http://localhost", headers={"X-Unimatrix-Request": "1"}
     ) as client:
         response = await client.delete(f"/api/recipe-lab/drafts/{record['id']}")
         assert response.status_code == 409 and "default" in response.json()["detail"]
@@ -186,7 +186,7 @@ async def test_delete_single_benchmark_preserves_other_data(tmp_path, monkeypatc
     app = FastAPI()
     app.include_router(router)
     service = router.service
-    # Persist a realistic run without starting a worker or making provider calls.
+
     monkeypatch.setattr(service, "launch", service.save)
     run = await service.start("passive", "test")
     other = await service.start("random", "other")
@@ -198,7 +198,7 @@ async def test_delete_single_benchmark_preserves_other_data(tmp_path, monkeypatc
     sentinel = root / "research/campaigns/keep/campaign.json"
     write_json(sentinel, {"keep": True})
     async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app), base_url="http://test"
+        transport=httpx.ASGITransport(app=app), base_url="http://localhost", headers={"X-Unimatrix-Request": "1"}
     ) as client:
         path = "/api/benchmarks/" + run["id"]
         impact = (await client.get(path + "/deletion")).json()
@@ -226,7 +226,7 @@ async def test_benchmark_delete_checks_lock_and_rejects_linked_paths(tmp_path):
     folder = root / ident
     write_json(folder / "benchmark.json", {"model": "test", "total_episodes": 1})
     async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app), base_url="http://test"
+        transport=httpx.ASGITransport(app=app), base_url="http://localhost", headers={"X-Unimatrix-Request": "1"}
     ) as client:
         path = "/api/benchmarks/" + ident
         with episode_lease(root / "benchmark.lock"):

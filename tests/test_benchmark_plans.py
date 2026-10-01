@@ -1,29 +1,33 @@
+import json
 from copy import deepcopy
 
 import pytest
 
-from unimatrix.benchmark.plans import PlanRepository, bind_candidate, validate_plan
+from unimatrix.benchmark.manifests import FIELDS, peer_slots
+from unimatrix.benchmark.recipes import RecipeRepository, bind_candidate, validate_recipe
 from unimatrix.core.ids import digest
 
 
 def test_candidates_share_all_cases_peers_and_scoring_rules():
-    spec = PlanRepository().get("standard-v1")
+    spec = RecipeRepository().get("standard-v1")
     a = bind_candidate(spec, "passive")
     b = bind_candidate(spec, "reciprocal")
-    assert len(a["episodes"]) == len(spec["cases"]) == 64
+    assert len(a["episodes"]) == len(spec["cases"]) == 16
     assert a["suite"] == b["suite"]
     for left, right, case in zip(a["episodes"], b["episodes"], spec["cases"]):
-        for key in ("domain", "level", "seed", "role", "replicate"):
-            assert left[key] == right[key] == case[key]
+        for key in FIELDS:
+            expected = case[key] if key != "layers" else left[key]
+            assert left[key] == right[key] == expected
         assert left["focal_slot"] == right["focal_slot"]
         assert left["suite_hash"] == right["suite_hash"]
-        peers = [s for s in left["slots"] if s != left["focal_slot"]]
+        peers = peer_slots(left)
+        assert peers == peer_slots(right)
         assert [left["policies"][s] for s in peers] == spec["peers"]
         assert [right["policies"][s] for s in peers] == spec["peers"]
 
 
 def test_changed_rules_create_a_different_leaderboard_identity():
-    spec = PlanRepository().get("compact-v1")
+    spec = RecipeRepository().get("standard-v1")
     first = bind_candidate(spec, "passive")
     changed = deepcopy(spec)
     changed["cases"][0]["seed"] = 123
@@ -35,23 +39,30 @@ def test_changed_rules_create_a_different_leaderboard_identity():
 
 
 def test_invalid_or_duplicate_cases_and_unsupported_budgets_are_rejected():
-    spec = PlanRepository().get("compact-v1")
+    spec = RecipeRepository().get("standard-v1")
     duplicate = deepcopy(spec)
     duplicate["cases"].append(duplicate["cases"][0])
     with pytest.raises(ValueError, match="Duplicate"):
-        validate_plan(duplicate)
+        validate_recipe(duplicate)
     changed = deepcopy(spec)
     changed["budgets"]["generation_tokens_per_decision"] = 8192
     with pytest.raises(ValueError, match="budgets"):
-        validate_plan(changed)
+        validate_recipe(changed)
     changed = deepcopy(spec)
-    changed["cases"][0]["level"] = 4
+    changed["cases"][0]["layers"] = "impossible"
     with pytest.raises(ValueError, match="Invalid benchmark case"):
-        validate_plan(changed)
+        validate_recipe(changed)
+
+
+def test_authored_recipe_cannot_replace_a_bundled_recipe(tmp_path):
+    spec = RecipeRepository().get("standard-v1")
+    (tmp_path / "replacement.json").write_text(json.dumps(spec))
+    with pytest.raises(ValueError, match="Duplicate benchmark recipe ID"):
+        RecipeRepository(tmp_path).all()
 
 
 def test_connection_and_credentials_do_not_create_a_new_competitor():
-    spec = PlanRepository().get("compact-v1")
+    spec = RecipeRepository().get("standard-v1")
     model = dict(
         model="candidate",
         snapshot="v1",

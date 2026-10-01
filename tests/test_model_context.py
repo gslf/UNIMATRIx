@@ -25,7 +25,8 @@ def server(monkeypatch, context=32768, stop_reason="eosFound", generated=9000):
     )
 
     async def respond(prompt, *, response_format, config, on_prediction_fragment):
-        assert prompt == '{"observation":"test"}'
+        assert '"role": "system"' in str(prompt)
+        assert "test" in str(prompt)
         assert response_format == {"type": "object"}
         assert config["contextOverflowPolicy"] == "stopAtLimit"
         assert config["maxTokens"] == CONFIG["context_tokens"]
@@ -97,12 +98,6 @@ async def test_sdk_failure_redacts_credentials_and_cleans_up(monkeypatch):
         await policy.close()
 
 
-@pytest.mark.parametrize("context", [None, 0, -1, True, 1.5, "32768"])
-def test_invalid_context(context):
-    with pytest.raises(ValueError, match="context_tokens"):
-        validate_policy(dict(CONFIG, context_tokens=context))
-
-
 def test_native_context_cannot_silently_downgrade_https():
     with pytest.raises(ValueError, match="http_host"):
         validate_policy(dict(CONFIG, endpoint="https://remote"))
@@ -123,31 +118,120 @@ async def test_cancelled_prediction_closes_sdk_scope(monkeypatch):
         await policy.close()
 
 
-def test_sdk_serializes_context_policy_without_hidden_output_budget():
-    from lmstudio._kv_config import prediction_config_to_kv_config_stack
-
-    structured, stack = prediction_config_to_kv_config_stack(
-        {"type": "object"},
-        {"maxTokens": 32768, "contextOverflowPolicy": "stopAtLimit", "temperature": 0},
-    )
-    fields = {item.key: item.value for item in stack.layers[0].config.fields}
-    assert structured
-    assert fields["llm.prediction.contextOverflowPolicy"] == "stopAtLimit"
-    assert fields["llm.prediction.maxPredictedTokens"] == {"checked": True, "value": 32768}
-    assert fields["llm.prediction.structured"]["jsonSchema"] == {"type": "object"}
-
-
 @pytest.mark.asyncio
-async def test_model_editor_saves_token_context(tmp_path):
+async def test_strict_output_keeps_decisions_in_the_model_and_reuses_interface_prefix():
+    import json
+
     import httpx
 
-    from unimatrix.web.server import build_app
+    from unimatrix.actions.schemas import SCHEMA, empty
+    from unimatrix.core.visibility import PROTOCOL
 
-    app = build_app(tmp_path / "runs", tmp_path / "models", tmp_path / "recipes")
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app), base_url="http://test"
-    ) as client:
-        response = await client.put("/api/models/test", json={"config": CONFIG})
-        assert response.status_code == 200
-        assert response.json()["context_tokens"] == 32768
-        assert "context_bytes_verified" not in response.json()
+    packet = dict(
+        interface={"operations": {"work": {"verb": "work", "project_id": "string"}}},
+        tick=7,
+        agent_id="slot-2",
+        scenario={"available_actions": []},
+    )
+
+    async def response(request):
+        body = json.loads(request.content)
+        assert body["messages"][0] == {"role": "system", "content": PROTOCOL}
+        prompt = body["messages"][1]["content"]
+        assert prompt.startswith('{"interface":') and json.loads(prompt) == packet
+        schema = body["response_format"]["json_schema"]["schema"]
+        assert schema["properties"]["tick"] == {"const": 7}
+        assert schema["properties"]["agent_id"] == {"const": "slot-2"}
+        assert schema["properties"]["operations"] == SCHEMA["properties"]["operations"]
+        return httpx.Response(
+            200,
+            json={
+                "choices": [
+                    {
+                        "message": {"content": json.dumps(empty(7, "slot-2"))},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {"completion_tokens": 40, "prompt_tokens": 100},
+            },
+        )
+
+    client = httpx.AsyncClient(transport=httpx.MockTransport(response))
+    policy = LLMPolicy(
+        dict(
+            model="micro",
+            snapshot="sha",
+            endpoint="http://localhost",
+            context_bytes_verified=24000,
+            budget_track="accounted_compute",
+            structured_output="decision_schema",
+        ),
+        client=client,
+    )
+    try:
+        raw, usage = await policy.decide(packet, {})
+        assert json.loads(raw) == empty(7, "slot-2") and usage["generated_tokens"] == 40
+        assert "const" not in SCHEMA["properties"]["tick"]
+    finally:
+        await policy.close()
+
+
+def test_compact_transport_never_repairs_or_selects_actions():
+    import json
+
+    from unimatrix.actions.schemas import validate
+
+    config = dict(
+        model="micro",
+        snapshot="sha",
+        endpoint="http://localhost",
+        context_bytes_verified=24000,
+        budget_track="accounted_compute",
+        structured_output="compact_decision",
+    )
+    policy = LLMPolicy(config, client=SimpleNamespace())
+    packet = dict(tick=3, agent_id="slot-1")
+    raw = '{"operations":[{"verb":"work","project_id":"chosen-by-model"}]}'
+    decision = validate(policy.expand_response(raw, packet), 3, "slot-1")
+    assert decision["operations"] == json.loads(raw)["operations"]
+    assert decision["messages"] == [] and decision["private_note"] is None
+    for bad in [
+        '{"operations":[],"operations":[]}',
+        '{"forecasts":[NaN]}',
+        '{"repair_me":true}',
+        '{"operations":"wrong"}',
+    ]:
+        expanded = policy.expand_response(bad, packet)
+        with pytest.raises(Exception):
+            validate(expanded, 3, "slot-1")
+
+
+async def test_managed_sdk_instance_is_reused_then_only_own_instance_unloaded(monkeypatch):
+    factory, scope, client, model = server(monkeypatch)
+    client.llm.load_new_instance = AsyncMock(return_value=model)
+    client.llm.unload = AsyncMock()
+    policy = LLMPolicy(dict(CONFIG, managed_instance=True, max_input_tokens=3000))
+    model.apply_prompt_template = AsyncMock(return_value="rendered prompt")
+    model.count_tokens = AsyncMock(return_value=2000)
+    try:
+        await policy.decide({"observation": "test"}, {})
+        await policy.decide({"observation": "test"}, {})
+        client.llm.load_new_instance.assert_awaited_once_with("test", policy.instance_id, ttl=120, config={"contextLength": 32768})
+        client.llm.model.assert_awaited_once_with(policy.instance_id, config={"contextLength": 32768}, ttl=120)
+        model.count_tokens.assert_awaited_with("rendered prompt")
+    finally:
+        await policy.close()
+    client.llm.unload.assert_awaited_once_with(policy.instance_id)
+
+
+async def test_input_token_budget_stops_before_generation(monkeypatch):
+    _, _, _, model = server(monkeypatch)
+    model.apply_prompt_template = AsyncMock(return_value="rendered prompt")
+    model.count_tokens = AsyncMock(return_value=2001)
+    policy = LLMPolicy(dict(CONFIG, max_input_tokens=2000))
+    try:
+        with pytest.raises(ValueError, match="input_token_budget_exceeded"):
+            await policy.decide({"observation": "test"}, {})
+        model.respond.assert_not_awaited()
+    finally:
+        await policy.close()

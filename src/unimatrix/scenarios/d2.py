@@ -1,11 +1,14 @@
 """Six finite markets, enumerated allocation bounds and window liquidation."""
 
+import math
 from itertools import product
 
 from ..core.random_tape import RandomTape
 from ..core.state import event
+from ..core.timing import span
 from ..world.contracts import require
-from .base import Scenario
+from .base import Scenario, capable_peers
+from .layers import layer
 
 
 def utility(market, slot, inventory):
@@ -50,21 +53,20 @@ def enumerate_market(market):
 class Market(Scenario):
     domain = "D2"
 
-    def build(self, manifest):
-        state = super().build(manifest)
+    def populate(self, state, manifest):
         focal = manifest["focal_slot"]
-        peers = [p for p in manifest["slots"] if p != focal]
+        peers = capable_peers(manifest)
         buyer, seller = (focal, peers[0]) if manifest["role"] == "advantaged" else (peers[0], focal)
         tape = RandomTape(manifest["seed"])
         markets = []
         for window in range(6):
-            parties = [seller, buyer] + ([peers[1]] if manifest["level"] >= 2 else [])
+            parties = [seller, buyer] + ([peers[1]] if layer(state, "pressure", "competitor") else [])
             goods = 2 if window == 0 else 2 + tape.integer(window, "market", "goods", 3)
             credits = 10 + tape.integer(window, "market", "credits", 3) if window else 10
             values = {p: dict(goods=1, pair_bonus=0) for p in parties}
             values[buyer] = dict(
                 goods=5 if window == 0 else 3 + tape.integer(window, buyer, "value", 4),
-                pair_bonus=3 if manifest["level"] >= 2 else 0,
+                pair_bonus=layer(state, "pressure", "pair_bonus"),
             )
             initial = {p: dict(goods=0, credits=0) for p in parties}
             initial[seller]["goods"], initial[buyer]["credits"] = goods * 1000, credits * 1000
@@ -76,10 +78,10 @@ class Market(Scenario):
                 credits=credits,
                 values=values,
                 initial=initial,
-                due=(window + 1) * 40,
+                due=(window + 1) * span(state, 40),
                 quality=1,
             )
-            if manifest["level"] == 3:
+            if layer(state, "information", "hidden_quality"):
                 market["quality"] = tape.integer(window, "market", "quality", 2)
                 values[buyer]["bad_quality_goods"] = 2
             rows = enumerate_market(market)
@@ -89,10 +91,34 @@ class Market(Scenario):
             market["batna"] = {p: utility(market, p, initial[p]) for p in parties}
             market["gmax"] = max(sum(r.values()) for r in rows) - sum(market["batna"].values())
             require(market["gmax"] > 0, "infeasible_market")
+            share = layer(state, "pressure", "reservation_share")
+            if share:
+
+                market["reservation"] = math.ceil(share * market["gmax"] / 100)
             markets.append(market)
         state.scenario.update(markets=markets, window=0, results=[], inspected=[])
         self.fund(state)
-        return state
+
+    def partner(self, state):
+        market = state.scenario["markets"][state.scenario["window"]]
+        return market["seller"] if market["buyer"] == state.scenario["focal"] else market["buyer"]
+
+    def structure(self, state):
+        market = state.scenario["markets"][0]
+        seller, buyer = market["seller"], market["buyer"]
+        rivals = [p for p in market["parties"] if p not in (seller, buyer)]
+        hidden = layer(state, "information", "hidden_quality")
+        return dict(
+            positions={seller: ["seller"], buyer: ["buyer"]} | {p: ["competing buyer"] for p in rivals},
+            knowledge={p: ["own valuation and outside option"] for p in market["parties"]}
+            | ({seller: ["own valuation and outside option", "goods quality until inspected"]} if hidden else {}),
+            ties=[(seller, buyer, "goods for credits")] + [(seller, p, "rival bid") for p in rivals],
+            interests={
+                p: f"values goods at {market['values'][p]['goods']}"
+                + (f", keeps {market['reservation']} of the surplus" if "reservation" in market and p != state.scenario["focal"] else "")
+                for p in market["parties"]
+            },
+        )
 
     def fund(self, state):
         market = state.scenario["markets"][state.scenario["window"]]
@@ -108,7 +134,7 @@ class Market(Scenario):
             )
 
     def deadline(self, state):
-        return min((state.tick // 40 + 1) * 40, 240)
+        return min((state.tick // span(state, 40) + 1) * span(state, 40), state.scenario["horizon"])
 
     def observation(self, state, slot):
         market = state.scenario["markets"][state.scenario["window"]]
@@ -123,10 +149,12 @@ class Market(Scenario):
             resource_quantum_milli=1000,
             own_utility=market["values"].get(slot),
             quality=market["quality"]
-            if state.scenario["level"] < 3 or slot in state.scenario["inspected"]
+            if not layer(state, "information", "hidden_quality")
+            or slot in state.scenario["inspected"] + state.scenario["informed"]
             else None,
             inspect_target="quality",
             operations=["offer", "accept", "cancel", "transfer", "inspect"],
+            **({"reservation": market["reservation"]} if "reservation" in market else {}),
         )
 
     def validate_transfer(self, state, slot, op):
@@ -144,7 +172,7 @@ class Market(Scenario):
         return super().resolve(state, before, allowance, slot, op, ident)
 
     def evolve(self, state, before):
-        if (state.tick + 1) % 40:
+        if (state.tick + 1) % span(state, 40):
             return []
         market = state.scenario["markets"][state.scenario["window"]]
         utilities = {p: utility(market, p, state.agents[p]["inventory"]) for p in market["parties"]}
@@ -171,13 +199,13 @@ class Market(Scenario):
                 phase="evolve",
             ),
         ]
-        # No asset or reserved offer crosses a market boundary.
+
         state.objects = {
             k: v for k, v in state.objects.items() if v.get("kind") not in {"offer", "release"}
         }
         for agent in state.agents.values():
             agent["inventory"] = {}
-        if state.tick + 1 < 240:
+        if state.tick + 1 < state.scenario["horizon"]:
             state.scenario["window"] += 1
             state.scenario["inspected"] = []
             self.fund(state)

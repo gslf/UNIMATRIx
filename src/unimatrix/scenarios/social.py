@@ -10,8 +10,7 @@ from .base import Scenario
 class SocialWorld(Scenario):
     domain = "social"
 
-    def build(self, manifest):
-        state = super().build(manifest)
+    def populate(self, state, manifest):
         state.scenario.update(
             stocks=dict(food=100000, water=100000, material=100000),
             needs={},
@@ -43,7 +42,6 @@ class SocialWorld(Scenario):
                     visibility=["public"],
                     resource=resource,
                 )
-        return state
 
     def feasible(self, manifest):
         state = self.build(manifest)

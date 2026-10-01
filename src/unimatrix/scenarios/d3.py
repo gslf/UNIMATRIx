@@ -5,15 +5,23 @@ from itertools import product
 from ..core.ids import digest
 from ..core.random_tape import RandomTape
 from ..core.state import event
+from ..core.timing import span
 from ..world.contracts import debit, require
 from .base import Scenario, sample
+from .layers import layer
+
+ASSIGNMENT = (
+    'The coordinator may assign work with a message {"assign": {"task-id": ["agent-id"]}}; '
+    "peers follow its latest assignment and otherwise take the first task open to them. "
+    "A workshop accepts a limited number of contributions per tick; joint tasks advance only "
+    "when two different skills contribute in the same tick."
+)
 
 
 class Coordination(Scenario):
     domain = "D3"
 
-    def build(self, manifest):
-        state = super().build(manifest)
+    def populate(self, state, manifest):
         tape = RandomTape(manifest["seed"])
         tasks = {}
         for i in range(12):
@@ -38,7 +46,7 @@ class Coordination(Scenario):
             state.agents[focal]["inventory"] = dict(material=20000, energy=20000)
         else:
             state.agents[focal]["location"] = tasks["task-0"]["workshop"]
-        if manifest["level"] >= 2:
+        if layer(state, "pressure", "cross_dependencies"):
             for group in range(1, 4):
                 if tape.integer(group, "dependency", "shared", 2):
                     predecessor = tape.integer(group, "dependency", "parent", group) * 3 + 2
@@ -68,7 +76,6 @@ class Coordination(Scenario):
             )
         state.scenario["efficiency_bounds"] = alternatives
         state.scenario["emax"] = max(row["efficiency"] for row in alternatives)
-        return state
 
     def observation(self, state, slot):
         tasks = state.scenario["tasks"]
@@ -76,17 +83,39 @@ class Coordination(Scenario):
             k: {f: v for f, v in t.items() if f not in {"contributions", "access_code"}}
             for k, t in tasks.items()
         }
-        return dict(
+        distributed = layer(state, "information", "distributed_keys")
+        if slot in state.scenario["informed"] or (not distributed and slot == state.scenario["focal"]):
+            keys = {key: task["access_code"] for key, task in tasks.items()}
+        elif distributed:
+            skill = state.agents[slot]["mandate"]["skill"]
+            keys = {k: t["access_code"] for k, t in tasks.items() if t["skill"] == skill}
+        else:
+            keys = {}
+        packet = dict(
             domain=self.domain,
             tasks=visible,
             workshops=["workshop-0", "workshop-1", "workshop-2"],
-            service_deadlines=[60, 120, 180, 240],
-            work_keys={key: task["access_code"] for key, task in tasks.items()}
-            if slot == state.scenario["focal"]
-            else {},
-            protocol="A work target is task-id:access-code. The appointed coordinator holds workshop access codes and may communicate them.",
+            service_deadlines=[span(state, t) for t in (60, 120, 180, 240)],
+            work_keys=keys,
+            coordinator=state.scenario["focal"],
+            workshop_capacity=layer(state, "scarcity", "workshop_capacity"),
+
+            present=[
+                p
+                for p, a in state.agents.items()
+                if p != slot and a["alive"] and a["location"] == state.agents[slot]["location"]
+            ][:16],
+            protocol="A work target is task-id:access-code. The appointed coordinator holds workshop access codes and may communicate them. "
+            + ASSIGNMENT,
             available_actions=[],
         )
+        if distributed:
+            packet.update(
+                keys_distributed=True,
+                protocol="A work target is task-id:access-code. Each skill group holds the codes of its own tasks and answers the coordinator's requests; the coordinator relays codes to whoever must contribute. "
+                + ASSIGNMENT,
+            )
+        return packet
 
     def resolve(self, state, before, allowance, slot, op, ident):
         if op["verb"] == "move":
@@ -112,7 +141,7 @@ class Coordination(Scenario):
             require(
                 slot not in state.scenario["tasks"][key]["contributions"], "duplicate_contribution"
             )
-            capacity = 2 if state.scenario["level"] >= 2 else 8
+            capacity = layer(state, "scarcity", "workshop_capacity")
             require(
                 sum(
                     len(t["contributions"])
@@ -142,20 +171,59 @@ class Coordination(Scenario):
                     task["complete"], task["completed_state"] = True, state.tick + 1
                     events.append(event("task_completed", dict(task_id=key), phase="evolve"))
             task["contributions"] = {}
-        if state.tick + 1 == 120 and (state.scenario["level"] == 3 or state.domain == "D8"):
-            # A repaired predecessor remains available; the affected service task
-            # needs a fresh bounded contribution after the announced fault.
-            state.scenario["tasks"]["task-8"]["effort"] = 0
-            state.scenario["tasks"]["task-8"]["complete"] = False
-            events.append(event("shock_applied", dict(task_id="task-8"), phase="evolve"))
+        if state.tick + 1 == state.scenario["shock_tick"] and (
+            layer(state, "shock", "task_fault") or state.domain == "D8"
+        ):
+
+
+            events.extend(self.apply(state, dict(type="fault", task="task-8")))
         return events
+
+    def apply(self, state, effect):
+        if effect["type"] != "fault":
+            return None
+        task = state.scenario["tasks"][effect["task"]]
+        task["effort"], task["complete"] = 0, False
+        return [event("shock_applied", dict(task_id=effect["task"]), phase="evolve")]
+
+    def gauges(self, state):
+        tasks = state.scenario["tasks"]
+        return dict(
+            super().gauges(state),
+            tasks_completed=sum(t["complete"] for t in tasks.values()),
+            services_completed=sum(tasks[f"task-{i}"]["complete"] for i in [2, 5, 8, 11]),
+        )
+
+    def structure(self, state):
+        s, tasks = state.scenario, state.scenario["tasks"]
+        distributed = layer(state, "information", "distributed_keys")
+        positions, knowledge = {}, {}
+        for slot, current in state.agents.items():
+            skill = current["mandate"]["skill"]
+            positions[slot] = [f"skill {skill}"] + (["coordinator"] if slot == s["focal"] else [])
+            held = [k for k, t in tasks.items() if t["skill"] == skill] if distributed else []
+            if slot in s["informed"] or (not distributed and slot == s["focal"]):
+                held = list(tasks)
+            knowledge[slot] = [f"access codes: {', '.join(held)}"] if held else []
+        ties = [
+            (parent, key, "must finish first") for key, t in tasks.items() for parent in t["predecessors"]
+        ] + [
+            (f"skill {t['skill']}", key, "two different skills at once" if t["complementary"] else "skill required")
+            for key, t in tasks.items()
+        ]
+        return dict(
+            positions=positions,
+            knowledge=knowledge,
+            ties=ties,
+            interests={slot: "four services delivered on time at low cost" for slot in state.agents},
+        )
 
     def evolve(self, state, before):
         events = self.advance_tasks(state, before)
         completed = sum(state.scenario["tasks"][f"task-{i}"]["complete"] for i in [2, 5, 8, 11])
         events.append(sample(state, completed, 4))
-        if (state.tick + 1) % 60 == 0:
-            i = (state.tick + 1) // 60 - 1
+        if (state.tick + 1) % span(state, 60) == 0:
+            i = (state.tick + 1) // span(state, 60) - 1
             success = state.scenario["tasks"][f"task-{i * 3 + 2}"]["complete"]
             result = dict(
                 delivery=i,

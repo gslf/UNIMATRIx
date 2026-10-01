@@ -16,3 +16,12 @@ class RandomTape:
 
     def priority(self, tick, slots):
         return sorted(slots, key=lambda slot: (self.integer(tick, slot, "priority", 2**256), slot))
+
+
+def noise_seed(seed, replicate):
+    """Replicates are parallel worlds: the same structure, their own noise and priority order."""
+    return [seed, "replicate", replicate]
+
+
+def noise_tape(state):
+    return RandomTape(noise_seed(state.seed, state.scenario.get("replicate", 0)))

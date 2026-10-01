@@ -46,7 +46,7 @@ class IntervenedPolicy:
             usage, research_intervention=variant, research_input=packet, research_output=raw
         )
         try:
-            # Removing blocked channels must never repair an invalid model output.
+
             decision = validate(raw, packet["tick"], packet["agent_id"])
             if variant == "no_communication":
                 decision["messages"] = []
@@ -63,7 +63,7 @@ class IntervenedPolicy:
                 rename(decision, {value: key for key, value in aliases.items()})
             ), usage
         except (ValueError, TypeError, ValidationError):
-            # An invalid model envelope is still judged by the canonical validator.
+
             return raw, usage
 
     async def close(self):

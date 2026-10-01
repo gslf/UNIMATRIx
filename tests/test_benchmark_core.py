@@ -252,14 +252,16 @@ def test_observation_section_quotas_preserve_unshown_private_records():
     from unimatrix.core.visibility import SECTIONS, observe, section_bytes
 
     scenario = get_scenario("D8")
-    state = scenario.build(episode("D8", level=3))
+    state = scenario.build(episode("D8", layers="harsh"))
     slot = state.scenario["focal"]
     state.agents[slot]["note"] = '"' * 4000
     state.inbox[slot] = [
         dict(id=str(i), tick=0, sender="slot-1", content="🙂" * 300, message_index=i)
         for i in range(12)
     ]
-    original = state.dump()
+    from copy import deepcopy
+
+    original = deepcopy(state.dump())
     packet = observe(state, slot, scenario)
     assert all(section_bytes(packet, name) <= quota for name, (quota, _) in SECTIONS.items())
     assert len(canonical(packet).encode()) <= 24000

@@ -6,7 +6,7 @@ import httpx
 import pytest
 
 from unimatrix.benchmark.manifests import episode
-from unimatrix.benchmark.plans import PlanRepository, bind_candidate
+from unimatrix.benchmark.recipes import RecipeRepository
 from unimatrix.core.ids import digest
 from unimatrix.core.visibility import observe
 from unimatrix.policies.llm_policy import LLMPolicy
@@ -41,11 +41,11 @@ def design(**kwargs):
 
 def test_fixed_rules_and_any_number_of_model_peers_are_frozen():
     peers = [dict(MODEL, **PERSONALITY)] * 3 + ["reciprocal"] * 20
-    draft = build_design(design(peers=peers), PlanRepository())
-    assert "levels" not in draft["design"]
-    assert {case["level"] for case in draft["plan"]["cases"]} == {2}
+    draft = build_design(design(peers=peers), RecipeRepository())
+    assert draft["design"]["complexity"] == ["standard"]
+    assert {case["layers"] for case in draft["plan"]["cases"]} == {"standard"}
     prepared = prepare(draft["plan"], {}, ["passive"], [], "Test")
-    assert prepared["provider_decisions_max"] == 3 * 240
+    assert prepared["provider_decisions_max"] == 3 * draft["plan"]["ticks"]
     manifest = prepared["studies"][0]["execution"]["episodes"][0]
     assert len(manifest["slots"]) == 24
     assert list(p for s, p in manifest["policies"].items() if s != manifest["focal_slot"]) == peers
@@ -54,7 +54,7 @@ def test_fixed_rules_and_any_number_of_model_peers_are_frozen():
         next(p for p in manifest["policies"].values() if isinstance(p, dict))["system_prompt"]
         == PERSONALITY["system_prompt"]
     )
-    changed = build_design(design(peers=peers), PlanRepository())
+    changed = build_design(design(peers=peers), RecipeRepository())
     assert changed["plan_hash"] != draft["plan_hash"]
 
 
@@ -64,17 +64,10 @@ def test_population_limits(count):
         design(peers=["passive"] * count)
 
 
-@pytest.mark.parametrize("levels", [[1], [3], [1, 2, 3]])
-def test_retired_difficulty_is_rejected(levels):
-    with pytest.raises(ValueError, match="retired"):
-        design(levels=levels)
-
-
-def test_old_recipe_requires_rebuild_instead_of_silent_rule_changes():
-    spec = PlanRepository().get("compact-v1")
-    spec["cases"][0]["level"] = 1
-    with pytest.raises(ValueError, match="rebuild"):
-        bind_candidate(spec, "passive")
+@pytest.mark.parametrize("complexity", [["extreme"], ["standard", "standard"], [{"shock": {"x": 1}}]])
+def test_unknown_or_duplicate_complexity_is_rejected(complexity):
+    with pytest.raises(ValueError):
+        design(complexity=complexity)
 
 
 @pytest.mark.parametrize("domain", [f"D{i}" for i in range(1, 9)])
@@ -97,11 +90,12 @@ def test_resource_stock_and_targets_scale_with_population():
     small = scenario.build(episode("D4"))
     large = scenario.build(episode("D4", peer_count=23))
     assert large.scenario["stock"] == 3 * small.scenario["stock"]
+    expected = sum(scenario.demand(large, s) for s in large.agents)
     events = scenario.evolve(large, large)
     sample = next(e for e in events if e["type"] == "service_sampled")
     stock = next(e for e in events if e["type"] == "stock_snapshot")
-    assert sample["payload"]["target"] == 125 * 24
-    assert stock["payload"]["reserve_target"] == 5000 * 24
+    assert sample["payload"]["target"] == expected >= 100 * 24
+    assert stock["payload"]["reserve_target"] == 10000 * 24 * 90 // 100
 
 
 @pytest.mark.asyncio
@@ -118,7 +112,7 @@ async def test_compatible_provider_receives_system_prompt_without_changing_obser
     messages = captured[0]["messages"]
     assert [m["role"] for m in messages] == ["system", "user"]
     assert PERSONALITY["system_prompt"] in messages[0]["content"]
-    assert "unimatrix.decision.v3" in messages[0]["content"]
+    assert "unimatrix.decision.v4" in messages[0]["content"]
     assert json.loads(messages[1]["content"]) == {"observation": "test"}
     assert usage["system_prompt"] == messages[0]["content"]
 
@@ -159,7 +153,7 @@ async def test_lab_roundtrip_preserves_population_and_distinct_personalities(tmp
     ] + ["reciprocal"] * 21
     payload = design(peers=peers).model_dump()
     async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app), base_url="http://test"
+        transport=httpx.ASGITransport(app=app), base_url="http://localhost", headers={"X-Unimatrix-Request": "1"}
     ) as client:
         response = await client.post("/api/recipe-lab/drafts", json=payload)
         assert response.status_code == 200, response.text
@@ -167,18 +161,16 @@ async def test_lab_roundtrip_preserves_population_and_distinct_personalities(tmp
         loaded = (await client.get("/api/recipe-lab/drafts/" + record["id"])).json()
         assert loaded["recipe"]["peers"] == peers
         assert len(loaded["recipe"]["cases"]) == 1
-        assert "levels" not in loaded["design"]
         assert digest(loaded["recipe"]) == digest(record["recipe"])
 
 
-def test_direct_runs_cannot_use_retired_difficulty():
-    from unimatrix.benchmark.validation import validate_manifest
+def test_config_binds_named_layers_and_rejects_unknown_fields():
     from unimatrix.config.models import Config
+    from unimatrix.scenarios.layers import PRESETS
 
     with pytest.raises(ValueError):
-        Config(mode="core", domain="D1", level=1)
-    with pytest.raises(ValueError, match="invalid_episode_shape"):
-        validate_manifest(episode("D1", level=1))
+        Config(mode="core", domain="D1", difficulty=1)
+    assert Config(mode="core", domain="D1", layers="harsh").manifest()["layers"] == PRESETS["harsh"]
 
 
 def test_larger_free_society_is_supported():

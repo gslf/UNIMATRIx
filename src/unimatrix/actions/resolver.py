@@ -3,9 +3,10 @@
 from copy import deepcopy
 
 from ..core.ids import entity_id
-from ..core.random_tape import RandomTape
+from ..core.random_tape import noise_tape
 from ..core.state import event
-from ..core.visibility import allowed
+from ..core.visibility import allowed, observe
+from ..core.waiting import information_signature, is_waiting
 from ..world import contracts, institutions, projects
 from ..world.contracts import Rejected, require
 
@@ -26,6 +27,13 @@ GOVERNANCE = {
 def operation(state, before, allowance, slot, op, ident, scenario):
     verb = op["verb"]
     require(before.agents[slot]["alive"], "inactive_actor")
+    if verb == "wait":
+        require(before.tick < op["until_tick"] <= before.scenario["horizon"], "invalid_wait_deadline")
+        plan = dict(origin_tick=before.tick, until_tick=op["until_tick"],
+                    generation=before.agents[slot]["generation"],
+                    information_signature=information_signature(observe(before, slot, scenario)))
+        state.agents[slot]["_wait"] = plan
+        return [event("wait_authorized", plan, slot, ["evaluator"])]
     if verb == "create_project":
         return projects.create(state, before, slot, op, ident)
     if verb == "work" and before.objects.get(op["project_id"], {}).get("kind") == "project":
@@ -100,6 +108,8 @@ def operation(state, before, allowance, slot, op, ident, scenario):
             obj = state.objects[key]
             if op["recipient_id"] not in obj["visibility"]:
                 obj["visibility"].append(op["recipient_id"])
+            if verb == "teach" and op["recipient_id"] not in obj.get("taught_to", []):
+                obj.setdefault("taught_to", []).append(op["recipient_id"])
         return [
             event(
                 "access_granted",
@@ -127,11 +137,24 @@ def operation(state, before, allowance, slot, op, ident, scenario):
 
 def resolve(before, decisions, scenario, packets):
     state = before.clone()
+
+
+
+    identifier_namespace = [
+        "world-entities-v1", state.domain, state.seed, state.scenario.get("replicate", 0)
+    ]
     state.receipts = {slot: [] for slot in state.agents}
     events = []
     allowance = {s: contracts.available(before, s) for s in before.agents}
-    for slot in RandomTape(before.seed).priority(before.tick, decisions):
+    for slot, packet in sorted(packets.items()):
+        if slot not in decisions and is_waiting(before, slot, packet):
+            plan = before.agents[slot]["_wait"]
+            events.append(event("decision_waited", dict(origin_tick=plan["origin_tick"],
+                                until_tick=plan["until_tick"], generation=plan["generation"]),
+                                slot, ["evaluator"]))
+    for slot in noise_tape(before).priority(before.tick, decisions):
         decision = decisions[slot]
+        state.agents[slot].pop("_wait", None)
         if decision is None:
             state.receipts[slot].append(dict(status="invalid_envelope"))
             events.append(event("decision_rejected", {}, slot, [slot]))
@@ -142,8 +165,12 @@ def resolve(before, decisions, scenario, packets):
         events.extend(scenario.forecasts(state, before, slot, decision["forecasts"]))
         for index, op in enumerate(decision["operations"]):
             candidate, budget = state.operation_copy(), deepcopy(allowance)
-            ident = entity_id(state.run_id, state.tick, slot, index)
+            ident = entity_id(identifier_namespace, state.tick, slot, index)
             try:
+                if op["verb"] == "wait":
+                    require(len(decision["operations"]) == 1 and not decision["messages"]
+                            and not decision["forecasts"] and decision["memory_query"] is None,
+                            "wait_requires_sole_operation_without_messages_forecasts_or_query")
                 emitted = operation(candidate, before, budget, slot, op, ident, scenario)
             except Rejected as error:
                 receipt = dict(
@@ -157,13 +184,14 @@ def resolve(before, decisions, scenario, packets):
             state.receipts[slot].append(receipt)
     events.extend(contracts.settle(state, allowance))
     events.extend(scenario.evolve(state, before))
+    events.extend(scenario.conditions(state, before))
     replaced = {
         slot
         for slot in state.agents
         if state.agents[slot]["generation"] != before.agents[slot]["generation"]
     }
     for slot in sorted(decisions):
-        # Only the inbox actually included in the packet is consumed.
+
         read_ids = {message["id"] for message in packets[slot]["inbox"]}
         state.inbox[slot] = [
             message for message in state.inbox[slot] if message["id"] not in read_ids
@@ -173,16 +201,18 @@ def resolve(before, decisions, scenario, packets):
             continue
         for index, message in enumerate(decision["messages"]):
             recipients = message["to"]
+            reach = scenario.contacts(before, slot)
             if message["channel"] == "public":
-                recipients = list(state.agents)
+                recipients = [r for r in state.agents if r == slot or r in reach]
             elif message["channel"] == "group":
                 group = before.objects.get(recipients[0], {})
-                recipients = group.get("members", []) if slot in group.get("members", []) else []
-            if not recipients or any(r not in before.agents for r in recipients):
+                members = group.get("members", []) if slot in group.get("members", []) else []
+                recipients = [r for r in members if r == slot or r in reach]
+            if not recipients or any(r not in before.agents or r not in reach | {slot} for r in recipients):
                 state.receipts[slot].append(dict(status="rejected", reason="unavailable_recipient"))
                 continue
             item = dict(
-                id=entity_id(state.run_id, state.tick, slot, f"message-{index}"),
+                id=entity_id(identifier_namespace, state.tick, slot, f"message-{index}"),
                 tick=state.tick + 1,
                 sender=slot,
                 sender_generation=before.agents[slot]["generation"],
@@ -206,7 +236,7 @@ def resolve(before, decisions, scenario, packets):
         ):
             state.memories[slot].append(
                 dict(
-                    id=entity_id(state.run_id, state.tick, slot, f"event-{index}"),
+                    id=entity_id(identifier_namespace, state.tick, slot, f"event-{index}"),
                     tick=state.tick + 1,
                     type=record["type"],
                     payload=record["payload"],

@@ -1,7 +1,16 @@
 """Serializable material and epistemic state. No provider or wall-clock data."""
 
-from copy import copy, deepcopy
-from dataclasses import asdict, dataclass, field
+import pickle
+from copy import copy
+from dataclasses import dataclass, field
+
+MATERIAL = ("run_id", "seed", "domain", "tick", "agents", "objects", "scenario", "inbox", "receipts")
+MUTABLE = ("agents", "objects", "scenario", "inbox", "receipts")
+
+
+def replica(value):
+    """Deep copy for JSON-like data; several times faster than copy.deepcopy."""
+    return pickle.loads(pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL))
 
 
 @dataclass
@@ -18,21 +27,27 @@ class WorldState:
     receipts: dict = field(default_factory=dict)
 
     def dump(self):
-        return asdict(self)
+        """Read-only material view; serialize it immediately, never mutate it."""
+        return {name: getattr(self, name) for name in MATERIAL}
 
     def clone(self):
-        return deepcopy(self)
+        candidate = copy(self)
+        for name in MUTABLE:
+            setattr(candidate, name, replica(getattr(self, name)))
+
+        candidate.memories = {slot: list(entries) for slot, entries in self.memories.items()}
+        return candidate
 
     def operation_copy(self):
         """Copy mutable material fields; operations cannot edit experience logs."""
         candidate = copy(self)
         for name in ("agents", "objects", "scenario", "receipts"):
-            setattr(candidate, name, deepcopy(getattr(self, name)))
+            setattr(candidate, name, replica(getattr(self, name)))
         return candidate
 
     @classmethod
     def load(cls, value):
-        return cls(**deepcopy(value))
+        return cls(**replica(value))
 
 
 def agent(slot, inventory=None, mandate=None):
@@ -52,7 +67,7 @@ def agent(slot, inventory=None, mandate=None):
 def event(kind, payload, actor=None, visibility=None, phase="resolve"):
     return dict(
         type=kind,
-        payload=deepcopy(payload),
+        payload=replica(payload),
         actor_slot=actor,
         visibility=visibility if visibility is not None else ["public"],
         phase=phase,

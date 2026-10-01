@@ -6,9 +6,9 @@ import pytest
 from fastapi import FastAPI
 
 from unimatrix.actions.schemas import empty
-from unimatrix.benchmark.plans import PlanRepository
+from unimatrix.benchmark.recipes import RecipeRepository
 from unimatrix.benchmark.service import BenchmarkService
-from unimatrix.core.ids import canonical
+from unimatrix.core.ids import canonical, digest
 from unimatrix.persistence.json_files import write_json
 from unimatrix.policies.llm_policy import LLMPolicy
 from unimatrix.web.benchmark import build_router
@@ -23,7 +23,7 @@ MODEL = dict(
 
 
 def setup(tmp_path):
-    spec = PlanRepository().get("compact-v1")
+    spec = RecipeRepository().get("standard-v1")
     spec.update(
         id="test-v1",
         name="Test v1",
@@ -52,13 +52,13 @@ async def test_complete_benchmark_scores_and_exposes_real_evidence(tmp_path, mon
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url="http://test"
     ) as client:
-        # Clients select saved recipes, but cannot supply arbitrary benchmark conditions.
+
         bad = await client.post("/api/benchmarks", json={"model_id": "a", "plan": "custom"})
         assert bad.status_code == 422
-        response = await client.post("/api/benchmarks", json={"model_id": "a"})
+        response = await client.post("/api/benchmarks", json={"model_id": "a", "parallelism": 4})
         assert response.status_code == 200
         run = response.json()
-        assert run["plan_id"] == "test-v1"
+        assert run["recipe_id"] == "test-v1"
         assert (
             await client.get(f"/api/leaderboard?cohort={run['cohort']}&track=accounted_compute")
         ).json() == []
@@ -83,9 +83,9 @@ async def test_complete_benchmark_scores_and_exposes_real_evidence(tmp_path, mon
         episode = result["episodes"][0]
         prefix = f"/api/benchmarks/{run['id']}/episodes/{episode['run_id']}"
         detail = (await client.get(prefix)).json()
-        assert len(detail["series"]) == 241
+        assert len(detail["series"]) == spec["ticks"] + 1
         assert detail["metrics"]
-        assert detail["verification"]["completed_tick"] == 240
+        assert detail["verification"]["completed_tick"] == spec["ticks"]
         decision = (
             await client.get(
                 prefix + "/decision", params={"tick": 0, "agent": episode["focal_slot"]}
@@ -101,12 +101,17 @@ async def test_complete_benchmark_scores_and_exposes_real_evidence(tmp_path, mon
         ).json()
         assert next_page["items"][0]["seq"] > messages["cursor"]
         assert (await client.get(prefix + "/state?tick=0")).json()["tick"] == 0
-        assert (await client.get(f"/api/benchmarks/{run['id']}/export")).status_code == 200
-        # Archived plan revisions stay inspectable after an authored file changes.
+        exported = await client.get(f"/api/benchmarks/{run['id']}/export")
+        assert exported.status_code == 200
+        saved = router.service.read(run["id"])
+        conditions = exported.json()["execution_configuration"]
+        assert conditions == dict(runtime=saved["runtime"], parallelism=4)
+        assert exported.json()["execution_configuration_sha256"] == digest(conditions)
+
         changed = deepcopy(spec)
         changed["cases"][0]["seed"] = 17
         write_json(tmp_path / "plans" / "test.json", changed)
-        versions = (await client.get("/api/plans")).json()
+        versions = (await client.get("/api/recipes")).json()
         old = next(p for p in versions if p["id"] == run["cohort"])
         assert old["archived"]
         current = next(p for p in versions if p["default"])
@@ -139,14 +144,14 @@ async def test_pause_restart_resume_and_failure_never_rank(tmp_path, monkeypatch
     await service.pause(run["id"])
     assert service.read(run["id"])["status"] == "paused"
     assert service.leaderboard(run["cohort"], "accounted_compute") == []
-    # A new server instance uses the saved plan, even if the author changes the live file.
+
     restored = BenchmarkService(tmp_path / "runs", service.plans)
     await restored.resume(run["id"])
     release.set()
     await restored.active[run["id"]][0]
     assert restored.read(run["id"])["status"] == "completed"
 
-    # Failure remains visible with its error; it cannot be assigned a score.
+
     async def fail(*args):
         raise ValueError("test provider failure")
 
@@ -170,7 +175,7 @@ async def test_cancel_before_first_instruction_releases_lease(tmp_path):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("recipe_id", ["compact-v1", "custom-v2"])
+@pytest.mark.parametrize("recipe_id", ["standard-v1", "custom-v2"])
 async def test_start_runs_selected_recipe_instead_of_server_default(tmp_path, monkeypatch, recipe_id):
     app, router, spec = setup(tmp_path)
     custom = dict(spec, id="custom-v2", name="Custom v2")
@@ -191,7 +196,7 @@ async def test_start_runs_selected_recipe_instead_of_server_default(tmp_path, mo
             })
             assert response.status_code == 200, response.text
             run = router.service.read(response.json()["id"])
-            assert run["plan_id"] == recipe_id
+            assert run["recipe_id"] == recipe_id
             assert run["cohort"] == selected["id"]
             assert run["total_episodes"] == selected["cases"]
             assert run["execution"]["suite"]["cases"] == selected["spec"]["cases"]

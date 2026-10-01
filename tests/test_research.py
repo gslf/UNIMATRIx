@@ -8,7 +8,7 @@ from fastapi import FastAPI
 
 from unimatrix.actions.schemas import empty
 from unimatrix.actions.schemas import validate as validate_decision
-from unimatrix.benchmark.plans import PlanRepository, bind_candidate
+from unimatrix.benchmark.recipes import RecipeRepository, bind_candidate
 from unimatrix.benchmark.service import BenchmarkService
 from unimatrix.core.ids import canonical
 from unimatrix.core.visibility import observe
@@ -32,7 +32,7 @@ MODEL = dict(
 
 def design(**changes):
     return dict(
-        base_plan="compact-v1",
+        base_recipe="standard-v1",
         id="lab-v1",
         name="Lab v1",
         description="Test design",
@@ -46,14 +46,14 @@ def design(**changes):
 
 
 def small_plan():
-    spec = build_design(Design(**design()), PlanRepository())["plan"]
+    spec = build_design(Design(**design()), RecipeRepository())["plan"]
     spec["bootstrap"] = dict(seed=1, resamples=10)
     return spec
 
 
 def test_design_is_balanced_disjoint_and_keeps_base_unchanged():
-    plans = PlanRepository()
-    original = plans.get("compact-v1")
+    plans = RecipeRepository()
+    original = plans.get("standard-v1")
     data = design()
     data.update(
         domains=["D1", "D2"],
@@ -71,7 +71,7 @@ def test_design_is_balanced_disjoint_and_keeps_base_unchanged():
     for key in ["engine", "budgets", "bootstrap", "peers", "ticks"]:
         assert result["plan"][key] == result["holdout"][key] == original[key]
     assert result["holdout"]["id"] == "lab-v1-holdout"
-    assert plans.get("compact-v1") == original
+    assert plans.get("standard-v1") == original
 
 
 @pytest.mark.parametrize(
@@ -80,7 +80,7 @@ def test_design_is_balanced_disjoint_and_keeps_base_unchanged():
         {"seeds": [1, 1]},
         {"holdout_seeds": [100]},
         {"domains": []},
-        {"levels": [4]},
+        {"complexity": ["extreme"]},
         {"replicates": 0},
         {"seeds": [True]},
         {"peers": []},
@@ -93,7 +93,7 @@ def test_invalid_designs_are_rejected(changes):
     data = design()
     data.update(changes)
     with pytest.raises(ValueError):
-        build_design(Design(**data), PlanRepository())
+        build_design(Design(**data), RecipeRepository())
 
 
 def test_preview_pairs_exact_cases_and_counts_reference_model_calls():
@@ -101,16 +101,18 @@ def test_preview_pairs_exact_cases_and_counts_reference_model_calls():
     spec["peers"] = [dict(MODEL, model="peer")] * 2 + ["passive"] * 5
     record = prepare(spec, {"a": MODEL}, ["passive"], ["no_memory", "no_communication"], "Pilot")
     assert len(record["studies"]) == record["episodes"] == 4
-    assert record["provider_decisions_max"] == (2 + 3 * 3) * 240
+    assert record["provider_decisions_max"] == (2 + 3 * 3) * spec["ticks"]
     assert record["provider_attempts_max"] == record["provider_decisions_max"] * 3
-    assert record["generated_tokens_max"] is None  # Legacy models have no declared token context.
+    assert record["generated_tokens_max"] is None
     ids = set()
     for study in record["studies"]:
         m = study["execution"]["episodes"][0]
         ids.add(m["run_id"])
         assert "ablations" not in m
         assert study["execution"]["suite"]["cases"] == spec["cases"]
-        assert [m["policies"][s] for s in m["slots"] if s != m["focal_slot"]] == spec["peers"]
+        from unimatrix.benchmark.manifests import peer_slots
+
+    assert [m["policies"][s] for s in peer_slots(m)] == spec["peers"]
     assert len(ids) == 4
     with pytest.raises(ValueError, match="same candidate"):
         prepare(spec, {"a": MODEL, "b": dict(MODEL, endpoint="http://elsewhere")}, [], [], "Pilot")
@@ -181,7 +183,7 @@ async def test_interventions_preserve_evidence_and_do_not_repair_invalid_outputs
 async def test_api_draft_preview_export_and_immutable_publication(tmp_path):
     write_json(tmp_path / "models" / "a.json", MODEL)
     router = build_research_router(
-        tmp_path / "runs", tmp_path / "models", tmp_path / "plans", "compact-v1"
+        tmp_path / "runs", tmp_path / "models", tmp_path / "plans", "standard-v1"
     )
     app = FastAPI()
     app.include_router(router)
@@ -202,26 +204,26 @@ async def test_api_draft_preview_export_and_immutable_publication(tmp_path):
             baselines=[],
             interventions=["no_memory"],
         )
-        preview = (await client.post("/api/recipe-lab/campaign-preview", json=request)).json()
+        preview = (await client.post("/api/recipe-lab/evaluation-preview", json=request)).json()
         write_json(tmp_path / "models" / "a.json", dict(MODEL, model="changed"))
         saved = read_json(
             tmp_path / "runs" / "research" / "previews" / preview["id"] / "preview.json"
         )
         m = saved["studies"][0]["execution"]["episodes"][0]
         assert m["policies"][m["focal_slot"]] == MODEL
-        assert (await client.get("/api/recipe-lab/campaigns")).json() == []
+        assert (await client.get("/api/recipe-lab/evaluations")).json() == []
         assert not list((tmp_path / "runs").rglob("episode.db"))
         publish = f"/api/recipe-lab/drafts/{draft['id']}/publish"
         assert (await client.post(publish, json={})).json()["already_saved"] is False
         assert (await client.post(publish, json={})).json()["already_saved"] is True
-        assert PlanRepository(tmp_path / "plans", "compact-v1").default == "compact-v1"
+        assert RecipeRepository(tmp_path / "plans", "standard-v1").default == "standard-v1"
         changed = design()
         changed["seeds"] = [101]
         other = (await client.post("/api/recipe-lab/drafts", json=changed)).json()
         assert (
             await client.post(f"/api/recipe-lab/drafts/{other['id']}/publish", json={})
         ).status_code == 409
-        assert read_json(tmp_path / "plans" / "lab-v1.json") == draft["plan"]
+        assert read_json(tmp_path / "plans" / "lab-v1.json") == draft["recipe"]
 
 
 @pytest.mark.asyncio
@@ -259,11 +261,11 @@ async def test_campaign_executes_real_engine_records_candidate_only_variants_and
     )
     store = EventStore(path)
     try:
-        assert store.verify()["completed_tick"] == 240
+        assert store.verify()["completed_tick"] == manifest["ticks"]
         rows = store.db.execute("SELECT body FROM model_calls").fetchall()
         calls = [json.loads(row[0]) for row in rows]
         modified = [c for c in calls if "research_intervention" in c]
-        assert len(modified) == 240
+        assert len(modified) == manifest["ticks"]
         assert all(c["slot"] == manifest["focal_slot"] for c in modified)
         assert all(c["research_input"]["private_note"] == "" for c in modified)
         assert all(
@@ -288,7 +290,7 @@ async def test_pause_restart_shared_lock_and_changed_implementation(tmp_path, mo
     record["id"] = "b" * 24
     runner.launch(record)
     await entered.wait()
-    service = BenchmarkService(tmp_path, PlanRepository())
+    service = BenchmarkService(tmp_path, RecipeRepository())
     with pytest.raises(ValueError, match="episode_already_running"):
         await service.start(MODEL, "a")
     await runner.pause(record)
@@ -296,7 +298,7 @@ async def test_pause_restart_shared_lock_and_changed_implementation(tmp_path, mo
     restored = CampaignRunner(runner.directory, runner.shared_lock)
     saved = read_json(runner.directory / record["id"] / "campaign.json")
     restored.launch(saved)
-    # Cancelling before the coroutine starts must also release the filesystem lock.
+
     await restored.pause(saved)
     assert not restored.active
     saved["research_runtime"] = "changed"
@@ -340,6 +342,104 @@ def test_analysis_uses_paired_cases_and_excludes_failed_and_intervened_metric_he
     assert result["completed_studies"] == 3
     assert result["score_spread"] == 100
     assert result["effects"][0]["delta"] == 50
-    assert result["effects"][0]["ci95"] == [50, 50]
+    assert result["effects"][0]["ci95"][0] < 0 < result["effects"][0]["ci95"][1]
     assert all(m["observations"] == 2 and m["mean"] == 50 for m in result["metric_health"])
     assert any("1 studies failed" in n for n in result["notes"])
+
+
+def test_analysis_normalizes_between_floor_and_ceiling_and_compares_pairs(tmp_path):
+    from unimatrix.evaluation.scoring import canonical_hash, summarize
+
+    record = prepare(
+        small_plan(),
+        {"a": MODEL, "b": dict(MODEL, model="second")},
+        ["random", "oracle"],
+        [],
+        "Normalization",
+    )
+    levels = {"baseline/random": 0.2, "baseline/oracle": 0.8, "a": 0.5, "b": 0.65}
+    for study in record["studies"]:
+        suite = study["execution"]["suite"]
+        base = levels[study["system_id"]]
+        data = dict(
+            benchmark_id=suite["benchmark_id"],
+            scaffold_id=suite["scaffold_id"],
+            suite_hash=canonical_hash(suite),
+            candidate_id=study["execution"]["candidate_id"],
+            data_kind="synthetic",
+            budget_track="accounted_compute",
+            runs=[
+                dict(
+                    c,
+                    status="completed",
+                    population="P0",
+                    scores={
+                        m: min(1, base + 0.05 * (c["seed"] % 2))
+                        for m in suite["domains"][c["domain"]]["metrics"]
+                    },
+                )
+                for c in suite["cases"]
+            ],
+        )
+        write_json(tmp_path / "studies" / study["id"] / "results.json", data)
+        study.update(status="completed", report=summarize(data, suite))
+    result = analyze(record, tmp_path)
+    assert result["normalized"] is True
+    systems = {s["system_id"]: s for s in result["systems"]}
+    assert systems["baseline/random"]["rating_points"] == 0
+    assert systems["baseline/oracle"]["rating_points"] == 100
+    assert 0 < systems["a"]["rating_points"] < systems["b"]["rating_points"] < 100
+    assert systems["a"]["iqm"] == pytest.approx(systems["a"]["usi"], abs=5)
+    pairs = {(c["left"], c["right"]) for c in result["comparisons"]}
+    assert ("test-model", "second") in pairs and ("second", "test-model") not in pairs
+    assert all(c["seed_rho"] is None or -1 <= c["seed_rho"] <= 1 for c in result["comparisons"])
+    assert result["discrimination"] and all(c["degenerate"] is False for c in result["discrimination"])
+    assert all(c["model_spread"] == pytest.approx(15) for c in result["discrimination"])
+
+
+@pytest.mark.asyncio
+async def test_pilot_stops_early_on_paired_seeds(tmp_path, monkeypatch):
+    from unimatrix.persistence.json_files import read_json as load
+
+    async def decide(self, observation, budget):
+        return canonical(empty(observation["tick"], observation["agent_id"])), {}
+
+    monkeypatch.setattr(LLMPolicy, "decide", decide)
+    spec = small_plan()
+    spec["cases"] = [dict(c, seed=seed) for seed in [1, 2, 3, 4] for c in spec["cases"][:1]]
+    record = prepare(
+        spec,
+        {"a": MODEL},
+        ["passive"],
+        [],
+        "Pilot",
+        mode="pilot",
+        stopping=dict(reference="reciprocal", minimum_effect=5, block_seeds=2, max_seeds=4),
+    )
+    assert [s["system_id"] for s in record["studies"]][:2] == ["baseline/passive", "baseline/reciprocal"]
+    record["id"] = "c" * 24
+    runner = CampaignRunner(tmp_path / "research" / "campaigns", tmp_path / "benchmark.lock")
+    runner.launch(record)
+    await runner.active[record["id"]][0]
+    assert record["status"] == "completed", record
+    study = record["studies"][-1]
+    assert study["stopping"]["verdict"] is None
+    assert study["stopping"]["seeds"] == [1, 2, 3, 4] and study["stopping"]["looks"] == 2
+    assert len(study["execution"]["episodes"]) == 4
+    assert study["stopping"]["planned_looks"] == 2
+    assert study["stopping"]["family_size"] == 2
+    assert study["stopping"]["interval_method"] == "weighted-Hoeffding-seed-clusters-v1"
+    saved = load(runner.directory / record["id"] / "campaign.json")
+    assert saved["mode"] == "pilot" and saved["studies"][-1]["stopping"]["seeds"] == [1, 2, 3, 4]
+    comparisons = record["analysis"]["comparisons"]
+    assert any(c["right"] == "reciprocal" and c["verdict"] == "inconclusive" for c in comparisons)
+
+
+def test_smoke_mode_keeps_one_case_per_domain_and_complexity():
+    spec = RecipeRepository().get("standard-v1")
+    record = prepare(spec, {}, ["passive"], [], "Smoke", mode="smoke")
+    cases = record["plan"]["cases"]
+    assert len(cases) == 16
+    assert cases == spec["cases"]
+    with pytest.raises(ValueError):
+        prepare(spec, {}, ["passive"], [], "Bad", mode="pilot", stopping={"reference": "nobody"})

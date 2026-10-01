@@ -4,11 +4,12 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .benchmark import build_router
 from .research import build_research_router
+from .security import DashboardSecurity
 
 
 def build_app(
@@ -16,12 +17,10 @@ def build_app(
     models_dir="config/models",
     recipes_dir="config/recipes",
     default_recipe="standard-v1",
-    **legacy,
+    *,
+    allowed_hosts=("localhost", "127.0.0.1", "::1"),
+    auth_token=None,
 ):
-    recipes_dir = legacy.pop("plans_dir", recipes_dir)
-    default_recipe = legacy.pop("default_plan", default_recipe)
-    if legacy:
-        raise TypeError("Unknown server options: " + ", ".join(legacy))
     router = build_router(runs_dir, models_dir, recipes_dir, default_recipe)
 
     research = build_research_router(runs_dir, models_dir, recipes_dir, default_recipe)
@@ -33,15 +32,19 @@ def build_app(
         await research.shutdown_tasks()
 
     app = FastAPI(title="UNIMATRIx", lifespan=lifespan)
+    app.add_middleware(DashboardSecurity, allowed_hosts=allowed_hosts, token=auth_token)
     static = Path(__file__).with_name("static")
     app.mount("/static", StaticFiles(directory=static), name="static")
     app.include_router(router)
     app.include_router(research)
-    app.include_router(research.legacy_router, include_in_schema=False)
 
     @app.get("/")
     def index():
         return FileResponse(static / "benchmark.html")
+
+    @app.get("/recipeManager")
+    def recipe_manager():
+        return FileResponse(static / "recipe-manager.html")
 
     @app.get("/recipe-lab")
     def recipe_lab():
@@ -50,9 +53,5 @@ def build_app(
     @app.get("/recipe-lab/evaluations/{ident}")
     def evaluation_explorer(ident: str):
         return FileResponse(static / "evaluation-explorer.html")
-
-    @app.get("/research", include_in_schema=False)
-    def legacy_research_page():
-        return RedirectResponse("/recipe-lab", status_code=307)
 
     return app

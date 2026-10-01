@@ -1,23 +1,21 @@
-#!/usr/bin/env python3
-"""USI scoring reference for already-normalized metrics. Python 3.11+, stdlib.
-
-Not a simulator, not an extractor and not a certification of empirical validity.
-The supplied examples are synthetic and the design manifest is a draft.
-"""
+"""Validate and score completed benchmark results."""
 
 from __future__ import annotations
 
 import argparse
 import hashlib
-import itertools
 import json
 import math
-import random
-from collections import defaultdict
 from pathlib import Path
 from statistics import fmean
 
-ROOT = Path(__file__).resolve().parents[1]
+from .uncertainty import METHOD, seed_estimator, seed_interval
+
+
+def case_key(row) -> tuple:
+    from ..scenarios.layers import layers_key
+
+    return (row["domain"], layers_key(row["layers"]), row["seed"], row["role"], row["replicate"])
 
 
 def canonical_hash(value: object) -> str:
@@ -41,23 +39,6 @@ def read_json(path: Path) -> dict:
     return value
 
 
-def expected_keys(manifest: dict) -> set[tuple]:
-    if "cases" in manifest:
-        return {
-            tuple(c[k] for k in ("domain", "level", "seed", "role", "replicate"))
-            for c in manifest["cases"]
-        }
-    return set(
-        itertools.product(
-            manifest["domains"],
-            manifest["levels"],
-            manifest["seeds"],
-            manifest["roles"],
-            manifest["replicates"],
-        )
-    )
-
-
 def validate(data: dict, manifest: dict) -> dict[tuple, float]:
     if data.get("suite_hash") != canonical_hash(manifest):
         raise ValueError("Suite hash mismatch")
@@ -70,7 +51,7 @@ def validate(data: dict, manifest: dict) -> dict[tuple, float]:
         raise ValueError("candidate_id required")
     if data.get("budget_track") not in ("accounted_compute", "opaque_compute"):
         raise ValueError("Unknown budget track")
-    expected = expected_keys(manifest)
+    expected = {case_key(c) for c in manifest["cases"]}
     if not isinstance(data.get("runs"), list):
         raise ValueError("runs must be a list")
     for d, spec in manifest["domains"].items():
@@ -82,13 +63,13 @@ def validate(data: dict, manifest: dict) -> dict[tuple, float]:
         ):
             raise ValueError(f"Non-positive weights: {d}")
     values = {}
-    fields = ("domain", "level", "seed", "role", "replicate")
+    fields = ("domain", "layers", "seed", "role", "replicate")
     for row in data["runs"]:
         if not isinstance(row, dict) or any(k not in row for k in fields):
             raise ValueError("Malformed run")
-        if any(type(row[k]) is not int for k in ("level", "seed", "replicate")):
-            raise ValueError("Integer level, seed and replicate required (not bool)")
-        key = tuple(row[k] for k in fields)
+        if any(type(row[k]) is not int for k in ("seed", "replicate")):
+            raise ValueError("Integer seed and replicate required (not bool)")
+        key = case_key(row)
         if key not in expected:
             raise ValueError(f"Unexpected cell: {key}")
         if key in values:
@@ -113,25 +94,14 @@ def validate(data: dict, manifest: dict) -> dict[tuple, float]:
 
 
 def domain_means(values: dict[tuple, float], manifest: dict) -> dict[str, float]:
-    # Explicit equal weights by level; the supplied manifest is fully balanced.
+
     out = {}
     for domain in manifest["domains"]:
         out[domain] = fmean(
-            fmean(v for k, v in values.items() if k[0] == domain and k[1] == level)
-            for level in sorted({k[1] for k in values if k[0] == domain})
+            fmean(v for k, v in values.items() if k[0] == domain and k[1] == label)
+            for label in sorted({k[1] for k in values if k[0] == domain})
         )
     return out
-
-
-def clustered(values: dict[tuple, float], manifest: dict) -> dict[tuple, dict[int, float]]:
-    temporary = defaultdict(lambda: defaultdict(list))
-    for (domain, level, seed, role, replicate), score in values.items():
-        population = manifest["population_by_seed"][str(seed)]
-        temporary[(domain, population)][seed].append(score)
-    return {
-        stratum: {seed: fmean(scores) for seed, scores in seeds.items()}
-        for stratum, seeds in temporary.items()
-    }
 
 
 def percentile(xs: list[float], p: float) -> float:
@@ -141,50 +111,69 @@ def percentile(xs: list[float], p: float) -> float:
     return ys[lo] + (ys[hi] - ys[lo]) * (position - lo)
 
 
-def interval(xs: list[float]) -> list[float]:
-    return [round(100 * percentile(xs, p), 6) for p in (0.025, 0.975)]
+def restrict(data: dict, manifest: dict, keys: set) -> tuple[dict, dict]:
+    """The same results and suite limited to the given case keys, with a fresh suite hash."""
+    spec = dict(manifest, cases=[c for c in manifest["cases"] if case_key(c) in keys])
+    rows = [r for r in data["runs"] if case_key(r) in keys]
+    return dict(data, runs=rows, suite_hash=canonical_hash(spec)), spec
 
 
-def bootstrap(
-    left: dict[tuple, float], manifest: dict, right: dict[tuple, float] | None = None
-) -> tuple[list[float], dict[str, list[float]]]:
-    """Stratified seed-cluster resampling; paired same draws when right is given.
-
-    Seed clusters retain levels, roles and inference repeats. Scenario families
-    are fixed; the interval does not generalize to unseen domain definitions.
-    """
-    l_clusters = clustered(left, manifest)
-    r_clusters = clustered(right, manifest) if right is not None else None
-    rng = random.Random(manifest["bootstrap"]["seed"])
-    total_samples = []
-    by_domain = {d: [] for d in manifest["domains"]}
-    for _ in range(manifest["bootstrap"]["resamples"]):
-        one_draw = defaultdict(list)
-        for stratum in sorted(l_clusters):
-            seeds = sorted(l_clusters[stratum])
-            sampled = rng.choices(seeds, k=len(seeds))
-            value = fmean(
-                l_clusters[stratum][s] - (r_clusters[stratum][s] if r_clusters is not None else 0)
-                for s in sampled
-            )
-            one_draw[stratum[0]].append((value, len(seeds)))
-        domain_draw = {}
-        for d, rows in one_draw.items():
-            # Preserve each stratum's design weight (equal pools in Core).
-            domain_draw[d] = sum(v * n for v, n in rows) / sum(n for _, n in rows)
-            by_domain[d].append(domain_draw[d])
-        total_samples.append(fmean(domain_draw.values()))
-    return total_samples, by_domain
+def common_cases(left: dict, left_spec: dict, right: dict, right_spec: dict):
+    """Both results restricted to the cases they share, for a paired comparison."""
+    keys = {case_key(c) for c in left_spec["cases"]} & {case_key(c) for c in right_spec["cases"]}
+    if not keys:
+        raise ValueError("No shared cases to compare")
+    a, spec = restrict(left, left_spec, keys)
+    b, _ = restrict(right, right_spec, keys)
+    return a, b, spec
 
 
-def summarize(data: dict, manifest: dict) -> dict:
+def normalized_scores(values: dict[tuple, float], references: dict) -> dict:
+    """Signed per-case reference gain; the strong reference is an anchor, not a cap."""
+    from .stats import normalize
+
+    result = {}
+    for key, score in values.items():
+        bounds = references.get(key)
+        result[key] = None if bounds is None else normalize(score, *bounds)
+    return result
+
+
+def summarize(data: dict, manifest: dict, references: dict | None = None) -> dict:
+    from .stats import iqm, optimality_gap
+
     values = validate(data, manifest)
     means = domain_means(values, manifest)
-    samples, domain_samples = bootstrap(values, manifest)
+    robust = dict(
+        iqm=round(100 * iqm(list(values.values())), 6),
+        optimality_gap=round(100 * optimality_gap(list(values.values())), 6),
+    )
+    if references is not None:
+        scored = normalized_scores(values, references)
+        usable = {k: v for k, v in scored.items() if v is not None}
+        complete = len(usable) == len(values)
+        rating = fmean(domain_means(usable, manifest).values()) if complete else None
+        robust.update(
+            scoring_version="reference-gain-v1",
+            rating=rating,
+            rating_ci95=seed_interval(usable, references=references, comparisons=len(means) + 1)
+            if complete
+            else None,
+            rating_domains={
+                d: dict(score=v, ci95=seed_interval(usable, references=references, domains=[d], comparisons=len(means) + 1))
+                for d, v in domain_means(usable, manifest).items()
+            }
+            if complete
+            else {},
+            rating_iqm=iqm(list(usable.values())) if complete else None,
+            normalized_cells=len(usable),
+            degenerate_cells=len(scored) - len(usable),
+        )
     return {
+        **robust,
         "candidate_id": data["candidate_id"],
         "data_kind": data["data_kind"],
-        "certified": manifest["release_status"] == "validated" and data["data_kind"] == "empirical",
+        "certified": False,
         "release_status": manifest["release_status"],
         "benchmark_id": manifest["benchmark_id"],
         "suite_hash": canonical_hash(manifest),
@@ -193,9 +182,9 @@ def summarize(data: dict, manifest: dict) -> dict:
         "completed_episodes": len(values),
         "ticks_per_episode": manifest["ticks"],
         "usi": round(100 * fmean(means.values()), 6),
-        "ci95": interval(samples),
+        "ci95": [100*v for v in seed_interval(values, comparisons=len(means) + 1)],
         "domains": {
-            d: {"score": round(100 * v, 6), "ci95": interval(domain_samples[d])}
+            d: {"score": round(100 * v, 6), "ci95": [100*x for x in seed_interval(values, domains=[d], comparisons=len(means) + 1)]}
             for d, v in means.items()
         },
         "strata": {
@@ -217,33 +206,55 @@ def summarize(data: dict, manifest: dict) -> dict:
                 )
                 for role in sorted({k[3] for k in values})
             },
-            "level": {
-                str(level): round(
-                    100 * fmean(value for key, value in values.items() if key[1] == level), 6
+            "complexity": {
+                label: round(
+                    100 * fmean(value for key, value in values.items() if key[1] == label), 6
                 )
-                for level in sorted({k[1] for k in values})
+                for label in sorted({k[1] for k in values})
             },
         },
         "bootstrap_resamples": manifest["bootstrap"]["resamples"],
-        "interval_scope": "Sampled seed clusters within fixed domains and populations; not construct validity.",
-        "warning": "Scoring reference only. Synthetic examples are not real model evaluations. Draft suites cannot certify a release.",
+        "interval_method": METHOD,
+        "interval_scope": "Independent seed clusters; simultaneous aggregate and domains; fixed tasks, peers and budgets.",
+        "warning": (
+            "Scoring reference only. Synthetic examples are not real model evaluations. "
+            "Draft suites cannot certify a release."
+            if data["data_kind"] == "synthetic"
+            else "Results describe this frozen recipe and candidate configuration; "
+                 "interpret intervals using the stated design and independent seed count."
+        ),
     }
 
 
-def compare(left: dict, right: dict, manifest: dict) -> dict:
+def compare(left: dict, right: dict, manifest: dict, *, comparisons=1) -> dict:
     for field in ("data_kind", "benchmark_id", "suite_hash", "scaffold_id", "budget_track"):
         if left.get(field) != right.get(field):
             raise ValueError(f"Cannot compare mismatched {field}")
+    from .stats import paired, probability_of_improvement
+
     a, b = validate(left, manifest), validate(right, manifest)
-    samples, _ = bootstrap(a, manifest, b)
     ma, mb = domain_means(a, manifest), domain_means(b, manifest)
+    keys = sorted(a)
+    av, weights = seed_estimator(a)
+    bv, _ = seed_estimator(b)
+    matched = paired(list(av.values()), [bv[s] for s in av])
+    equal_weights = len({round(w, 12) for w in weights.values()}) == 1
+    cluster_se = matched["se"] if equal_weights else None
     return {
+        "paired_se": None if cluster_se is None else round(100 * cluster_se, 6),
+        "matched_seed_clusters": len(av),
+        "seed_rho": matched["rho"],
+        "effective_pairs": matched["effective_pairs"],
+        "probability_of_improvement": probability_of_improvement(
+            [a[k] for k in keys], [b[k] for k in keys]
+        ),
         "left": left["candidate_id"],
         "right": right["candidate_id"],
         "data_kind": left["data_kind"],
         "certified": False,
         "paired_delta": round(100 * fmean(ma[d] - mb[d] for d in ma), 6),
-        "paired_ci95": interval(samples),
+        "paired_ci95": [100*v for v in seed_interval({k: a[k] - b[k] for k in a}, paired=True, comparisons=comparisons)],
+        "interval_method": METHOD,
         "matched_episodes": len(a),
         "warning": "A paired difference under the supplied design; not evidence of general intelligence.",
     }
@@ -252,7 +263,7 @@ def compare(left: dict, right: dict, manifest: dict) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("input", type=Path)
-    parser.add_argument("--manifest", type=Path, default=ROOT / "benchmark/core-v1.json")
+    parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--compare", type=Path)
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()

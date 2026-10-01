@@ -1,23 +1,23 @@
-"""Procedural transfer on disjoint inputs and a fresh apprentice at S120."""
+"""Procedural transfer on disjoint inputs and a fresh apprentice at the turnover tick."""
 
 from itertools import permutations
 
 from ..core.random_tape import RandomTape
 from ..core.state import event
+from ..core.timing import span
 from ..core.visibility import allowed
 from ..world.contracts import debit, require
 from ..world.recipes import execute
-from .base import Scenario, replace_slot
+from .base import Scenario, capable_peers
+from .layers import layer
 
 
 class Transmission(Scenario):
     domain = "D7"
 
-    def build(self, manifest):
-        state = super().build(manifest)
+    def populate(self, state, manifest):
         tape = RandomTape(manifest["seed"])
-        focal = manifest["focal_slot"]
-        learner = next(s for s in manifest["slots"] if s != focal)
+        learner = capable_peers(manifest)[0]
         names = [f"transform-{i}-{tape.integer(i, 'name', 'alias', 1000000)}" for i in range(3)]
         permutations_ = list(permutations(range(4)))
         transforms = {
@@ -27,12 +27,12 @@ class Transmission(Scenario):
         procedures = {
             f"procedure-{i}": (
                 [names[i % 3]]
-                if i < 3 and manifest["level"] == 1
+                if i < 3 and layer(state, "pressure", "simple_first_procedures")
                 else [names[i % 3], names[(i // 3 + i + 1) % 3]]
             )
             for i in range(6)
         }
-        if manifest["level"] == 3:
+        if layer(state, "pressure", "extended_procedures"):
             procedures = {
                 key: chain + [names[(i + 2) % 3]]
                 for i, (key, chain) in enumerate(procedures.items())
@@ -59,8 +59,8 @@ class Transmission(Scenario):
                     chain=chain,
                     procedure_id=f"procedure-{index}",
                     target=target,
-                    due=due,
-                    open=max(0, due - 19),
+                    due=span(state, due),
+                    open=max(0, span(state, due) - (span(state, 20) - 1)),
                     success=False,
                     artifact=None,
                 )
@@ -72,7 +72,22 @@ class Transmission(Scenario):
             state.agents[slot]["inventory"] = dict(
                 energy=100000, **{f"material-{i}": 10000 for i in range(4)}
             )
-        return state
+
+    def partner(self, state):
+        return state.scenario["learner"]
+
+    def gauges(self, state):
+        return dict(super().gauges(state), solved=sum(t["success"] for t in state.scenario["tasks"]))
+
+    def structure(self, state):
+        s = state.scenario
+        focal, learner = s["focal"], s["learner"]
+        return dict(
+            positions={focal: ["teacher"], learner: [f"learner, replaced by an apprentice at tick {s['shock_tick']}"]},
+            knowledge={focal: ["the private grammar and six procedures"], learner: ["held-out tasks while they are open"]},
+            ties=[(focal, learner, "must teach procedures" if layer(state, "information", "explicit_teaching") else "publishes procedures")],
+            interests={focal: "held-out tasks solved by the learner", learner: "solve open tasks"},
+        )
 
     def observation(self, state, slot):
         s = state.scenario
@@ -81,8 +96,8 @@ class Transmission(Scenario):
             for task in s["tasks"]
             if task["open"] <= state.tick < task["due"]
         ]
-        # The teacher sees examples and the grammar, never heldout input/output pairs.
-        return dict(
+
+        packet = dict(
             domain=self.domain,
             learner=s["learner"],
             transforms=s["transforms"] if slot == s["focal"] else None,
@@ -91,6 +106,9 @@ class Transmission(Scenario):
             training_inputs=[0],
             available_actions=[],
         )
+        if layer(state, "information", "explicit_teaching"):
+            packet["teaching_required"] = True
+        return packet
 
     def resolve(self, state, before, allowance, slot, op, ident):
         s = state.scenario
@@ -142,6 +160,10 @@ class Transmission(Scenario):
                     and obj["owner"] == s["focal"]
                     and slot in obj["read_by"]
                     and allowed(obj, slot)
+                    and (
+                        not layer(state, "information", "explicit_teaching")
+                        or slot in obj.get("taught_to", [])
+                    )
                     and all(step["transform_id"] in obj["content"] for step in recipe["steps"])
                 ),
                 None,
@@ -191,15 +213,18 @@ class Transmission(Scenario):
                 events.append(
                     event("heldout_task_resolved", result, visibility=["evaluator"], phase="evolve")
                 )
-        if state.tick + 1 == 120:
-            learner = state.scenario["learner"]
-            events.append(replace_slot(state, learner))
-            for obj in state.objects.values():
-                if obj.get("kind") == "artifact" and learner in obj.get("read_by", []):
-                    obj["read_by"].remove(learner)
-            state.objects = {
-                k: v
-                for k, v in state.objects.items()
-                if not (v.get("owner") == learner and "public" not in v.get("visibility", []))
-            }
+        if state.tick + 1 == state.scenario["shock_tick"]:
+            events.extend(self.turnover(state, state.scenario["learner"]))
+        return events
+
+    def turnover(self, state, slot):
+        events = super().turnover(state, slot)
+        for obj in state.objects.values():
+            if obj.get("kind") == "artifact" and slot in obj.get("taught_to", []):
+                obj["taught_to"].remove(slot)
+        state.objects = {
+            k: v
+            for k, v in state.objects.items()
+            if not (v.get("owner") == slot and "public" not in v.get("visibility", []))
+        }
         return events

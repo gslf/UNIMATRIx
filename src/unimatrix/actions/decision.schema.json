@@ -2,7 +2,7 @@
   "type": "object",
   "properties": {
     "protocol": {
-      "const": "unimatrix.decision.v3"
+      "const": "unimatrix.decision.v4"
     },
     "tick": {
       "type": "integer",
@@ -1011,6 +1011,23 @@
               "contract_id"
             ],
             "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "properties": {
+              "verb": {
+                "const": "wait"
+              },
+              "until_tick": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "required": [
+              "verb",
+              "until_tick"
+            ],
+            "additionalProperties": false
           }
         ]
       }
@@ -1071,6 +1088,6 @@
   ],
   "additionalProperties": false,
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "urn:unimatrix:decision:v1",
-  "description": "Structural Core-v1 envelope. Enforce UTF-8 byte budgets, ACL, AP, probability sum, balances, deadlines and consent additionally in the runtime. The DSL here is the v1 subset."
+  "$id": "urn:unimatrix:decision:v4",
+  "description": "Decision envelope. The runtime also enforces byte budgets, access control, balances, deadlines and consent."
 }

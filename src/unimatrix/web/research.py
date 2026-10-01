@@ -6,19 +6,38 @@ import uuid
 from pathlib import Path
 from typing import Literal
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import FileResponse
-from pydantic import AliasChoices, BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from ..benchmark.models import ModelRepository
-from ..benchmark.recipes import BUNDLED, RecipeRepository, recipe_fields, recipe_text
+from ..benchmark.personas import catalog as personalities
+from ..benchmark.personas import societies, templates
+from ..benchmark.recipes import BUNDLED, RecipeRepository
 from ..core.ids import digest
 from ..persistence.json_files import read_json, write_json
 from ..policies.scripted import BASELINES as PEER_POLICIES
+from ..policies.scripted import BY_NAME, DEFAULTS
 from ..research.campaigns import BASELINES, INTERVENTIONS, CampaignRunner, prepare
+from ..research.comparison import compare_smoke, compatible
+from ..research.debugger import metric_report
 from ..research.design import Design, build_design
+from ..research.probes import ProbeRunner, harvest, observable_references
+from ..research.structure import society_structure
+from ..scenarios.layers import PRESETS, catalog, event_catalog, family_label, layers_key, ranges
 from .deletion import Deletions
 from .evaluation_explorer import add_explorer_routes
+
+
+def recipe_fields(record):
+    names = {
+        "plan": "recipe",
+        "plans": "recipes",
+        "plan_id": "recipe_id",
+        "plan_name": "recipe_name",
+        "plan_hash": "recipe_hash",
+    }
+    return {names.get(key, key): value for key, value in record.items()}
 
 
 class CampaignIn(BaseModel):
@@ -27,11 +46,14 @@ class CampaignIn(BaseModel):
     split: Literal["development", "holdout"] = "development"
     name: str = Field(min_length=1, max_length=120)
     parallelism: int = Field(1, ge=1, le=64, strict=True)
-    model_ids: list[str] = Field(default_factory=list, max_length=8)
-    baselines: list[str] = Field(default_factory=lambda: list(BASELINES), max_length=6)
+    model_ids: list[str] = Field(default_factory=list, max_length=32)
+    baselines: list[str] = Field(default_factory=lambda: list(BASELINES), max_length=len(BASELINES))
     interventions: list[str] = Field(
         default_factory=lambda: ["no_communication", "no_memory"], max_length=4
     )
+    mode: Literal["smoke", "pilot", "full"] = "full"
+    stopping: dict | None = None
+    profiles: list[str] = Field(default_factory=list, max_length=6)
 
 
 class StartIn(BaseModel):
@@ -39,15 +61,25 @@ class StartIn(BaseModel):
     preview_id: str
 
 
+class ScreenIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    model_ids: list[str] = Field(min_length=1, max_length=32)
+    parallelism: int = Field(4, ge=1, le=64, strict=True)
+
+
+class StructureIn(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    design: Design
+    domain: str
+    seed: int | None = None
+    role: Literal["advantaged", "disadvantaged"] | None = None
+    stratum: int = Field(0, ge=0, le=2)
+    certify: bool = False
+
+
 class PublishIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     split: Literal["development", "holdout"] = "development"
-
-
-class RecipeDesign(Design):
-    base_plan: str = Field(
-        default="compact-v1", validation_alias=AliasChoices("base_recipe", "base_plan")
-    )
 
 
 def build_research_router(runs_dir, models_dir, recipes_dir, default_recipe):
@@ -56,8 +88,9 @@ def build_research_router(runs_dir, models_dir, recipes_dir, default_recipe):
     models = ModelRepository(models_dir)
     plans = RecipeRepository(recipes_dir, default_recipe)
     runner = CampaignRunner(root / "campaigns", Path(runs_dir) / "benchmark.lock")
+    probes = ProbeRunner(root / "probes")
     deletions = Deletions(runs_dir, plans)
-    router = APIRouter()
+    router = APIRouter(prefix="/api/recipe-lab")
 
     def checked(fn, *args):
         try:
@@ -68,7 +101,7 @@ def build_research_router(runs_dir, models_dir, recipes_dir, default_recipe):
             message = (
                 "Another benchmark or research evaluation is running."
                 if str(error) == "episode_already_running"
-                else recipe_text(str(error))
+                else str(error)
             )
             raise HTTPException(422, message) from error
         except OSError as error:
@@ -88,7 +121,11 @@ def build_research_router(runs_dir, models_dir, recipes_dir, default_recipe):
     def public(record):
         result = {k: v for k, v in record.items() if k not in {"studies", "plan"}}
         result["studies"] = [
-            {k: v for k, v in s.items() if k != "execution"} for s in record["studies"]
+            dict(
+                {k: v for k, v in s.items() if k != "execution"},
+                total_episodes=len(s["execution"]["episodes"]),
+            )
+            for s in record["studies"]
         ]
         result["plan_name"] = record["plan"]["name"]
         if result["status"] == "running" and record["id"] not in runner.active:
@@ -113,7 +150,6 @@ def build_research_router(runs_dir, models_dir, recipes_dir, default_recipe):
         return deletions.delete(deletions.recipe, ident)
 
     @router.delete("/evaluations/{ident}")
-    @router.delete("/campaigns/{ident}", include_in_schema=False)
     async def delete_evaluation(ident: str):
         return deletions.delete(deletions.evaluation, ident)
 
@@ -126,8 +162,31 @@ def build_research_router(runs_dir, models_dir, recipes_dir, default_recipe):
                 baselines=BASELINES,
                 interventions=INTERVENTIONS,
                 peer_policies=PEER_POLICIES,
-                metric_catalog=read_json(BUNDLED.parent / "core-v1.json")["domains"],
+                metric_catalog=read_json(BUNDLED.parent / "metric-catalog.json")["domains"],
+                complexity_presets=PRESETS,
+                layer_catalog=catalog(),
+                personalities=personalities(),
+                societies=societies(),
+                templates=templates(),
+                event_catalog=event_catalog(),
+                dispositions=dict(
+                    defaults=DEFAULTS,
+                    presets=BY_NAME,
+                    types={key: type(value).__name__ for key, value in DEFAULTS.items()},
+                ),
             )
+        )
+
+    @router.post("/structure")
+    def structure(body: StructureIn):
+        """The social structure of one case of the form's design; nothing is saved."""
+        record = checked(build_design, body.design, plans)
+        if body.stratum >= len(body.design.complexity):
+            raise HTTPException(422, "Unknown complexity stratum")
+        entry = body.design.complexity[body.stratum]
+        label = family_label(entry) if ranges(entry) else layers_key(entry)
+        return checked(
+            society_structure, record["plan"], body.domain, body.seed, body.role, label, body.certify
         )
 
     @router.get("/drafts")
@@ -150,7 +209,8 @@ def build_research_router(runs_dir, models_dir, recipes_dir, default_recipe):
         ]
 
     @router.post("/drafts")
-    async def generate(body: RecipeDesign):
+    async def generate(body: Design):
+        checked(models.validate_peer_credentials, (body.peers or []) + (body.holdout_peers or []))
         record = checked(build_design, body, plans)
         record["id"] = uuid.uuid4().hex[:24]
         target = folder("drafts", record["id"])
@@ -193,7 +253,7 @@ def build_research_router(runs_dir, models_dir, recipes_dir, default_recipe):
         temporary = target_dir / (".publish-" + uuid.uuid4().hex + ".tmp")
         try:
             checked(write_json, temporary, spec)
-            # Atomic creation without replacing an existing author's file.
+
             os.link(temporary, target)
         except FileExistsError as error:
             raise HTTPException(
@@ -204,7 +264,6 @@ def build_research_router(runs_dir, models_dir, recipes_dir, default_recipe):
         return dict(id=spec["id"], name=spec["name"], already_saved=False)
 
     @router.post("/evaluation-preview")
-    @router.post("/campaign-preview", include_in_schema=False)
     async def preview(body: CampaignIn):
         record = draft(body.draft_id)
         spec = record["plan"] if body.split == "development" else record["holdout"]
@@ -213,7 +272,18 @@ def build_research_router(runs_dir, models_dir, recipes_dir, default_recipe):
         if len(body.model_ids) != len(set(body.model_ids)):
             raise HTTPException(422, "Select each model only once")
         selected = {ident: checked(models.get, ident) for ident in body.model_ids}
-        prepared = checked(prepare, spec, selected, body.baselines, body.interventions, body.name, body.parallelism)
+        prepared = checked(
+            prepare,
+            spec,
+            selected,
+            body.baselines,
+            body.interventions,
+            body.name,
+            body.parallelism,
+            body.mode,
+            body.stopping,
+            body.profiles,
+        )
         prepared.update(draft_id=body.draft_id, split=body.split)
         ident = digest(
             {
@@ -229,7 +299,6 @@ def build_research_router(runs_dir, models_dir, recipes_dir, default_recipe):
         return public(prepared)
 
     @router.post("/evaluations")
-    @router.post("/campaigns", include_in_schema=False)
     async def launch(body: StartIn):
         prepared = checked(read_json, folder("previews", body.preview_id) / "preview.json")
         prepared["id"] = uuid.uuid4().hex[:24]
@@ -237,7 +306,6 @@ def build_research_router(runs_dir, models_dir, recipes_dir, default_recipe):
         return public(prepared)
 
     @router.get("/evaluations")
-    @router.get("/campaigns", include_in_schema=False)
     def campaign_list():
         return [
             public(read_json(p))
@@ -249,18 +317,15 @@ def build_research_router(runs_dir, models_dir, recipes_dir, default_recipe):
         ]
 
     @router.get("/evaluations/{ident}")
-    @router.get("/campaigns/{ident}", include_in_schema=False)
     def read_campaign(ident: str):
         return public(campaign(ident))
 
     @router.post("/evaluations/{ident}/pause")
-    @router.post("/campaigns/{ident}/pause", include_in_schema=False)
     async def pause(ident: str):
         await runner.pause(campaign(ident))
         return public(campaign(ident))
 
     @router.post("/evaluations/{ident}/resume")
-    @router.post("/campaigns/{ident}/resume", include_in_schema=False)
     async def resume(ident: str):
         record = campaign(ident)
         if record["status"] in {"completed", "completed_with_failures", "failed"}:
@@ -271,19 +336,109 @@ def build_research_router(runs_dir, models_dir, recipes_dir, default_recipe):
         return public(record)
 
     @router.get("/evaluations/{ident}/export")
-    @router.get("/campaigns/{ident}/export", include_in_schema=False)
     def export_report(ident: str):
         record = campaign(ident)
         output = folder("campaigns", ident) / "findings.json"
         checked(write_json, output, dict(public(record), recipe=record["plan"]))
         return FileResponse(output, filename=ident + "-findings.json")
 
+    @router.get("/evaluations/{ident}/smoke-comparison")
+    def smoke_comparison(ident: str, reference: str | None = None):
+        target = campaign(ident)
+        candidates = [read_json(p) for p in sorted((root / "campaigns").glob("*/campaign.json"),
+                                                  key=lambda p: p.stat().st_mtime, reverse=True)]
+        sources = [s for s in candidates if compatible(s, target)
+                   and any(t["status"] == "completed" and t["system_id"].startswith("baseline/")
+                           for t in s["studies"])]
+        choices = [dict(id=s["id"], name=s["name"]) for s in sources]
+        if reference:
+            selected = campaign(reference)
+        else:
+            selected = sources[0] if sources else None
+        if selected is None:
+            return dict(sources=choices, rows=[], note="No compatible smoke run with completed baselines. "
+                        "Run smoke on this draft and split before comparing model results.")
+        result = checked(compare_smoke, selected, target, root / "campaigns")
+        return dict(result, sources=choices)
+
+    @router.get("/evaluations/{ident}/metrics")
+    def metrics(ident: str):
+        """Metric debugger: means per system, effective weights, loophole flags, examples."""
+        record = campaign(ident)
+        done = sum(s["status"] == "completed" for s in record["studies"])
+        cache = folder("campaigns", ident) / "metrics.json"
+        if cache.is_file():
+            saved = read_json(cache)
+            if saved["completed_studies"] == done:
+                return saved
+        report = dict(
+            completed_studies=done, metrics=checked(metric_report, record, folder("campaigns", ident))
+        )
+        if record["status"] in {"completed", "completed_with_failures"}:
+            checked(write_json, cache, report)
+        return report
+
+    def probe_reports(record):
+        return dict(scope=record.get("mode", "unknown"), models={
+            s["system_id"]: dict(score=s["report"]["usi"], model_hash=s["model_hash"])
+            for s in record["studies"]
+            if (record.get("mode") == "full" and s["status"] == "completed"
+                and s["intervention"] is None and s.get("report") and s.get("model_hash"))
+        })
+
+    @router.get("/evaluations/{ident}/probe-screens/{model_id}")
+    def screen_details(ident: str, model_id: str, offset: int = Query(0, ge=0)):
+        campaign(ident)
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", model_id):
+            raise HTTPException(404, "Unknown model screen")
+        record = checked(read_json, probes.folder(ident) / f"screen-{model_id}.json")
+        bank = probes.bank(ident)
+        if not bank or record.get("bank_id") != bank.get("id"):
+            raise HTTPException(422, "This screen belongs to an older probe bank; run it again")
+        lookup = {p["id"]: p for p in bank["probes"]}
+        rows = []
+        for row in record.get("results", [])[offset:offset + 1]:
+            probe = lookup[row["id"]]
+            rows.append(dict(row, tick=probe["tick"], seed=probe["seed"], role=probe["role"], reference_decisions=probe.get("references", {}),
+                             oracle_decision=probe["oracle"]))
+        return dict(model_id=model_id, offset=offset, total=len(record.get("results", [])), rows=rows)
+
+    @router.get("/evaluations/{ident}/probes")
+    def probe_status(ident: str):
+        record = campaign(ident)
+        status = probes.status(ident)
+        reports = probe_reports(record)
+        for row in status["screens"]:
+            row["comparison_scope"] = reports["scope"]
+            row["correlation"] = probes.correlation(ident, reports, row) if not row["stale"] else None
+        return status
+
+    @router.post("/evaluations/{ident}/probes")
+    async def harvest_probes(ident: str):
+        record = campaign(ident)
+        bank = checked(harvest, record, folder("campaigns", ident))
+        for probe in bank["probes"]:
+            probe["references"] = await observable_references(probe)
+        bank["id"] = digest({k: v for k, v in bank.items() if k != "id"})
+        checked(probes.save_bank, bank)
+        return probes.status(ident)
+
+    @router.post("/evaluations/{ident}/probe-screens")
+    async def start_screen(ident: str, body: ScreenIn):
+        record = campaign(ident)
+        if len(body.model_ids) != len(set(body.model_ids)):
+            raise HTTPException(422, "Select each model only once")
+        selected = {model_id: checked(models.get, model_id) for model_id in body.model_ids}
+        reports = probe_reports(record)
+        checked(probes.launch, ident, selected, reports, body.parallelism)
+        return probes.status(ident)
+
     add_explorer_routes(router, campaign, folder, runner)
-    current = APIRouter(prefix="/api/recipe-lab")
-    current.include_router(router)
-    legacy = APIRouter(prefix="/api/research")
-    legacy.include_router(router)
-    current.legacy_router = legacy
-    current.shutdown_tasks = runner.shutdown
-    current.runner = runner
-    return current
+
+    async def shutdown():
+        await runner.shutdown()
+        await probes.shutdown()
+
+    router.shutdown_tasks = shutdown
+    router.runner = runner
+    return router

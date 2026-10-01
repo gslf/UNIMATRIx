@@ -6,6 +6,7 @@ from ..core.ids import digest
 from ..core.visibility import observe
 from ..persistence.event_store import EventStore
 from ..scenarios import get_scenario
+from ..scenarios.layers import PRESETS
 from .fingerprints import runtime_fingerprint
 from .manifests import episode
 
@@ -25,10 +26,10 @@ def run(seeds=range(8)):
     violations = []
     for domain in [f"D{i}" for i in range(1, 9)]:
         scenario = get_scenario(domain)
-        for level in [2]:
+        for preset in PRESETS:
             for seed in seeds:
                 for role in ["advantaged", "disadvantaged"]:
-                    manifest = episode(domain, level, seed, role)
+                    manifest = episode(domain, seed=seed, role=role, layers=preset)
                     certificates.append(scenario.feasible(manifest))
                     state = scenario.build(manifest)
                     focal = manifest["focal_slot"]
@@ -38,13 +39,13 @@ def run(seeds=range(8)):
                     state.agents[focal]["query"] = "hidden query"
                     state.memories[focal].append(dict(id="hidden", tick=0, content="confidential"))
                     if observe(state, other, scenario) != original:
-                        violations.append([domain, level, seed, role])
+                        violations.append([domain, preset, seed, role])
     comparisons = []
     for domain in [f"D{i}" for i in range(1, 9)]:
         manifest = episode(domain)
         scenario = get_scenario(domain)
         quiet, spam = scenario.build(manifest), scenario.build(manifest)
-        for _ in range(240):
+        for _ in range(manifest["ticks"]):
             decisions = {s: empty(quiet.tick, s) for s in quiet.agents}
             packets = {s: dict(inbox=[]) for s in quiet.agents}
             quiet, _ = resolve(quiet, decisions, scenario, packets)
@@ -70,14 +71,15 @@ def run(seeds=range(8)):
     store = EventStore(":memory:")
     try:
         store.initialize(manifest, state)
-        for _ in range(240):
-            decisions = {s: empty(state.tick, s) for s in state.agents}
-            after, events = resolve(
-                state, decisions, scenario, {s: dict(inbox=[]) for s in decisions}
-            )
-            store.commit(state, after, events)
-            state = after
-        first, second = store.verify(), store.verify()
+        import asyncio
+
+        from ..persistence.replay import replay
+        from ..policies.router import Router
+        from .runner import Runner
+
+        asyncio.run(Runner(store, scenario, Router.scripted(manifest)).run())
+        first = store.verify()
+        second = replay(store)
     finally:
         store.close()
     return dict(
@@ -90,6 +92,7 @@ def run(seeds=range(8)):
         privacy_failures=violations,
         gaming_audit_passed=all(c["equal"] for c in comparisons),
         gaming=comparisons,
-        golden_replay_identical=first == second,
+        golden_replay_identical=all(second[k] == v for k, v in first.items()),
+        recomputed_transitions=second["transitions_recomputed"],
         golden_trace=first,
     )

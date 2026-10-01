@@ -7,7 +7,7 @@ import pytest
 from fastapi import FastAPI
 
 from unimatrix.actions.schemas import empty
-from unimatrix.benchmark.plans import PlanRepository
+from unimatrix.benchmark.recipes import RecipeRepository
 from unimatrix.benchmark.runner import Runner
 from unimatrix.benchmark.scheduler import bind
 from unimatrix.core.ids import canonical
@@ -29,7 +29,7 @@ MODEL = dict(
 
 
 def small_plan():
-    spec = PlanRepository().get("compact-v1")
+    spec = RecipeRepository().get("standard-v1")
     spec.update(cases=spec["cases"][:1], domains={"D1": spec["domains"]["D1"]})
     return spec
 
@@ -47,7 +47,7 @@ async def fixture(tmp_path, monkeypatch):
         endpoint="http://localhost:1234",
     )
     spec = small_plan()
-    # Two episodes allow testing queued evidence and pagination.
+
     spec["cases"].append(dict(spec["cases"][0], seed=101))
     record = prepare(spec, {"candidate": model}, ["passive"], ["no_communication"], "Explorer test")
     record.update(id="a" * 24, split="development", status="paused")

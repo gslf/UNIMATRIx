@@ -1,19 +1,32 @@
 """Strict envelope validation; material failures are per-operation receipts."""
 
 import json
+from copy import deepcopy
 from pathlib import Path
 
 from jsonschema import Draft202012Validator
 
 from ..core.ids import canonical
+from .availability import WORLD_OPERATIONS, implemented_verbs
 
 SCHEMA = json.loads(Path(__file__).with_name("decision.schema.json").read_text())
 VALIDATOR = Draft202012Validator(SCHEMA)
 
 
+OPERATIONS = {
+    variant["properties"]["verb"]["const"]: Draft202012Validator(variant)
+    for variant in SCHEMA["properties"]["operations"]["items"]["oneOf"]
+}
+_ENVELOPE = deepcopy(SCHEMA)
+_ENVELOPE["properties"]["operations"]["items"] = dict(
+    type="object", required=["verb"], properties=dict(verb=dict(enum=sorted(OPERATIONS)))
+)
+ENVELOPE = Draft202012Validator(_ENVELOPE)
+
+
 def empty(tick, slot):
     return dict(
-        protocol="unimatrix.decision.v3",
+        protocol="unimatrix.decision.v4",
         tick=tick,
         agent_id=slot,
         messages=[],
@@ -41,7 +54,9 @@ def validate(raw, tick, slot):
         object_pairs_hook=pairs,
         parse_constant=lambda _: (_ for _ in ()).throw(ValueError("nonfinite")),
     )
-    VALIDATOR.validate(data)
+    ENVELOPE.validate(data)
+    for op in data["operations"]:
+        OPERATIONS[op["verb"]].validate(op)
     if data["tick"] != tick or data["agent_id"] != slot:
         raise ValueError("identity_or_tick_mismatch")
     for text, limit in [(data["private_note"], 4000), (data["memory_query"], 500)] + [
@@ -53,6 +68,7 @@ def validate(raw, tick, slot):
     def strict_numbers(value, key=""):
         integer_fields = {
             "tick",
+            "until_tick",
             "quantity_milli",
             "cost_milli",
             "deposit_milli",
@@ -80,8 +96,8 @@ def validate(raw, tick, slot):
     return data
 
 
-def interface():
-    """Compact protocol documentation included identically for every actor."""
+def interface(domain=None):
+    """Implemented operation types, identical for every actor in the same domain."""
 
     def shape(spec):
         if "const" in spec:
@@ -96,21 +112,35 @@ def interface():
 
     operations = {
         op["properties"]["verb"]["const"]: {
-            k: shape(v) for k, v in op["properties"].items() if k != "verb"
+            k: shape(v) for k, v in op["properties"].items()
         }
         for op in SCHEMA["properties"]["operations"]["items"]["oneOf"]
+        if op["properties"]["verb"]["const"] in implemented_verbs(domain, OPERATIONS)
     }
     return dict(
         envelope=empty(0, "YOUR_SLOT"),
         operations=operations,
-        message=dict(channel="private|public|group", to=["recipient-id"], content="text"),
+        message={
+            "private": dict(channel="private", to=["agent-id"], content="text"),
+            "public": dict(channel="public", to=[], content="text"),
+            "group": dict(channel="group", to=["group-id"], content="text"),
+        },
         forecast=dict(probe_id="issued-probe-id", probabilities=[0.5, 0.5]),
         limits=dict(
             operations=2,
             messages=2,
+            private_message_recipients=4,
+            public_message_recipients=0,
+            group_message_recipients=1,
+            message_recipients_unique=True,
             message_utf8_bytes=1200,
             private_note_utf8_bytes=4000,
             envelope_utf8_bytes=6144,
         ),
-        notes="Use the current tick and your authenticated slot. Null private_note preserves notes; empty string clears them. Sign the exact terms_hash. Quantities are positive integer milliunits; message delivery is next tick.",
+        notes="Each operations item is an object with a verb field. Use the current tick and your authenticated slot. Null private_note preserves notes; empty string clears them. Sign the exact terms_hash. Quantities are positive integer milliunits; message delivery is next tick. wait(until_tick) suspends your decisions until that tick or any observable information change/new message. Use wait as the sole operation, with no messages, forecasts or memory_query; private_note may be saved. The world and deadlines continue.",
     )
+
+
+
+INTERFACE = interface()
+INTERFACES = {domain: interface(domain) for domain in WORLD_OPERATIONS}

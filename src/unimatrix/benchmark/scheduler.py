@@ -1,5 +1,6 @@
 """Sequential episode scheduling, resumable SQLite output and strict scoring."""
 
+import asyncio
 import json
 from pathlib import Path
 
@@ -11,25 +12,63 @@ from ..persistence.lease import episode_lease
 from ..policies.router import Router
 from ..policies.scripted import Scripted
 from ..scenarios import get_scenario
-from .manifests import FIELDS
+from .manifests import FIELDS, peer_slots
+from .parallel import process_pool, scripted_only
 from .runner import Runner
-from .validation import validate_manifest
+from .validation import is_model, scripted_name, validate_manifest
+
+
+def society_overrides(manifest):
+    """Disposition overrides the society layer gives each scripted slot."""
+    from ..policies.scripted import ADVERSARIAL, UNCONDITIONAL
+
+    society = manifest["layers"]["society"]
+    peers = peer_slots(manifest)
+    adversarial = set(peers[: round(len(peers) * society["adversarial_share"] / 100)])
+    result = {}
+    for slot, config in manifest["policies"].items():
+        if is_model(config) or config == "oracle":
+            continue
+        overrides = dict(config.get("disposition", {})) if isinstance(config, dict) else {}
+        overrides.update(society["dispositions"].get(scripted_name(config), {}))
+        if slot in adversarial:
+            overrides.update(ADVERSARIAL)
+        if not society["conditional_cooperation"] and slot != manifest["focal_slot"]:
+            overrides.update(UNCONDITIONAL)
+        result[slot] = overrides
+    return result
 
 
 def bind(manifest):
+    from ..core.random_tape import noise_seed
     from ..policies.ablations import Ablated
     from ..policies.llm_policy import LLMPolicy
+    from ..policies.oracle import Oracle
 
+    seed = noise_seed(manifest["seed"], manifest["replicate"])
+    overrides = society_overrides(manifest)
     bindings = {}
+    router = Router(bindings)
     for slot, config in manifest["policies"].items():
-        policy = Scripted(config) if isinstance(config, str) else LLMPolicy(config)
+        if is_model(config):
+            policy = LLMPolicy(config)
+        elif config == "oracle":
+            policy = Oracle(router, get_scenario(manifest["domain"]))
+        else:
+            name = scripted_name(config)
+            policy = Scripted(
+                dict(policy=name, disposition=overrides[slot]) if overrides[slot] else name,
+                seed,
+                slot == manifest["focal_slot"],
+            )
         if manifest.get("ablations"):
             policy = Ablated(policy, manifest["ablations"])
         bindings[slot] = policy
-    return Router(bindings)
+    return router
 
 
-async def run_episode(manifest, directory, until=None, concurrency=8):
+async def run_episode(manifest, directory, until=None, concurrency=8, wrap=None):
+    """Run one episode to completion; `wrap` may substitute policies after binding."""
     validate_manifest(manifest)
     scenario = get_scenario(manifest["domain"])
     certificate = scenario.feasible(manifest)
@@ -45,6 +84,8 @@ async def run_episode(manifest, directory, until=None, concurrency=8):
         router = None
         try:
             router = bind(manifest)
+            if wrap is not None:
+                router = wrap(router)
             initial = scenario.build(manifest)
             preregistration = canonical(initial.scenario) + "\n"
             registration_path = path / "preregistration.json"
@@ -69,6 +110,21 @@ async def run_episode(manifest, directory, until=None, concurrency=8):
             for policy in router.bindings.values() if router else []:
                 if hasattr(policy, "close"):
                     await policy.close()
+
+
+def _run_episode_process(manifest, directory, until):
+    return asyncio.run(run_episode(manifest, directory, until))
+
+
+async def run_episode_offloaded(manifest, directory, until=None, wrap=None):
+    """Scripted-only episodes run in a worker process; provider-backed ones stay inline."""
+    pool = process_pool.get()
+    if pool is not None and wrap is None and scripted_only(manifest):
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(
+            pool, _run_episode_process, manifest, str(directory), until
+        )
+    return await run_episode(manifest, directory, until, wrap=wrap)
 
 
 def collect(plan, directory):
@@ -97,7 +153,7 @@ def collect(plan, directory):
                 )
             )
             for config in manifest["policies"].values():
-                if isinstance(config, dict) and config["budget_track"] == "opaque_compute":
+                if is_model(config) and config["budget_track"] == "opaque_compute":
                     result["budget_track"] = "opaque_compute"
         finally:
             store.close()
