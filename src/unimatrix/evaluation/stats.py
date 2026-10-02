@@ -102,9 +102,9 @@ def spearman(left, right):
 
 
 def normalize(score, floor, ceiling, epsilon=0.05):
-    """Signed reference gain: 0 at floor, 1 at anchor; never clip over-performance."""
+    """Reference gain: floor at zero, anchor at one; no upper cap."""
     if not all(math.isfinite(x) for x in (score, floor, ceiling, epsilon)) or epsilon <= 0:
         raise ValueError("invalid_reference")
     if ceiling - floor < epsilon:
         return None
-    return (score - floor) / (ceiling - floor)
+    return max(0.0, (score - floor) / (ceiling - floor))

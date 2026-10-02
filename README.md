@@ -1,6 +1,6 @@
-# UNIMATRIx
+# UNIMATRIx v4.0.0
 
-**Current release: 4.0.0.** UNIMATRIx evaluates one candidate model in deterministic, 72-tick simulated societies across eight domains. The bundled `standard-v1` and `validation-v1` recipes contain 16 and 128 episodes respectively.
+UNIMATRIx evaluates one candidate model in deterministic, 72-tick simulated societies across eight domains. The bundled `standard-v1` and `validation-v1` recipes contain 16 and 128 episodes respectively.
 
 ## Install and run
 

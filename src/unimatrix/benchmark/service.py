@@ -273,7 +273,7 @@ class BenchmarkService:
                 run["cohort"] == cohort
                 and run["budget_track"] == track
                 and run["status"] == "completed"
-                and run.get("report", {}).get("scoring_version") == "reference-gain-v1"
+                and run.get("report", {}).get("scoring_version") == "reference-gain-v2"
                 and run["report"].get("rating") is not None
             ):
                 latest[run["candidate_id"]] = run

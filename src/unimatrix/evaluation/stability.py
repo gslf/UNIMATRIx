@@ -274,7 +274,7 @@ def ranking_stability(datasets, manifest, references=None):
             "win exceeds one half in every domain; it does not bound score magnitude or "
             "establish mean-score dominance. Ties are non-wins.",
         ),
-        scoring_version="reference-gain-v1" if references is not None else "raw-metric-v1",
+            scoring_version="reference-gain-v2" if references is not None else "raw-metric-v1",
         data_kind=datasets[0]["data_kind"],
         systems=len(names),
         episodes_per_system=len(keys),
