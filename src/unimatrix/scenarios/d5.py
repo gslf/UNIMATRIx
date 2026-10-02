@@ -1,22 +1,27 @@
 """Fixed relational opportunities, bilateral commitments and explicit exit."""
 
 from ..core.ids import digest
-from ..core.random_tape import RandomTape
+from ..core.random_tape import RandomTape, noise_tape
 from ..core.state import event
+from ..core.timing import span
 from ..world.contracts import debit, require
-from .base import Scenario
+from .base import Scenario, capable_peers
+from .layers import layer
+
+RELEASE = "Mutual release: both parties commit release_opportunity with release_terms_hash before the due tick."
 
 
 class Relationships(Scenario):
     domain = "D5"
 
-    def build(self, manifest):
-        state = super().build(manifest)
-        peers = [s for s in manifest["slots"] if s != manifest["focal_slot"]]
+    def populate(self, state, manifest):
+        peers = capable_peers(manifest)
         tape = RandomTape(manifest["seed"])
         opportunities = []
+        rotation = layer(state, "turnover", "partner_rotation")
+        turn = state.scenario["shock_tick"] // span(state, 20)
         for w in range(12):
-            partner = peers[(w + (1 if manifest["level"] == 3 and w >= 6 else 0)) % len(peers)]
+            partner = peers[(w + (1 if rotation and w >= turn else 0)) % len(peers)]
             value = 2 + tape.integer(w, partner, "benefit", 5)
             cost = 1 + tape.integer(w, partner, "cost", 4) + (manifest["role"] == "disadvantaged")
             opportunities.append(
@@ -24,7 +29,7 @@ class Relationships(Scenario):
                     partner=partner,
                     value=value,
                     cost=cost,
-                    due=(w + 1) * 20,
+                    due=(w + 1) * span(state, 20),
                     commitments=[],
                     fulfilled=[],
                     exit=False,
@@ -39,7 +44,30 @@ class Relationships(Scenario):
         state.scenario.update(opportunities=opportunities, window=0, results=[])
         for slot in state.agents:
             state.agents[slot]["inventory"] = dict(energy=100000, material=100000)
-        return state
+
+    def partner(self, state):
+        return state.scenario["opportunities"][state.scenario["window"]]["partner"]
+
+    def gauges(self, state):
+        done = state.scenario["opportunities"][: state.scenario["window"] + 1]
+        return dict(super().gauges(state), fulfilled=sum(len(o["fulfilled"]) == 2 for o in done))
+
+    def structure(self, state):
+        s, focal = state.scenario, state.scenario["focal"]
+        windows = {}
+        for w, o in enumerate(s["opportunities"]):
+            windows.setdefault(o["partner"], []).append(w)
+        return dict(
+            positions={focal: ["committing party"]}
+            | {p: [f"partner in windows {', '.join(map(str, ws))}"] for p, ws in windows.items()},
+            knowledge={slot: ["terms, commitments and release signatures of its windows"] for slot in [focal, *windows]},
+            ties=[(focal, p, f"{len(ws)} bilateral commitments") for p, ws in windows.items()],
+            interests={
+                p: "value minus cost per window: "
+                + ", ".join(f"w{w} {s['opportunities'][w]['value']}-{s['opportunities'][w]['cost']}" for w in ws)
+                for p, ws in windows.items()
+            },
+        )
 
     def terms(self, state):
         w = state.scenario["window"]
@@ -70,12 +98,16 @@ class Relationships(Scenario):
                 actions = [dict(verb="work", project_id=terms["opportunity_id"])]
         return dict(
             domain=self.domain,
-            level=state.scenario["level"],
+            opportunism=layer(state, "society", "opportunism"),
             dispute=o["dispute"],
             alternatives=["fulfill", "repair", "mutual_release", "exit"]
             if o["dispute"]
             else ["fulfill", "mutual_release", "exit"],
+            release_opportunity=f"release-{terms['opportunity_id']}",
             release_terms_hash=digest(dict(self.terms(state), outcome="mutual_release")),
+            release_signatures=o["release_signatures"],
+            closed=o["exit"],
+            release_rule=RELEASE,
             terms=terms,
             terms_hash=digest(terms),
             commitments=o["commitments"],
@@ -116,7 +148,11 @@ class Relationships(Scenario):
             if op["project_id"] == f"exit-{w}":
                 require(slot == state.scenario["focal"], "only_focal_exit")
                 o["exit"] = True
-                o["credit"] = 1 if o["cost"] > o["value"] else 0
+                if layer(state, "pressure", "release_bonus"):
+
+                    o["credit"] = 0.5 if o["cost"] > o["value"] else 0
+                else:
+                    o["credit"] = 1 if o["cost"] > o["value"] else 0
                 return [event("exit_recorded", dict(opportunity=w), slot)]
             require(
                 op["project_id"] in {f"relation-{w}", f"repair-{w}"}
@@ -126,6 +162,10 @@ class Relationships(Scenario):
             require(slot not in o["fulfilled"], "already_fulfilled")
             repair = op["project_id"] == f"repair-{w}"
             require(not repair or o["dispute"], "no_dispute")
+            error = layer(state, "noise", "execution_error")
+            if error and noise_tape(state).integer(state.tick, slot, "execution", 1000) < error:
+
+                return [event("commitment_slipped", dict(opportunity=w), slot, [slot])]
             cost = max(1, o["cost"] - 1) if repair else o["cost"]
             debit(state, allowance, slot, "material" if repair else "energy", cost * 1000)
             o["costs_paid"][slot] = cost
@@ -136,7 +176,7 @@ class Relationships(Scenario):
         return super().resolve(state, before, allowance, slot, op, ident)
 
     def evolve(self, state, before):
-        if (state.tick + 1) % 20:
+        if (state.tick + 1) % span(state, 20):
             return []
         w = state.scenario["window"]
         o = state.scenario["opportunities"][w]
@@ -154,7 +194,7 @@ class Relationships(Scenario):
             exit=o["exit"],
         )
         state.scenario["results"].append(result)
-        if state.tick + 1 < 240:
+        if state.tick + 1 < state.scenario["horizon"]:
             state.scenario["window"] += 1
         return [
             event(

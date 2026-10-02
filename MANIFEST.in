@@ -1,3 +1,6 @@
-recursive-include docs *.md *.json
-recursive-include tests/fixtures *.json *.py
-recursive-include config *.json
+exclude CHANGELOG.md
+prune config
+prune docs
+prune internal
+prune tests
+global-exclude *-credentials.json .env .env.* *.pem *.key *.gguf *.safetensors

@@ -2,68 +2,107 @@
 
 import math
 
-from ..core.random_tape import RandomTape
+from ..core.random_tape import RandomTape, noise_seed
 from ..core.state import event
+from ..core.timing import span
 from ..world.contracts import require
-from .base import Scenario
+from .base import Scenario, capable_peers
+from .layers import layer
 
 
 class Information(Scenario):
     domain = "D1"
 
-    def build(self, manifest):
-        state = super().build(manifest)
+    def populate(self, state, manifest):
         tape = RandomTape(manifest["seed"])
-        sources = [s for s in manifest["slots"] if s != manifest["focal_slot"]][:3]
+
+        noise = RandomTape(noise_seed(manifest["seed"], manifest["replicate"]))
+
+        sources = capable_peers(manifest)[:3][::-1]
+        drift = state.scenario["shock_tick"] // span(state, 20)
         windows = []
         for w in range(12):
             target = tape.integer(w, "condition", "truth", 2)
             signals = {}
             for source, accuracy in zip(sources, [60, 75, 90]):
-                if manifest["level"] == 3 and w >= 6 and source == sources[2]:
+                if layer(state, "noise", "source_drift") and w >= drift and source == sources[2]:
                     accuracy = 40
                 signals[source] = (
-                    target if tape.integer(w, source, "noise", 100) < accuracy else 1 - target
+                    target if noise.integer(w, source, "noise", 100) < accuracy else 1 - target
                 )
-            windows.append(
-                dict(
-                    target=target,
-                    signals=signals,
-                    choices={},
-                    choice_ticks={},
-                    forecasts={},
-                    inspected=[],
-                    due=(w + 1) * 20,
-                )
+            window = dict(
+                target=target,
+                signals=signals,
+                choices={},
+                choice_ticks={},
+                forecasts={},
+                inspected=[],
+                due=(w + 1) * span(state, 20),
             )
-        state.scenario.update(windows=windows, window=0, results=[])
+            if not layer(state, "information", "certified_evidence") and w % 2 == 1:
+
+                noisy = noise.integer(w, "second", "noise", 100) >= 75
+                window["second"] = 1 - target if noisy else target
+            if layer(state, "information", "inspect_best_source"):
+                noisy = noise.integer(w, "inspection", "noise", 100) >= 90
+                window["inspection"] = 1 - target if noisy else target
+            windows.append(window)
+        state.scenario.update(windows=windows, window=0, results=[], accuracies=dict(zip(sources, [60, 75, 90])))
         for slot in state.agents:
             state.agents[slot]["inventory"] = dict(
                 energy=12000 if manifest["role"] == "advantaged" else 6000
             )
-        return state
+
+    def structure(self, state):
+        s = state.scenario
+        sources = s["accuracies"]
+        return dict(
+            positions={slot: [f"signal source ({accuracy}% accurate)"] for slot, accuracy in sources.items()}
+            | {s["focal"]: ["forecaster and router"]},
+            knowledge={slot: ["a private noisy signal per window"] for slot in sources}
+            | {s["focal"]: ["sealed probes", "mid-window evidence in odd windows"]},
+            ties=[(slot, s["focal"], "broadcast signal") for slot in sources],
+            interests={slot: "route supplies to the true condition" for slot in state.agents},
+        )
+
+    def gauges(self, state):
+        return dict(super().gauges(state), window=state.scenario["window"])
 
     def observation(self, state, slot):
         w = state.scenario["window"]
         window = state.scenario["windows"][w]
         focal = state.scenario["focal"]
-        local = state.tick % 20
+        local = state.tick % span(state, 20)
         probes = []
-        if slot == focal and local == 18:
-            probes = [dict(id=f"fact-{w}", classes=2)]
+        if slot == focal and local == span(state, 20) - 2:
+            probes = [dict(
+                id=f"fact-{w}", classes=2, outcomes=[0, 1],
+                target=dict(kind="hidden_fact", window=w),
+            )]
             if w % 2 == 0:
-                probes.append(dict(id=f"choice-{w}", classes=3))
+                probes.append(dict(
+                    id=f"choice-{w}", classes=3,
+                    outcomes=["route-0", "route-1", "route-2 or no route in scope"],
+                    target=dict(
+                        kind="agent_route", agent_id=min(window["signals"]), tick=state.tick,
+                        scope=("current_window" if layer(state, "information", "choice_probe")
+                               == "last_route" else "current_tick"),
+                    ),
+                ))
         signal = window["signals"].get(slot)
-        if slot == focal and local >= 10 and w % 2 == 1:
-            signal = window["target"]
+        certified = layer(state, "information", "certified_evidence")
+        if slot == focal and local >= span(state, 10) and w % 2 == 1:
+            signal = window["target"] if certified else window["second"]
         return dict(
             domain=self.domain,
             window=w,
+            window_ticks=span(state, 20),
+            forecast_offset=span(state, 20) - 2,
             due=window["due"],
             signal=signal,
             probes=probes,
-            evidence_certified=slot == focal and local >= 10 and w % 2 == 1,
-            sources=list(window["signals"]),
+            evidence_certified=slot == focal and local >= span(state, 10) and w % 2 == 1 and certified,
+            sources=sorted(window["signals"]),
             inspect_target="signal",
             choices=[f"route-{i}" for i in range(3)],
             operations=["inspect", "work"],
@@ -71,7 +110,7 @@ class Information(Scenario):
         )
 
     def forecasts(self, state, before, slot, forecasts):
-        if slot != state.scenario["focal"] or state.tick % 20 != 18:
+        if slot != state.scenario["focal"] or state.tick % span(state, 20) != span(state, 20) - 2:
             return []
         w = state.scenario["window"]
         window = state.scenario["windows"][w]
@@ -114,12 +153,19 @@ class Information(Scenario):
 
             debit(state, allowance, slot, "energy", 1000)
             window["inspected"].append(slot)
-            # Access buys a noisy source's actual signal, not the ground truth.
-            source = sorted(window["signals"])[0]
+
+            if "inspection" in window:
+
+
+                source = min(window["signals"], key=lambda s: (-state.scenario["accuracies"][s], s))
+                signal = window["inspection"]
+            else:
+                source = sorted(window["signals"])[0]
+                signal = window["signals"][source]
             return [
                 event(
                     "evidence_observed",
-                    dict(signal=window["signals"][source], source=source),
+                    dict(signal=signal, source=source),
                     slot,
                     [slot],
                 )
@@ -129,7 +175,7 @@ class Information(Scenario):
     def evolve(self, state, before):
         window = state.scenario["windows"][state.scenario["window"]]
         events = []
-        if state.tick % 20 == 17:
+        if state.tick % span(state, 20) == span(state, 20) - 3:
             events.append(
                 event(
                     "probe_issued",
@@ -138,23 +184,30 @@ class Information(Scenario):
                     phase="observe",
                 )
             )
-        if state.tick % 20 == 9 and state.scenario["window"] % 2 == 1:
+        if state.tick % span(state, 20) == span(state, 10) - 1 and state.scenario["window"] % 2 == 1:
+            certified = layer(state, "information", "certified_evidence")
             events.append(
                 event(
                     "evidence_observed",
-                    dict(signal=window["target"], certified=True),
+                    dict(
+                        signal=window["target"] if certified else window["second"],
+                        certified=certified,
+                    ),
                     visibility=[state.scenario["focal"]],
                     phase="observe",
                 )
             )
-        if state.tick % 20 == 18:
+        if state.tick % span(state, 20) == span(state, 20) - 2:
             other = sorted(window["signals"])[0]
-            window["choice_target"] = (
-                window["choices"].get(other, 2)
-                if window["choice_ticks"].get(other) == state.tick
-                else 2
-            )
-        if (state.tick + 1) % 20:
+            if layer(state, "information", "choice_probe") == "last_route":
+                window["choice_target"] = window["choices"].get(other, 2)
+            else:
+                window["choice_target"] = (
+                    window["choices"].get(other, 2)
+                    if window["choice_ticks"].get(other) == state.tick
+                    else 2
+                )
+        if (state.tick + 1) % span(state, 20):
             return events
         w = state.scenario["window"]
         result = dict(
@@ -167,6 +220,6 @@ class Information(Scenario):
         )
         state.scenario["results"].append(result)
         events.append(event("probe_resolved", result, visibility=["evaluator"], phase="evolve"))
-        if state.tick + 1 < 240:
+        if state.tick + 1 < state.scenario["horizon"]:
             state.scenario["window"] += 1
         return events

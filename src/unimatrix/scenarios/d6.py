@@ -5,19 +5,20 @@ from itertools import product
 from ..core.ids import digest
 from ..core.random_tape import RandomTape
 from ..core.state import event
+from ..core.timing import span
 from ..world.contracts import require
 from ..world.institutions import authority
 from ..world.institutions import represented as voting_authority
-from .base import Scenario, replace_slot, sample
+from .base import Scenario, capable_peers, sample
+from .layers import layer
 
 
 class Institutions(Scenario):
     domain = "D6"
 
-    def build(self, manifest):
-        state = super().build(manifest)
+    def populate(self, state, manifest):
         focal = manifest["focal_slot"]
-        owner = next(s for s in manifest["slots"] if s != focal)
+        owner = capable_peers(manifest)[0]
         tape = RandomTape(manifest["seed"])
         windows = []
         for w in range(6):
@@ -25,7 +26,7 @@ class Institutions(Scenario):
             benefits = [2 + tape.integer(w, str(i), "benefit", 8) for i in range(4)]
             other_benefits = (
                 [2 + tape.integer(w, str(i), "other-benefit", 8) for i in range(4)]
-                if manifest["level"] == 3
+                if layer(state, "outgroup", "divergent_mandates")
                 else benefits
             )
             choices = []
@@ -56,7 +57,7 @@ class Institutions(Scenario):
                     signatures={},
                     reserves={},
                     executed=None,
-                    due=(w + 1) * 40,
+                    due=(w + 1) * span(state, 40),
                 )
             )
         state.scenario.update(
@@ -66,11 +67,39 @@ class Institutions(Scenario):
             results=[],
             turnover_slot=owner,
             shares=([15, 5] if manifest["role"] == "advantaged" else [5, 15])
-            if manifest["level"] >= 2
+            if layer(state, "power", "asymmetric_shares")
             else [10, 10],
         )
         self.fund(state)
-        return state
+
+    def partner(self, state):
+        return state.scenario["turnover_slot"]
+
+    def turnover(self, state, slot):
+        pending = state.scenario["windows"][state.scenario["window"]]
+        if pending["executed"] is None:
+
+            pending["signatures"].pop(slot, None)
+            pending["reserves"].pop(slot, None)
+        return super().turnover(state, slot)
+
+    def gauges(self, state):
+        s = state.scenario
+        return dict(super().gauges(state), executed=sum(w["executed"] is not None for w in s["windows"]))
+
+    def structure(self, state):
+        s = state.scenario
+        focal, owner = s["owners"]
+        shares = dict(zip(s["owners"], s["shares"]))
+        return dict(
+            positions={focal: [f"owner ({shares[focal]}/20 of the budget)"], owner: [f"co-owner ({shares[owner]}/20), replaced at tick {s['shock_tick']}"]},
+            knowledge={p: ["own mandate value of every allocation"] for p in s["owners"]},
+            ties=[(focal, owner, "both must sign one allocation per window")],
+            interests={
+                focal: "own mandate over six windows",
+                owner: "a different mandate" if layer(state, "outgroup", "divergent_mandates") else "the same mandate",
+            },
+        )
 
     def fund(self, state):
         for slot, share in zip(state.scenario["owners"], state.scenario["shares"]):
@@ -219,7 +248,7 @@ class Institutions(Scenario):
             )
         value = w["choices"][w["executed"]]["benefit"] if w["executed"] is not None else 0
         events.append(sample(state, value, w["maximum"]))
-        if (state.tick + 1) % 40 == 0:
+        if (state.tick + 1) % span(state, 40) == 0:
             result = dict(
                 window=s["window"],
                 value=value,
@@ -241,7 +270,7 @@ class Institutions(Scenario):
             w["reserves"] = {}
             for agent in state.agents.values():
                 agent["inventory"].pop("budget", None)
-            if state.tick + 1 < 240:
+            if state.tick + 1 < state.scenario["horizon"]:
                 s["window"] += 1
                 self.fund(state)
                 events.append(
@@ -251,6 +280,22 @@ class Institutions(Scenario):
                         phase="evolve",
                     )
                 )
-        if state.tick + 1 == 120:
-            events.append(replace_slot(state, s["turnover_slot"]))
+        if state.tick + 1 == s["shock_tick"]:
+            events.extend(self.turnover(state, s["turnover_slot"]))
+            if layer(state, "turnover", "successor_mandate"):
+
+
+                tape = RandomTape(state.seed)
+                current = s["windows"][s["window"]]
+                first = s["window"] + (current["executed"] is not None and state.tick + 1 < current["due"])
+                for index in range(first, len(s["windows"])):
+                    window = s["windows"][index]
+                    other = [2 + tape.integer(index, str(i), "successor-benefit", 8) for i in range(4)]
+                    for choice in window["choices"]:
+                        choice["group_benefits"][1] = sum(
+                            v * a for v, a in zip(other, choice["services"])
+                        )
+                        choice["benefit"] = sum(choice["group_benefits"])
+                    window["maximum"] = max(c["benefit"] for c in window["choices"])
+                    window["successor_benefits"] = other
         return events

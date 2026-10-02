@@ -1,7 +1,10 @@
 """Descriptive material, social and compute outcomes, separate from USI."""
 
 import json
+from collections import Counter
 from statistics import fmean
+
+from ..benchmark.validation import is_model
 
 
 def gini(values):
@@ -16,11 +19,23 @@ def gini(values):
 
 def diagnostics(store):
     state = store.load()
-    events = list(store.events())
+    counts = store.counts()
+    focal = store.manifest["focal_slot"]
+    focal_counts = Counter(
+        e["type"] for e in store.events(kinds=[
+            "decision_rejected", "operation_rejected", "message_sent", "decision_waited"])
+        if e["actor_id"] == focal
+    )
+
+
+    focal_decisions = store.db.execute(
+        "SELECT COUNT(*) FROM decisions WHERE slot=? AND tick<?",
+        (focal, state.tick),
+    ).fetchone()[0]
     resources = sorted({r for a in state.agents.values() for r in a["inventory"]})
     stocks = {r: [a["inventory"].get(r, 0) for a in state.agents.values()] for r in resources}
     calls = [json.loads(row[0]) for row in store.db.execute("SELECT body FROM model_calls")]
-    messages = [e for e in events if e["type"] == "message_sent"]
+    messages = list(store.events(kinds=["message_sent"]))
     edges = {
         (e["actor_id"], recipient)
         for e in messages
@@ -29,7 +44,7 @@ def diagnostics(store):
     }
     n = len(state.agents)
     model_slots = {
-        slot for slot, policy in store.manifest["policies"].items() if isinstance(policy, dict)
+        slot for slot, policy in store.manifest["policies"].items() if is_model(policy)
     }
     provider_calls = [c for c in calls if c["slot"] in model_slots]
     costs = []
@@ -56,18 +71,27 @@ def diagnostics(store):
         },
         groups=sum(obj.get("kind") == "group" for obj in state.objects.values()),
         artifacts=sum(obj.get("kind") == "artifact" for obj in state.objects.values()),
-        births=sum(e["type"] == "agent_born" for e in events),
-        deaths=sum(e["type"] == "agent_died" for e in events),
-        broken_contracts=sum(e["type"] == "contract_breached" for e in events),
+        births=counts.get("agent_born", 0),
+        deaths=counts.get("agent_died", 0),
+        broken_contracts=counts.get("contract_breached", 0),
     )
     return dict(
+        candidate_slot=focal,
+        candidate_resolved_decisions=focal_decisions,
+        candidate_authorized_wait_ticks=focal_counts["decision_waited"],
+        candidate_invalid_envelopes=focal_counts["decision_rejected"],
+        candidate_rejected_operations=focal_counts["operation_rejected"],
+        candidate_messages=focal_counts["message_sent"],
+        candidate_decision_attempts=sum(c["slot"] == focal for c in calls),
+        candidate_infrastructure_errors=sum(c["slot"] == focal and "error" in c for c in calls),
         inventory_by_resource={r: dict(total=sum(v), gini=gini(v)) for r, v in stocks.items()},
         social=social,
         living_agents=sum(a["alive"] for a in state.agents.values()),
         messages=len(messages),
-        rejected_operations=sum(e["type"] == "operation_rejected" for e in events),
-        invalid_envelopes=sum(e["type"] == "decision_rejected" for e in events),
+        rejected_operations=counts.get("operation_rejected", 0),
+        invalid_envelopes=counts.get("decision_rejected", 0),
         decision_attempts=len(calls),
+        authorized_wait_ticks=counts.get("decision_waited", 0),
         provider_attempts=len(provider_calls),
         infrastructure_errors=sum("error" in c for c in calls),
         reported_input_tokens=sum(c.get("input_tokens") or 0 for c in calls),

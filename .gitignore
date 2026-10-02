@@ -1,6 +1,7 @@
 .venv/
 inference_server/.venv/
-inference_server/models/*.gguf
+*.gguf
+*.safetensors
 __pycache__/
 *.pyc
 *.pyo
@@ -19,11 +20,19 @@ chroma_*/
 .codex/*
 .agents/*
 analysis_scripts/
+/internal/codex/
 
 build/
 dist/
 .ruff_cache/
 .hypothesis/
 
-# Local inference credentials managed by the configuration page
 *-credentials.json
+
+/config/models/*
+
+/config/recipes/*
+.env
+.env.*
+*.pem
+*.key

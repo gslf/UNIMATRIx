@@ -11,6 +11,7 @@ from unimatrix.core.visibility import observe
 from unimatrix.scenarios import get_scenario
 from unimatrix.scenarios.d2 import enumerate_market, utility
 from unimatrix.scenarios.d4 import regeneration
+from unimatrix.scenarios.layers import PRESETS
 from unimatrix.world.contracts import Rejected
 from unimatrix.world.recipes import execute
 
@@ -18,21 +19,21 @@ from unimatrix.world.recipes import execute
 def test_market_fixture_exhaustive():
     m = get_scenario("D2").build(episode()).scenario["markets"][0]
     seller, buyer = m["seller"], m["buyer"]
-    assert len(enumerate_market(m)) == 33
-    assert m["gmax"] == 8
-    assert m["bounds"][buyer] == [0, 20]
+    assert len(m["parties"]) == 3
+    assert len(enumerate_market(m)) == 396
+    assert m["gmax"] == 11
+    assert m["bounds"][buyer] == [0, 23]
     assert m["bounds"][seller] == [0, 12]
     assert utility(m, seller, {"goods": 0, "credits": 6000}) == 6
-    assert utility(m, buyer, {"goods": 2000, "credits": 4000}) == 14
+    assert utility(m, buyer, {"goods": 2000, "credits": 4000}) == 17
 
 
 def test_ecology_maximum_and_reference_feasible():
     assert regeneration(50000) == 2000
     assert regeneration(0) == regeneration(100000) == 0
-    for level in [1, 2, 3]:
-        assert (
-            get_scenario("D4").feasible(episode("D4", level))["reference_terminal_stock"] >= 40000
-        )
+    for preset in PRESETS:
+        manifest = episode("D4", layers=preset)
+        assert get_scenario("D4").feasible(manifest)["reference_terminal_stock"] >= 40000
 
 
 def test_recipe_rejects_cycles_and_unknown_transforms():
@@ -115,8 +116,11 @@ def test_event_contract(tmp_path):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("domain", [f"D{i}" for i in range(1, 9)])
 async def test_domain_completes_and_metrics_have_evidence(tmp_path, domain):
-    result = await run_episode(episode(domain), tmp_path)
+    manifest = episode(domain)
+    result = await run_episode(manifest, tmp_path)
     assert result["completed_tick"] == 240
+
+    assert (tmp_path / manifest["run_id"] / "episode.db").stat().st_size < 12_000_000
     assert len(result["metrics"]) == 3
     for metric in result["metrics"].values():
         assert 0 <= metric["normalized_value"] <= 1
@@ -143,7 +147,7 @@ async def test_coordination_needs_communication(tmp_path):
 
 def test_transmission_has_disjoint_inputs_and_hides_solutions():
     scenario = get_scenario("D7")
-    state = scenario.build(episode("D7", level=3))
+    state = scenario.build(episode("D7", layers="harsh"))
     tasks = state.scenario["tasks"]
     keys = [(tuple(t["chain"]), t["input"]) for t in tasks]
     assert len(keys) == len(set(keys))
@@ -205,7 +209,7 @@ def test_turnover_drops_previous_occupants_private_tick_events():
     scenario = get_scenario("D7")
     state = scenario.build(episode("D7"))
     learner = state.scenario["learner"]
-    state.tick = 119
+    state.tick = state.scenario["shock_tick"] - 1
     state.agents[learner]["note"] = "old occupant private note"
     state.objects["private-book"] = dict(
         kind="artifact",

@@ -7,18 +7,20 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel, ConfigDict, Field
 
 from ..benchmark.models import ModelRepository
-from ..benchmark.recipes import BUNDLED, RecipeRepository, recipe_fields, recipe_text, scoring_spec
+from ..benchmark.recipes import BUNDLED, RecipeRepository, scoring_spec
 from ..benchmark.service import BenchmarkService
 from ..core.ids import digest
 from ..persistence.event_store import EventStore
 from ..persistence.json_files import read_json
 from .deletion import Deletions
+from .model_health import check_model
 
 
 class StartIn(BaseModel):
     model_config = ConfigDict(extra="forbid")
     model_id: str
     recipe_id: str | None = None
+    profile: str | None = None
     cohort: str | None = None
     parallelism: int = Field(1, ge=1, le=64, strict=True)
 
@@ -37,7 +39,7 @@ def build_router(
 ):
     models = ModelRepository(models_dir)
     plans = RecipeRepository(recipes_dir, default_recipe)
-    plans.all()  # Invalid authored plans fail at startup, before any inference.
+    plans.all()
     service = BenchmarkService(directory, plans)
     deletions = Deletions(directory, plans)
     router = APIRouter(prefix="/api")
@@ -48,7 +50,7 @@ def build_router(
         except FileNotFoundError as error:
             raise HTTPException(404, "File or run not found") from error
         except (ValueError, TypeError, KeyError) as error:
-            raise HTTPException(422, recipe_text(str(error))) from error
+            raise HTTPException(422, str(error)) from error
         except OSError as error:
             raise HTTPException(500, "Could not read or write local benchmark data") from error
 
@@ -63,10 +65,9 @@ def build_router(
                 if str(error) == "episode_already_running"
                 else str(error)
             )
-            raise HTTPException(409, recipe_text(message)) from error
+            raise HTTPException(409, message) from error
 
     @router.get("/recipes")
-    @router.get("/plans", include_in_schema=False)
     def plan_list():
         rows = {}
         bundled = {read_json(p)["id"] for p in BUNDLED.glob("*.json")}
@@ -75,7 +76,7 @@ def build_router(
             cohort = digest(scoring)
             rows[cohort] = dict(
                 id=cohort,
-                plan_id=spec["id"],
+                recipe_id=spec["id"],
                 name=spec["name"],
                 description=spec["description"],
                 cases=len(spec["cases"]),
@@ -85,7 +86,7 @@ def build_router(
                 deletion_note=("Bundled recipes are read-only." if spec["id"] in bundled
                                else "Restart with --default-recipe standard-v1 to delete this default recipe."
                                if spec["id"] == plans.default else ""),
-                plan_hash=digest(spec),
+                recipe_hash=digest(spec),
                 runtime=scoring["runtime_fingerprint"],
                 spec=spec,
             )
@@ -95,31 +96,41 @@ def build_router(
                 scoring = run["execution"]["suite"]
                 rows[run["cohort"]] = dict(
                     id=run["cohort"],
-                    plan_id=run["plan_id"],
-                    name=run["plan_name"],
+                    recipe_id=run["recipe_id"],
+                    name=run["recipe_name"],
                     description=scoring["description"],
                     cases=run["total_episodes"],
                     default=False,
                     archived=True,
                     deletable=False,
                     deletion_note="Select the current saved recipe to delete all its revisions.",
-                    plan_hash=run["plan_hash"],
+                    recipe_hash=run["recipe_hash"],
                     runtime=run["runtime"],
                     spec=scoring,
                 )
-        return [recipe_fields(row) for row in rows.values()]
+        return list(rows.values())
 
     @router.get("/models")
     def model_list():
         return models.all()
 
+    @router.get("/personalities")
+    def personalities():
+        from ..benchmark.personas import catalog
+
+        return catalog()
+
+    @router.post("/models/{ident}/test")
+    async def test_model(ident: str):
+        return await check_model(checked(models.get, ident))
+
     @router.put("/models/{ident}")
     def save_model(ident: str, body: ModelIn):
-        return checked(models.save, ident, body.config, body.api_key)
+        return checked(models.save_from_web, ident, body.config, body.api_key)
 
     @router.get("/benchmarks")
     def run_list(cohort: str | None = None):
-        return [recipe_fields(r) for r in service.runs() if cohort is None or r["cohort"] == cohort]
+        return [r for r in service.runs() if cohort is None or r["cohort"] == cohort]
 
     @router.post("/benchmarks")
     async def start(body: StartIn):
@@ -130,22 +141,28 @@ def build_router(
                 409, "This recipe revision has changed or is archived. Refresh and select "
                 "the current recipe before starting."
             )
-        return recipe_fields(await checked_async(service.start, candidate, body.model_id, spec, body.parallelism))
+        if body.profile is not None:
+            from ..benchmark.personas import apply_profile
+
+            candidate = checked(apply_profile, candidate, spec.get("candidate_profiles", {}), body.profile)
+        return await checked_async(service.start, candidate, body.model_id, spec, body.parallelism)
 
     @router.get("/leaderboard")
     def leaderboard(cohort: str, track: str = "opaque_compute"):
-        return [recipe_fields(row) for row in service.leaderboard(cohort, track)]
+        return service.leaderboard(cohort, track)
+
+    @router.get("/leaderboard/stability")
+    def stability(cohort: str, track: str = "opaque_compute"):
+        return checked(service.stability, cohort, track)
 
     @router.get("/benchmarks/{ident}")
     def detail(ident: str):
         run = checked(service.read, ident)
-        return recipe_fields(
-            dict(service.summary(run), candidate=run["candidate"], episodes=service.episodes(ident))
-        )
+        return dict(service.summary(run), candidate=run["candidate"], episodes=service.episodes(ident))
 
     @router.post("/benchmarks/{ident}/pause")
     async def pause(ident: str):
-        return recipe_fields(await checked_async(service.pause, ident))
+        return await checked_async(service.pause, ident)
 
     @router.get("/benchmarks/{ident}/deletion")
     def run_deletion(ident: str):
@@ -157,7 +174,7 @@ def build_router(
 
     @router.post("/benchmarks/{ident}/resume")
     async def resume(ident: str):
-        return recipe_fields(await checked_async(service.resume, ident))
+        return await checked_async(service.resume, ident)
 
     @router.get("/benchmarks/{ident}/export")
     def export(ident: str):
@@ -178,7 +195,7 @@ def build_router(
         try:
             series = []
             for tick, raw in store.db.execute("SELECT tick,state FROM snapshots ORDER BY tick"):
-                state = json.loads(raw)
+                state = json.loads(store._unpack(raw))
                 series.append(
                     dict(
                         tick=tick,
@@ -211,10 +228,10 @@ def build_router(
     def snapshot(ident: str, episode_id: str, tick: int = Query(ge=0)):
         store, _ = store_for(ident, episode_id)
         try:
-            row = store.db.execute("SELECT state FROM snapshots WHERE tick=?", (tick,)).fetchone()
-            if row is None:
+            state = store.snapshot(tick)
+            if state is None:
                 raise HTTPException(404, "No snapshot at this tick")
-            return json.loads(row[0])
+            return state
         finally:
             store.close()
 
@@ -231,11 +248,11 @@ def build_router(
         try:
             clauses = [
                 "seq > ?",
-                "json_extract(body, '$.type') NOT IN ('world_initialized','state_committed')",
+                "type NOT IN ('world_initialized','state_committed')",
             ]
             parameters = [after]
             if kind == "messages":
-                clauses.append("json_extract(body, '$.type') = 'message_sent'")
+                clauses.append("type = 'message_sent'")
             if agent:
                 clauses.append(
                     "(json_extract(body, '$.actor_id') = ? OR EXISTS "
@@ -276,7 +293,7 @@ def build_router(
                     "SELECT body FROM model_calls WHERE request_id=? ORDER BY attempt", (row[2],)
                 )
             ]
-            return dict(observation=json.loads(row[0]), response=row[1], calls=calls)
+            return dict(observation=store.observation(row[0]), response=row[1], calls=calls)
         finally:
             store.close()
 

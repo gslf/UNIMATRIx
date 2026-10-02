@@ -3,10 +3,12 @@ const $=id=>document.getElementById(id), el=(tag,text,cls)=>{const n=document.cr
 const format=n=>n==null?"—":Number(n).toLocaleString(undefined,{maximumFractionDigits:2});
 const variant=v=>({normal:"Normal",no_memory:"No memory",no_communication:"No communication",reverse_observation_order:"Reverse peer order",rename_agents:"Rename agents"}[v]||v);
 const ident=location.pathname.split("/").filter(Boolean).at(-1), base="/api/recipe-lab/evaluations/"+encodeURIComponent(ident);
-let overview=null,studyId=new URLSearchParams(location.search).get("study"),episodeId=null,detail=null,offset=0,panel="activity",revision=0,paneRevision=0,busy=false;
+const query=new URLSearchParams(location.search),PANELS=["activity","agents","metrics","calls","messages","events"];
+let overview=null,studyId=query.get("study"),episodeId=query.get("episode"),locate=episodeId,detail=null,offset=0,panel=PANELS.includes(query.get("panel"))?query.get("panel"):"activity",revision=0,paneRevision=0,busy=false;
 let eventCursor=0,messageCursor=0,callOffset=0,signature="";
 if(studyId!==null)$("follow").checked=false;
 async function api(path,method="GET"){const r=await fetch(base+path,{method,cache:"no-store"});const v=await r.json();if(!r.ok)throw new Error(typeof v.detail==="string"?v.detail:JSON.stringify(v.detail));return v;}
+function agentLabel(slot,focal=detail?.focal_slot){const label=String(slot??"world").replace(/^slot-(\d+)$/,"AGENT $1");return label+(slot===focal?" - Protagonist":"");}
 function fail(e){$("error").textContent=e.message;$("error").hidden=false;}
 function warning(id,text){$(id).textContent=text||"";$(id).hidden=!text;}
 function on(id,fn,event="click"){$(id).addEventListener(event,()=>Promise.resolve().then(fn).catch(fail));}
@@ -30,25 +32,25 @@ function renderOverview(data){
   $("study-list").replaceChildren(...data.studies.map((s,i)=>{
     const b=el("button",undefined,"study-card"+(s.id===studyId?" selected":""));b.setAttribute("aria-pressed",String(s.id===studyId));
     b.append(el("strong",`${i+1}. ${s.label}`),el("span",`${s.candidate.kind==="scripted"?"Scripted baseline":"Model"} · ${variant(s.intervention)}`),el("span",`${s.phase} · ${s.completed_episodes}/${s.total_episodes} episodes · ${s.current_episodes?.length??0} in progress · parallel requests: ${data.parallelism??1}`));
-    const p=el("progress");p.max=s.total_episodes*240;p.value=s.completed_episodes*240+(s.current_ticks??s.current?.completed_tick??0);p.setAttribute("aria-label",s.label+" progress");b.append(p);
+    const p=el("progress");p.max=s.total_episodes*(s.ticks_per_episode??240);p.value=s.completed_episodes*(s.ticks_per_episode??240)+(s.current_ticks??s.current?.completed_tick??0);p.setAttribute("aria-label",s.label+" progress");b.append(p);
     if(s.score!=null)b.append(el("span",`Score ${format(s.score)} / 100`));b.onclick=()=>selectStudy(s.id);return b;
   }));
   const s=data.studies.find(s=>s.id===studyId);if(!s)return;
   $("study-name").textContent=s.label;$("study-variant").textContent=variant(s.intervention);warning("study-error",s.error);
-  $("study-model").textContent=s.candidate.kind==="model"?`${s.candidate.name} · ${s.candidate.snapshot} · ${s.candidate.endpoint} · Context: ${s.candidate.context_tokens?format(s.candidate.context_tokens)+" tokens":"legacy server settings"}`:`Scripted baseline: ${s.candidate.name}. ${s.provider_agents?`${s.provider_agents} model peers may call their providers.`:"All agents use local rules; no provider requests."}`;
+  $("study-model").textContent=s.candidate.kind==="model"?`${s.candidate.name} · ${s.candidate.snapshot} · ${s.candidate.endpoint} · Context: ${s.candidate.context_tokens?format(s.candidate.context_tokens)+" tokens":"provider settings"}`:`Scripted baseline: ${s.candidate.name}. ${s.provider_agents?`${s.provider_agents} model peers may call their providers.`:"All agents use local rules; no provider requests."}`;
 }
 async function refresh(poll=false){
   if(poll&&busy)return;busy=true;const token=++revision;paneRevision++;$("error").hidden=true;
   try{
     const data=await api("/explorer");if(token!==revision)return;renderOverview(data);if(studyId==null)return;
-    let rows=await api(`/studies/${studyId}/episodes?offset=${offset}`);if(token!==revision)return;
+    let rows=await api(`/studies/${studyId}/episodes?offset=${offset}${locate?"&locate="+encodeURIComponent(locate):""}`);if(token!==revision)return;offset=rows.offset;locate=null;
     if($("follow").checked&&rows.current_index!=null&&Math.floor(rows.current_index/48)*48!==offset){offset=Math.floor(rows.current_index/48)*48;rows=await api(`/studies/${studyId}/episodes?offset=${offset}`);if(token!==revision)return;}
     const s=data.studies.find(s=>s.id===studyId);
     if($("follow").checked&&s.current_episode)episodeId=s.current_episode;
     if(!rows.items.some(e=>e.id===episodeId))episodeId=(rows.items.find(e=>e.status==="running")||rows.items.find(e=>e.status!=="pending")||rows.items[0])?.id;
     $("episode-page").textContent=`${rows.total?offset+1:0}–${Math.min(rows.total,offset+48)} of ${rows.total}`;$("previous-page").disabled=offset===0;$("next-page").disabled=offset+48>=rows.total;
     $("episode-list").replaceChildren(...rows.items.map(e=>{
-      const b=el("button",undefined,`episode-card ${e.status}`+(e.id===episodeId?" selected":""));b.setAttribute("aria-pressed",String(e.id===episodeId));b.append(el("strong",`#${e.index} · ${e.domain} · Level ${e.level}`),el("span",`Seed ${e.seed} · ${e.role} · replicate ${e.replicate}`),el("span",`${e.status.replaceAll("_"," ")} · ${e.completed_tick}/${e.ticks} ticks`));b.onclick=()=>selectEpisode(e.id);return b;
+      const b=el("button",undefined,`episode-card ${e.status}`+(e.id===episodeId?" selected":""));b.setAttribute("aria-pressed",String(e.id===episodeId));b.append(el("strong",`#${e.index} · ${e.domain}`),el("span",`Seed ${e.seed} · ${e.role} · replicate ${e.replicate} · ${e.complexity}`),el("span",`${e.status.replaceAll("_"," ")} · ${e.completed_tick}/${e.ticks} ticks`));b.onclick=()=>selectEpisode(e.id);return b;
     }));
     if(!episodeId)return;
     const d=await api(epPath());if(token!==revision)return;
@@ -58,9 +60,9 @@ async function refresh(poll=false){
     $("episode-status").textContent=d.status.replaceAll("_"," ");$("tick-progress").max=d.ticks;$("tick-progress").value=d.completed_tick;
     stats([["Recorded provider attempts",format(d.totals.provider_attempts||0)],["Reported output tokens",format(d.totals.output_tokens)],["Mean attempt latency (s)",format(d.totals.mean_latency)],["Recorded provider errors",format(d.totals.errors||0)]]);
     const waitingModels=d.waiting.filter(s=>d.policies[s]?.kind==="model");
-    $("waiting").textContent=d.status==="running"?`${d.saved_decisions}/${d.agents.length} decisions saved for tick ${d.completed_tick}. ${waitingModels.length?"Awaiting model decisions: "+waitingModels.join(", ")+".":""} Awaiting decisions is inferred from saved evidence; it does not confirm an HTTP request is in flight.`:"";
+    $("waiting").textContent=d.status==="running"?`${d.saved_decisions}/${d.agents.length-(d.authorized_waiting?.length??0)} decisions saved for tick ${d.completed_tick}. ${d.authorized_waiting?.length?d.authorized_waiting.length+" agents chose to wait. ":""}${waitingModels.length?"Awaiting model decisions: "+waitingModels.map(s=>agentLabel(s)).join(", ")+".":""} Awaiting decisions is inferred from saved evidence; it does not confirm an HTTP request is in flight.`:"";
     $("pending").hidden=d.status!=="pending";$("evidence").hidden=d.status==="pending";
-    const agent=$("agent").value;$("agent").replaceChildren(...Object.entries(d.policies).map(([s,p])=>new Option(`${s}${s===d.focal_slot?" · candidate":""} · ${p.name}`,s)));$("agent").value=!changed&&d.policies[agent]?agent:d.focal_slot;
+    const agent=$("agent").value;$("agent").replaceChildren(...Object.entries(d.policies).map(([s,p])=>new Option(`${agentLabel(s,d.focal_slot)} · ${p.name}${p.personality?" · "+p.personality:""}`,s)));$("agent").value=!changed&&d.policies[agent]?agent:d.focal_slot;
     $("decision-tick").max=d.ticks-1;
     if(changed||$("follow").checked)$("decision-tick").value=Math.min(d.ticks-1,d.last_decision_tick??d.completed_tick);
     renderActivity(d);
@@ -76,10 +78,11 @@ function renderActivity(d){
   for(const [x,text]of [[20,"Tick 0"],[740,`Tick ${plotTicks}`]]){const label=document.createElementNS(ns,"text");label.setAttribute("x",x);label.setAttribute("y",175);label.setAttribute("fill","var(--dim)");label.textContent=text;svg.append(label);}
   $("activity-chart").replaceChildren(d.series.length?svg:el("p","No committed events yet.","muted"));
   $("world-phases").replaceChildren(...d.phases.map(p=>el("span",`${p.phase} · ${p.events} events`,"stage")));
-  $("agent-status").replaceChildren(...Object.entries(d.policies).map(([slot,p])=>{const b=el("button",undefined,"agent-tile");b.append(el("strong",slot+(slot===d.focal_slot?" · candidate":"")),el("span",p.kind==="model"?p.name:`Scripted · ${p.name}`),el("span",d.status==="running"?(!d.agents.includes(slot)?"Inactive":d.waiting.includes(slot)?"Decision not saved yet":"Decision saved"):d.status.replaceAll("_"," ")));b.onclick=()=>{$("agent").value=slot;showPanel("agents");};return b;}));
+  $("agent-status").replaceChildren(...Object.entries(d.policies).map(([slot,p])=>{const b=el("button",undefined,"agent-tile");b.append(el("strong",agentLabel(slot,d.focal_slot)),el("span",p.kind==="model"?p.name+(p.personality?" · "+p.personality:""):`Scripted · ${p.name}${p.personality?" · "+p.personality:""}`),el("span",d.status==="running"?(!d.agents.includes(slot)?"Inactive":d.authorized_waiting?.includes(slot)?"Waiting by choice":d.waiting.includes(slot)?"Decision not saved yet":"Decision saved"):d.status.replaceAll("_"," ")));b.onclick=()=>{$("agent").value=slot;showPanel("agents");};return b;}));
 }
 function inspectTick(tick){$("follow").checked=false;$("decision-tick").value=Math.min(tick,detail.ticks-1);showPanel("agents");}
-function showPanel(name){panel=name;signature="";for(const n of ["activity","agents","calls","messages","events"])$("panel-"+n).hidden=n!==name;for(const b of document.querySelectorAll("[data-panel]")){b.classList.toggle("active",b.dataset.panel===name);b.setAttribute("aria-current",b.dataset.panel===name?"page":"false");}loadPanel(true).catch(fail);}
+function applyPanel(){for(const n of PANELS)$("panel-"+n).hidden=n!==panel;for(const b of document.querySelectorAll("[data-panel]")){b.classList.toggle("active",b.dataset.panel===panel);b.setAttribute("aria-current",b.dataset.panel===panel?"page":"false");}}
+function showPanel(name){panel=name;signature="";applyPanel();loadPanel(true).catch(fail);}
 async function loadPanel(reset){
   if(!detail||detail.status==="pending")return;
   const token=++paneRevision,path=epPath(),version=revision,chosen=panel;
@@ -87,20 +90,33 @@ async function loadPanel(reset){
   if(panel==="agents"){
     const tick=Number($("decision-tick").value);if(!Number.isInteger(tick)||tick<0||tick>=detail.ticks)throw new Error("Choose a decision tick within this episode.");
     const [decision,state]=await Promise.all([api(path+`/decision?agent=${encodeURIComponent($("agent").value)}&tick=${tick}`),api(path+`/state?tick=${tick}`).catch(e=>({unavailable:e.message}))]);if(!current())return;
-    $("decision-note").textContent=decision.recorded?`Saved decision at tick ${tick}. World state is before that decision.`:"No decision saved for this agent at this tick. It may be pending, failed or not scheduled.";
+    $("decision-note").textContent=decision.recorded?`Saved decision at tick ${tick}. World state is before that decision.`:decision.authorized_wait?`The agent chose to wait at tick ${decision.authorized_wait.origin_tick}, until tick ${decision.authorized_wait.until_tick} or new information. No response was requested at tick ${tick}.`:"No decision saved for this agent at this tick. It may be pending, failed or not scheduled.";
     const agentState=state.agents?.[$("agent").value];
     $("agent-snapshot").replaceChildren();
     if(agentState){$("agent-snapshot").append(el("h3",`Agent state · tick ${tick}`),el("p",`${agentState.alive?"Alive":"Inactive"} · location: ${agentState.location}`));for(const [resource,amount]of Object.entries(agentState.inventory||{})){const row=el("div",undefined,"data-row");row.append(el("span",resource),el("strong",format(amount/1000)+" units"));$("agent-snapshot").append(row);}}
     $("world-state").textContent=pretty(state);$("decision-content").replaceChildren();
-    if(decision.recorded){const original=decision.calls.find(c=>c.research_input);$("decision-content").append(block("Observation from the world",decision.observation),block(detail.policies[$("agent").value].kind==="model"?"Input actually sent to the model":"Input to scripted agent",original?.research_input||decision.observation),block(detail.policies[$("agent").value].kind==="model"?"Raw model output":"Scripted output",original?.research_output??decision.response,true),block("Response submitted to the engine",decision.response),block("Recorded attempt details",decision.calls));}
+    if(decision.recorded){const original=decision.calls.find(c=>c.research_input);$("decision-content").append(...(detail.policies[$("agent").value].system_prompt?[block("Peer personality",detail.policies[$("agent").value].system_prompt)]:[]),block("Observation from the world",decision.observation),block(detail.policies[$("agent").value].kind==="model"?"Input actually sent to the model":"Input to scripted agent",original?.research_input||decision.observation),block(detail.policies[$("agent").value].kind==="model"?"Raw model output":"Scripted output",original?.research_output??decision.response,true),block("Response submitted to the engine",decision.response),block("Recorded attempt details",decision.calls));}
+  }else if(panel==="metrics"){
+    const data=await api(path+"/metrics").catch(e=>({unavailable:e.message}));if(!current())return;
+    $("metric-list").replaceChildren();
+    if(data.unavailable){$("metric-list").append(el("p",data.unavailable,"muted"));return;}
+    $("metric-list").append(el("p",`Episode score ${format(100*data.score)} / 100 for ${agentLabel(data.focal)}. Each metric lists the events that produced it; click one to inspect the decisions of that tick.`,"muted"));
+    for(const m of data.metrics){
+      const card=el("details",undefined,"evidence-record"),points=m.weight==null?"":` · weight ${format(m.weight)} → ${format(100*m.value*m.weight)} points`;card.open=m.value<0.98;
+      card.append(el("summary",`${m.metric} · ${format(100*m.value)} / 100${points} · ${format(m.numerator)} of ${m.denominator}`));
+      const many=m.contributions.length>24,shown=many?m.lost:m.contributions;
+      if(many)card.append(el("p",`${m.contributions.length} scoring events; the five that lost the most are shown.`,"muted small"));
+      for(const c of shown){const b=el("button",`Tick ${c.tick} · ${c.label} · ${format(100*c.value)} · event #${c.seq}`,"agent-button");b.onclick=()=>inspectTick(Math.max(0,c.tick-1));card.append(b);}
+      $("metric-list").append(card);
+    }
   }else if(panel==="calls"){
     const start=reset?0:callOffset;const data=await api(path+`/calls?offset=${start}`);if(!current())return;
-    if(reset)$("call-list").replaceChildren();for(const call of data.items){const row=block(`${call.slot} · tick ${call.tick??"unknown (no saved decision)"} · attempt ${call.attempt} · ${format(call.latency)} s${call.error?" · ERROR":""}`,call);if(call.error)row.classList.add("error");$("call-list").append(row);}callOffset=start+data.items.length;$("more-calls").hidden=!data.more;if(!callOffset)$("call-list").append(el("p","No completed provider attempts recorded. Scripted decisions do not appear here.","muted"));
+    if(reset)$("call-list").replaceChildren();for(const call of data.items){const row=block(`${agentLabel(call.slot)} · tick ${call.tick??"unknown (no saved decision)"} · attempt ${call.attempt} · ${format(call.latency)} s${call.error?" · ERROR":""}`,call);if(call.error)row.classList.add("error");$("call-list").append(row);}callOffset=start+data.items.length;$("more-calls").hidden=!data.more;if(!callOffset)$("call-list").append(el("p","No completed provider attempts recorded. Scripted decisions do not appear here.","muted"));
   }else if(panel==="events"||panel==="messages"){
     const messages=panel==="messages",start=reset?0:messages?messageCursor:eventCursor,kind=messages?"messages":$("event-filter").value;
     const data=await api(path+`/events?after=${start}&kind=${kind}`);if(!current())return;
     const target=$(messages?"message-list":"event-list");if(reset)target.replaceChildren();
-    for(const event of data.items){if(messages){const row=el("article",undefined,"evidence-record");row.append(el("strong",`Tick ${event.tick} · ${event.actor_id} → ${(event.payload.to||[]).join(", ")||event.payload.channel||"public"}`),el("p",event.payload.content||"","message-text"));row.append(block("Message event",event));target.append(row);}else target.append(block(`#${event.seq} · tick ${event.tick} · ${event.phase} · ${event.type} · ${event.actor_id||"world"}`,event));}
+    for(const event of data.items){if(messages){const row=el("article",undefined,"evidence-record");row.append(el("strong",`Tick ${event.tick} · ${agentLabel(event.actor_id)} → ${(event.payload.to||[]).map(s=>agentLabel(s)).join(", ")||event.payload.channel||"public"}`),el("p",event.payload.content||"","message-text"));row.append(block("Message event",event));target.append(row);}else target.append(block(`#${event.seq} · tick ${event.tick} · ${event.phase} · ${event.type} · ${agentLabel(event.actor_id||"world")}`,event));}
     if(messages)messageCursor=data.cursor;else eventCursor=data.cursor;$(messages?"more-messages":"more-events").hidden=!data.more;if(!target.children.length)target.append(el("p","No matching events recorded yet.","muted"));
   }
 }
@@ -112,4 +128,4 @@ on("next-page",()=>{$("follow").checked=false;offset+=48;episodeId=null;return r
 on("agent",()=>{$("follow").checked=false;return loadPanel(true);},"change");on("load-decision",()=>{$("follow").checked=false;return loadPanel(true);});
 on("latest-decision",()=>{$("decision-tick").value=detail.last_decision_tick??0;return loadPanel(true);});
 for(const id of ["more-calls","more-messages","more-events"])on(id,()=>{$("follow").checked=false;return loadPanel(false);});on("event-filter",()=>loadPanel(true),"change");
-refresh();setInterval(()=>{if(!document.hidden&&overview?.status==="running")refresh(true);},3000);
+applyPanel();refresh();setInterval(()=>{if(!document.hidden&&overview?.status==="running")refresh(true);},3000);

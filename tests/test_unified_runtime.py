@@ -1,6 +1,7 @@
 import sqlite3
 
 import pytest
+from jsonschema import ValidationError as SchemaValidationError
 from pydantic import ValidationError
 
 from unimatrix.actions.resolver import resolve
@@ -27,10 +28,10 @@ def transition(state, scenario, operations):
     return resolve(state, decisions, scenario, packets)
 
 
-def test_old_config_and_database_are_rejected_without_migration(tmp_path):
+def test_unknown_config_and_foreign_database_are_rejected_untouched(tmp_path):
     with pytest.raises(ValidationError):
-        Config.model_validate({"simulation": {"name": "old"}, "agents": []})
-    path = tmp_path / "old.db"
+        Config.model_validate({"simulation": {"name": "other"}, "agents": []})
+    path = tmp_path / "foreign.db"
     connection = sqlite3.connect(path)
     connection.execute("CREATE TABLE agents(id TEXT)")
     connection.commit()
@@ -39,6 +40,25 @@ def test_old_config_and_database_are_rejected_without_migration(tmp_path):
     with pytest.raises(ValueError, match="incompatible_database"):
         EventStore(path)
     assert path.read_bytes() == original
+
+    old = tmp_path / "old.db"
+    connection = sqlite3.connect(old)
+    connection.execute("PRAGMA application_id=1431132164")
+    connection.execute("PRAGMA user_version=5")
+    connection.execute("CREATE TABLE run(id INTEGER)")
+    connection.commit()
+    connection.close()
+    original = old.read_bytes()
+    with pytest.raises(ValueError, match="incompatible_database"):
+        EventStore(old)
+    assert old.read_bytes() == original
+
+
+def test_previous_decision_protocol_is_rejected():
+    decision = empty(0, "slot-0")
+    decision["protocol"] = "unimatrix.decision.v3"
+    with pytest.raises(SchemaValidationError):
+        validate(canonical(decision), 0, "slot-0")
 
 
 def test_birth_requires_two_exact_consents_and_consumes_real_resources():

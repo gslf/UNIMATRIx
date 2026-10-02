@@ -26,12 +26,15 @@ def runtime_fingerprint():
         root / "benchmark" / name
         for name in [
             "runner.py",
+            "service.py",
+            "duration.py",
             "parallel.py",
             "scheduler.py",
             "manifests.py",
             "validation.py",
-            "plans.py",
+            "recipes.py",
             "fingerprints.py",
+            "feasibility.py",
         ]
     ]
     files = {str(p.relative_to(root)): p.read_text() for p in sorted(paths)}

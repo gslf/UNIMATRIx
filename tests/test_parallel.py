@@ -80,7 +80,7 @@ async def test_worker_failure_drains_other_workers():
 @pytest.mark.asyncio
 async def test_shared_limit_across_real_episodes_and_identical_world_results(tmp_path, monkeypatch):
     from unimatrix.actions.schemas import empty
-    from unimatrix.benchmark.plans import PlanRepository, bind_candidate
+    from unimatrix.benchmark.recipes import RecipeRepository, bind_candidate
     from unimatrix.benchmark.scheduler import run_episode
     from unimatrix.core.ids import canonical
     from unimatrix.persistence.event_store import EventStore
@@ -93,7 +93,7 @@ async def test_shared_limit_across_real_episodes_and_identical_world_results(tmp
         context_bytes_verified=24000,
         budget_track="opaque_compute",
     )
-    spec = PlanRepository().get("compact-v1")
+    spec = RecipeRepository().get("standard-v1")
     spec["cases"] = spec["cases"][:2]
     spec["domains"] = {
         d: v for d, v in spec["domains"].items() if d in {c["domain"] for c in spec["cases"]}
@@ -188,12 +188,11 @@ async def test_parallelism_is_saved_by_both_launch_interfaces(tmp_path, monkeypa
         response = await client.post(
             "/api/recipe-lab/drafts",
             json=dict(
-                base_recipe="compact-v1",
+                base_recipe="standard-v1",
                 id="parallel-test",
                 name="Parallel test",
                 description="Test",
                 domains=["D1"],
-                levels=[1],
                 seeds=[100, 101],
                 roles=["advantaged"],
             ),
@@ -213,3 +212,50 @@ async def test_parallelism_is_saved_by_both_launch_interfaces(tmp_path, monkeypa
         body["parallelism"] = 2
         other = await client.post("/api/recipe-lab/evaluation-preview", json=body)
         assert other.json()["id"] != response.json()["id"]
+
+
+@pytest.mark.asyncio
+async def test_scripted_episodes_run_in_worker_processes(tmp_path, monkeypatch):
+    import os
+
+    from tests.test_evidence_v6 import child_pid
+    from unimatrix.benchmark import scheduler
+    from unimatrix.benchmark.manifests import episode
+    from unimatrix.benchmark.parallel import process_pool
+
+    monkeypatch.setattr(scheduler, "_run_episode_process", child_pid)
+    seen = []
+
+    async def worker(manifest):
+        result = await scheduler.run_episode_offloaded(manifest, tmp_path)
+        seen.append(result["pid"])
+        return {}
+
+    await execute_episodes(
+        {"completed_episodes": 0}, [episode("D2")], worker, lambda: None, 1, "usage", []
+    )
+    assert seen and seen[0] != os.getpid()
+    assert process_pool.get() is None
+
+
+@pytest.mark.asyncio
+async def test_offloaded_and_inline_scripted_episodes_produce_identical_evidence(tmp_path):
+    from unimatrix.benchmark.manifests import episode
+    from unimatrix.benchmark.scheduler import run_episode, run_episode_offloaded
+    from unimatrix.persistence.event_store import EventStore
+
+    manifest = episode("D2")
+    inline = await run_episode(manifest, tmp_path / "inline", until=5)
+
+    async def worker(current):
+        return (await run_episode_offloaded(current, tmp_path / "pool", until=5))["diagnostics"]
+
+    await execute_episodes(
+        {"completed_episodes": 0}, [manifest], worker, lambda: None, 1, "usage", ["messages"]
+    )
+    for folder in ["inline", "pool"]:
+        store = EventStore(tmp_path / folder / manifest["run_id"] / "episode.db", read_only=True)
+        try:
+            assert store.verify() == inline["verification"]
+        finally:
+            store.close()

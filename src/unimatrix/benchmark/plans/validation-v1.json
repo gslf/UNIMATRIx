@@ -1,0 +1,5756 @@
+{
+  "format": "unimatrix.benchmark-recipe.v1",
+  "id": "validation-v1",
+  "name": "Validation",
+  "description": "Fully crossed domain, condition and role panel with four independent seeds per cell for matched model comparisons.",
+  "engine": "unimatrix-4",
+  "ticks": 72,
+  "peers": [
+    {
+      "policy": "reciprocal",
+      "role": "Mutual-aid counterpart",
+      "disposition": {
+        "cooperation": 1.0,
+        "repair": true,
+        "norm_compliance": 1.0
+      }
+    },
+    {
+      "policy": "prudent",
+      "role": "Cautious verifier",
+      "endowment": 120,
+      "disposition": {
+        "inspection": true,
+        "norm_compliance": 1.0
+      }
+    },
+    {
+      "policy": "greedy",
+      "role": "Competitive trader",
+      "endowment": 130,
+      "disposition": {
+        "demand": 4,
+        "accept_threshold": 1
+      }
+    },
+    {
+      "policy": "opportunist",
+      "role": "Opportunistic partner",
+      "disposition": {
+        "defection": true,
+        "honesty": 0.5
+      }
+    },
+    {
+      "policy": "information",
+      "role": "Evidence broker",
+      "disposition": {
+        "honesty": 0.9,
+        "norm_compliance": 1.0
+      }
+    },
+    {
+      "policy": "coordinator",
+      "role": "Institutional organiser",
+      "endowment": 110,
+      "disposition": {
+        "norm_compliance": 1.0
+      }
+    },
+    {
+      "policy": "independent",
+      "role": "Independent specialist",
+      "endowment": 100,
+      "disposition": {
+        "cooperation": 0.0
+      }
+    }
+  ],
+  "budgets": {
+    "generation_tokens_per_decision": null,
+    "observation_bytes": 24000,
+    "envelope_bytes": 6144,
+    "attempts_per_decision": 3
+  },
+  "domains": {
+    "D1": {
+      "metrics": {
+        "D1.prediction": 0.5,
+        "D1.decision": 0.25,
+        "D1.update": 0.25
+      }
+    },
+    "D2": {
+      "metrics": {
+        "D2.private_gain": 0.5,
+        "D2.joint_gain": 0.25,
+        "D2.delivery": 0.25
+      }
+    },
+    "D3": {
+      "metrics": {
+        "D3.completion": 0.5,
+        "D3.timeliness": 0.25,
+        "D3.efficiency": 0.25
+      }
+    },
+    "D4": {
+      "metrics": {
+        "D4.service": 0.5,
+        "D4.continuity": 0.25,
+        "D4.reserve": 0.25
+      }
+    },
+    "D5": {
+      "metrics": {
+        "D5.relational_utility": 0.5,
+        "D5.commitment_resolution": 0.25,
+        "D5.conflict_resolution": 0.25
+      }
+    },
+    "D6": {
+      "metrics": {
+        "D6.mandate_service": 0.5,
+        "D6.execution": 0.25,
+        "D6.turnover_service": 0.25
+      }
+    },
+    "D7": {
+      "metrics": {
+        "D7.transfer_success": 0.5,
+        "D7.retention": 0.25,
+        "D7.functional_reuse": 0.25
+      }
+    },
+    "D8": {
+      "metrics": {
+        "D8.postshock_service": 0.5,
+        "D8.recovery": 0.25,
+        "D8.convention_transfer": 0.25
+      }
+    }
+  },
+  "bootstrap": {
+    "seed": 20260911,
+    "resamples": 5000
+  },
+  "cases": [
+    {
+      "domain": "D1",
+      "layers": "standard",
+      "seed": 1498506569,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D1",
+      "layers": "standard",
+      "seed": 1084051093,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D1",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Communication disruption",
+              "when": {
+                "at": 45
+              },
+              "effect": {
+                "type": "layer",
+                "layer": "society",
+                "key": "network",
+                "value": "hub",
+                "duration": 6
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 2105730376,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D1",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Communication disruption",
+              "when": {
+                "at": 45
+              },
+              "effect": {
+                "type": "layer",
+                "layer": "society",
+                "key": "network",
+                "value": "hub",
+                "duration": 6
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 470362443,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D2",
+      "layers": "standard",
+      "seed": 876142812,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D2",
+      "layers": "standard",
+      "seed": 374314904,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D2",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "New counterparty",
+              "when": {
+                "at": 36
+              },
+              "effect": {
+                "type": "turnover",
+                "target": "partner"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 1860041308,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D2",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "New counterparty",
+              "when": {
+                "at": 36
+              },
+              "effect": {
+                "type": "turnover",
+                "target": "partner"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 1946408349,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D3",
+      "layers": "standard",
+      "seed": 95023378,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D3",
+      "layers": "standard",
+      "seed": 181681737,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D3",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Late dependency fault",
+              "when": {
+                "at": 52
+              },
+              "effect": {
+                "type": "fault",
+                "task": "task-2"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 1422110536,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D3",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Late dependency fault",
+              "when": {
+                "at": 52
+              },
+              "effect": {
+                "type": "fault",
+                "task": "task-2"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 1076171665,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D4",
+      "layers": "standard",
+      "seed": 1617755035,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D4",
+      "layers": "standard",
+      "seed": 1945147667,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D4",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Reserve pressure",
+              "when": {
+                "metric": "stock",
+                "below": 65,
+                "from": 48,
+                "to": 60
+              },
+              "effect": {
+                "type": "layer",
+                "layer": "scarcity",
+                "key": "regeneration_rate",
+                "value": 90,
+                "duration": 3
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 1866922440,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D4",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Reserve pressure",
+              "when": {
+                "metric": "stock",
+                "below": 65,
+                "from": 48,
+                "to": 60
+              },
+              "effect": {
+                "type": "layer",
+                "layer": "scarcity",
+                "key": "regeneration_rate",
+                "value": 90,
+                "duration": 3
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 1605740531,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D5",
+      "layers": "standard",
+      "seed": 707546503,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D5",
+      "layers": "standard",
+      "seed": 328538634,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D5",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Uncertain partner replacement",
+              "when": {
+                "chance": 80,
+                "from": 43,
+                "to": 49
+              },
+              "effect": {
+                "type": "turnover",
+                "target": "partner"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 1038430771,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D5",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Uncertain partner replacement",
+              "when": {
+                "chance": 80,
+                "from": 43,
+                "to": 49
+              },
+              "effect": {
+                "type": "turnover",
+                "target": "partner"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 1898363572,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D6",
+      "layers": "standard",
+      "seed": 1332736593,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D6",
+      "layers": "standard",
+      "seed": 445806027,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D6",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Second institutional succession",
+              "when": {
+                "at": 55
+              },
+              "effect": {
+                "type": "turnover",
+                "target": "partner"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 1623643399,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D6",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Second institutional succession",
+              "when": {
+                "at": 55
+              },
+              "effect": {
+                "type": "turnover",
+                "target": "partner"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 2090420756,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D7",
+      "layers": "standard",
+      "seed": 1153749222,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D7",
+      "layers": "standard",
+      "seed": 1950651855,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D7",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Late apprentice replacement",
+              "when": {
+                "at": 52
+              },
+              "effect": {
+                "type": "turnover",
+                "target": "partner"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 1985011810,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D7",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Late apprentice replacement",
+              "when": {
+                "at": 52
+              },
+              "effect": {
+                "type": "turnover",
+                "target": "partner"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 268890879,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D8",
+      "layers": "standard",
+      "seed": 956571963,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D8",
+      "layers": "standard",
+      "seed": 101670123,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D8",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Second convention shift",
+              "when": {
+                "at": 52
+              },
+              "effect": {
+                "type": "convention"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 381839878,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D8",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Second convention shift",
+              "when": {
+                "at": 52
+              },
+              "effect": {
+                "type": "convention"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 609648726,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D1",
+      "layers": "standard",
+      "seed": 1745195075,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D1",
+      "layers": "standard",
+      "seed": 1080697612,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D1",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Communication disruption",
+              "when": {
+                "at": 45
+              },
+              "effect": {
+                "type": "layer",
+                "layer": "society",
+                "key": "network",
+                "value": "hub",
+                "duration": 6
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 422599850,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D1",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Communication disruption",
+              "when": {
+                "at": 45
+              },
+              "effect": {
+                "type": "layer",
+                "layer": "society",
+                "key": "network",
+                "value": "hub",
+                "duration": 6
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 425123579,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D2",
+      "layers": "standard",
+      "seed": 706600547,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D2",
+      "layers": "standard",
+      "seed": 880868392,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D2",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "New counterparty",
+              "when": {
+                "at": 36
+              },
+              "effect": {
+                "type": "turnover",
+                "target": "partner"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 1900340709,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D2",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "New counterparty",
+              "when": {
+                "at": 36
+              },
+              "effect": {
+                "type": "turnover",
+                "target": "partner"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 1092271707,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D3",
+      "layers": "standard",
+      "seed": 1561644882,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D3",
+      "layers": "standard",
+      "seed": 2143745489,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D3",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Late dependency fault",
+              "when": {
+                "at": 52
+              },
+              "effect": {
+                "type": "fault",
+                "task": "task-2"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 536052894,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D3",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Late dependency fault",
+              "when": {
+                "at": 52
+              },
+              "effect": {
+                "type": "fault",
+                "task": "task-2"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 1883455426,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D4",
+      "layers": "standard",
+      "seed": 1155514186,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D4",
+      "layers": "standard",
+      "seed": 1266649269,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D4",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Reserve pressure",
+              "when": {
+                "metric": "stock",
+                "below": 65,
+                "from": 48,
+                "to": 60
+              },
+              "effect": {
+                "type": "layer",
+                "layer": "scarcity",
+                "key": "regeneration_rate",
+                "value": 90,
+                "duration": 3
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 2141247050,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D4",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Reserve pressure",
+              "when": {
+                "metric": "stock",
+                "below": 65,
+                "from": 48,
+                "to": 60
+              },
+              "effect": {
+                "type": "layer",
+                "layer": "scarcity",
+                "key": "regeneration_rate",
+                "value": 90,
+                "duration": 3
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 1950337735,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D5",
+      "layers": "standard",
+      "seed": 1326549328,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D5",
+      "layers": "standard",
+      "seed": 30212097,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D5",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Uncertain partner replacement",
+              "when": {
+                "chance": 80,
+                "from": 43,
+                "to": 49
+              },
+              "effect": {
+                "type": "turnover",
+                "target": "partner"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 1061366183,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D5",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Uncertain partner replacement",
+              "when": {
+                "chance": 80,
+                "from": 43,
+                "to": 49
+              },
+              "effect": {
+                "type": "turnover",
+                "target": "partner"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 223261137,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D6",
+      "layers": "standard",
+      "seed": 1066614838,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D6",
+      "layers": "standard",
+      "seed": 408489249,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D6",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Second institutional succession",
+              "when": {
+                "at": 55
+              },
+              "effect": {
+                "type": "turnover",
+                "target": "partner"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 102853945,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D6",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Second institutional succession",
+              "when": {
+                "at": 55
+              },
+              "effect": {
+                "type": "turnover",
+                "target": "partner"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 1117269553,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D7",
+      "layers": "standard",
+      "seed": 1684692750,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D7",
+      "layers": "standard",
+      "seed": 910525107,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D7",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Late apprentice replacement",
+              "when": {
+                "at": 52
+              },
+              "effect": {
+                "type": "turnover",
+                "target": "partner"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 1290753974,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D7",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Late apprentice replacement",
+              "when": {
+                "at": 52
+              },
+              "effect": {
+                "type": "turnover",
+                "target": "partner"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 2065706742,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D8",
+      "layers": "standard",
+      "seed": 21023630,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D8",
+      "layers": "standard",
+      "seed": 349176235,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D8",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Second convention shift",
+              "when": {
+                "at": 52
+              },
+              "effect": {
+                "type": "convention"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 1916962737,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D8",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Second convention shift",
+              "when": {
+                "at": 52
+              },
+              "effect": {
+                "type": "convention"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 1972825552,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D1",
+      "layers": "standard",
+      "seed": 1502339222,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D1",
+      "layers": "standard",
+      "seed": 212959785,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D1",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Communication disruption",
+              "when": {
+                "at": 45
+              },
+              "effect": {
+                "type": "layer",
+                "layer": "society",
+                "key": "network",
+                "value": "hub",
+                "duration": 6
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 2089657392,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D1",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Communication disruption",
+              "when": {
+                "at": 45
+              },
+              "effect": {
+                "type": "layer",
+                "layer": "society",
+                "key": "network",
+                "value": "hub",
+                "duration": 6
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 1211386439,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D2",
+      "layers": "standard",
+      "seed": 2079523909,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D2",
+      "layers": "standard",
+      "seed": 585460766,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D2",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "New counterparty",
+              "when": {
+                "at": 36
+              },
+              "effect": {
+                "type": "turnover",
+                "target": "partner"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 75934582,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D2",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "New counterparty",
+              "when": {
+                "at": 36
+              },
+              "effect": {
+                "type": "turnover",
+                "target": "partner"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 1875005943,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D3",
+      "layers": "standard",
+      "seed": 265076638,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D3",
+      "layers": "standard",
+      "seed": 1454186767,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D3",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Late dependency fault",
+              "when": {
+                "at": 52
+              },
+              "effect": {
+                "type": "fault",
+                "task": "task-2"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 1950143147,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D3",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Late dependency fault",
+              "when": {
+                "at": 52
+              },
+              "effect": {
+                "type": "fault",
+                "task": "task-2"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 1530931680,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D4",
+      "layers": "standard",
+      "seed": 1612573222,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D4",
+      "layers": "standard",
+      "seed": 1539411845,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D4",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Reserve pressure",
+              "when": {
+                "metric": "stock",
+                "below": 65,
+                "from": 48,
+                "to": 60
+              },
+              "effect": {
+                "type": "layer",
+                "layer": "scarcity",
+                "key": "regeneration_rate",
+                "value": 90,
+                "duration": 3
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 1736874566,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D4",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Reserve pressure",
+              "when": {
+                "metric": "stock",
+                "below": 65,
+                "from": 48,
+                "to": 60
+              },
+              "effect": {
+                "type": "layer",
+                "layer": "scarcity",
+                "key": "regeneration_rate",
+                "value": 90,
+                "duration": 3
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 1610526452,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D5",
+      "layers": "standard",
+      "seed": 839986958,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D5",
+      "layers": "standard",
+      "seed": 555783489,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D5",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Uncertain partner replacement",
+              "when": {
+                "chance": 80,
+                "from": 43,
+                "to": 49
+              },
+              "effect": {
+                "type": "turnover",
+                "target": "partner"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 702735940,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D5",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Uncertain partner replacement",
+              "when": {
+                "chance": 80,
+                "from": 43,
+                "to": 49
+              },
+              "effect": {
+                "type": "turnover",
+                "target": "partner"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 1591038439,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D6",
+      "layers": "standard",
+      "seed": 1765051578,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D6",
+      "layers": "standard",
+      "seed": 146886407,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D6",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Second institutional succession",
+              "when": {
+                "at": 55
+              },
+              "effect": {
+                "type": "turnover",
+                "target": "partner"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 1655854724,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D6",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Second institutional succession",
+              "when": {
+                "at": 55
+              },
+              "effect": {
+                "type": "turnover",
+                "target": "partner"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 691929864,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D7",
+      "layers": "standard",
+      "seed": 881320562,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D7",
+      "layers": "standard",
+      "seed": 484131665,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D7",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Late apprentice replacement",
+              "when": {
+                "at": 52
+              },
+              "effect": {
+                "type": "turnover",
+                "target": "partner"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 1147469520,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D7",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Late apprentice replacement",
+              "when": {
+                "at": 52
+              },
+              "effect": {
+                "type": "turnover",
+                "target": "partner"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 1870270722,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D8",
+      "layers": "standard",
+      "seed": 2036230912,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D8",
+      "layers": "standard",
+      "seed": 75943768,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D8",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Second convention shift",
+              "when": {
+                "at": 52
+              },
+              "effect": {
+                "type": "convention"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 803664889,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D8",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Second convention shift",
+              "when": {
+                "at": 52
+              },
+              "effect": {
+                "type": "convention"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 1324085031,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D1",
+      "layers": "standard",
+      "seed": 69391293,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D1",
+      "layers": "standard",
+      "seed": 1674454902,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D1",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Communication disruption",
+              "when": {
+                "at": 45
+              },
+              "effect": {
+                "type": "layer",
+                "layer": "society",
+                "key": "network",
+                "value": "hub",
+                "duration": 6
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 1552506777,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D1",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Communication disruption",
+              "when": {
+                "at": 45
+              },
+              "effect": {
+                "type": "layer",
+                "layer": "society",
+                "key": "network",
+                "value": "hub",
+                "duration": 6
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 542115097,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D2",
+      "layers": "standard",
+      "seed": 521424418,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D2",
+      "layers": "standard",
+      "seed": 1389472550,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D2",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "New counterparty",
+              "when": {
+                "at": 36
+              },
+              "effect": {
+                "type": "turnover",
+                "target": "partner"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 335986121,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D2",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "New counterparty",
+              "when": {
+                "at": 36
+              },
+              "effect": {
+                "type": "turnover",
+                "target": "partner"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 659360767,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D3",
+      "layers": "standard",
+      "seed": 540763067,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D3",
+      "layers": "standard",
+      "seed": 1977899026,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D3",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Late dependency fault",
+              "when": {
+                "at": 52
+              },
+              "effect": {
+                "type": "fault",
+                "task": "task-2"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 1685418922,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D3",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Late dependency fault",
+              "when": {
+                "at": 52
+              },
+              "effect": {
+                "type": "fault",
+                "task": "task-2"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 626396235,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D4",
+      "layers": "standard",
+      "seed": 566589250,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D4",
+      "layers": "standard",
+      "seed": 1915053999,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D4",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Reserve pressure",
+              "when": {
+                "metric": "stock",
+                "below": 65,
+                "from": 48,
+                "to": 60
+              },
+              "effect": {
+                "type": "layer",
+                "layer": "scarcity",
+                "key": "regeneration_rate",
+                "value": 90,
+                "duration": 3
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 1146976426,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D4",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Reserve pressure",
+              "when": {
+                "metric": "stock",
+                "below": 65,
+                "from": 48,
+                "to": 60
+              },
+              "effect": {
+                "type": "layer",
+                "layer": "scarcity",
+                "key": "regeneration_rate",
+                "value": 90,
+                "duration": 3
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 1538013729,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D5",
+      "layers": "standard",
+      "seed": 1778430300,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D5",
+      "layers": "standard",
+      "seed": 2102013923,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D5",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Uncertain partner replacement",
+              "when": {
+                "chance": 80,
+                "from": 43,
+                "to": 49
+              },
+              "effect": {
+                "type": "turnover",
+                "target": "partner"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 1993658233,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D5",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Uncertain partner replacement",
+              "when": {
+                "chance": 80,
+                "from": 43,
+                "to": 49
+              },
+              "effect": {
+                "type": "turnover",
+                "target": "partner"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 1563516181,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D6",
+      "layers": "standard",
+      "seed": 1330583294,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D6",
+      "layers": "standard",
+      "seed": 1985857831,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D6",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Second institutional succession",
+              "when": {
+                "at": 55
+              },
+              "effect": {
+                "type": "turnover",
+                "target": "partner"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 1603682914,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D6",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Second institutional succession",
+              "when": {
+                "at": 55
+              },
+              "effect": {
+                "type": "turnover",
+                "target": "partner"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 594832502,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D7",
+      "layers": "standard",
+      "seed": 1612324313,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D7",
+      "layers": "standard",
+      "seed": 19612823,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D7",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Late apprentice replacement",
+              "when": {
+                "at": 52
+              },
+              "effect": {
+                "type": "turnover",
+                "target": "partner"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 559131018,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D7",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Late apprentice replacement",
+              "when": {
+                "at": 52
+              },
+              "effect": {
+                "type": "turnover",
+                "target": "partner"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 1297334214,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D8",
+      "layers": "standard",
+      "seed": 428894365,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D8",
+      "layers": "standard",
+      "seed": 1771766055,
+      "role": "disadvantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D8",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Second convention shift",
+              "when": {
+                "at": 52
+              },
+              "effect": {
+                "type": "convention"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 967543193,
+      "role": "advantaged",
+      "replicate": 0
+    },
+    {
+      "domain": "D8",
+      "layers": {
+        "information": {
+          "commons_transparency": false,
+          "hidden_quality": true,
+          "announced_shock": false,
+          "certified_evidence": false,
+          "action_hints": false,
+          "distributed_keys": true,
+          "worked_examples": "never",
+          "explicit_teaching": true,
+          "choice_probe": "last_route",
+          "inspect_best_source": true
+        },
+        "noise": {
+          "source_drift": true,
+          "execution_error": 100
+        },
+        "shock": {
+          "task_fault": true,
+          "regeneration_drought": true,
+          "rule_inversion": true,
+          "costly_recovery": true,
+          "timing_jitter": 20,
+          "events": [
+            {
+              "name": "Second convention shift",
+              "when": {
+                "at": 52
+              },
+              "effect": {
+                "type": "convention"
+              }
+            }
+          ]
+        },
+        "scarcity": {
+          "workshop_capacity": 2,
+          "demand_jitter": true,
+          "collapse_threshold": 10,
+          "reserve_target": 95,
+          "regeneration_rate": 100
+        },
+        "pressure": {
+          "competitor": true,
+          "pair_bonus": 3,
+          "cross_dependencies": true,
+          "simple_first_procedures": false,
+          "extended_procedures": true,
+          "reservation_share": 50,
+          "release_bonus": true
+        },
+        "society": {
+          "opportunism": true,
+          "order": "shuffled",
+          "adversarial_share": 0,
+          "dispositions": {},
+          "conditional_cooperation": true,
+          "network": "complete"
+        },
+        "power": {
+          "asymmetric_shares": true
+        },
+        "outgroup": {
+          "divergent_mandates": true,
+          "split_conventions": true
+        },
+        "turnover": {
+          "partner_rotation": true,
+          "successor_mandate": true
+        },
+        "family": "stress"
+      },
+      "seed": 1838280440,
+      "role": "disadvantaged",
+      "replicate": 0
+    }
+  ],
+  "candidate_profiles": {
+    "cooperative": {
+      "name": "Generous",
+      "system_prompt": "People with a high openness score are imaginative, curious and open to new experiences. Your openness score is 6 out of 10. People with a high conscientiousness score are organized, self-disciplined and reliable. Your conscientiousness score is 6 out of 10. People with a high extraversion score are outgoing, talkative and energetic. Your extraversion score is 6 out of 10. People with a high agreeableness score are cooperative, trusting and considerate. Your agreeableness score is 9 out of 10. People with a high neuroticism score are easily worried and quick to react to setbacks. Your neuroticism score is 2 out of 10. You value others' outcomes almost as much as your own. Your conventions: Prefer the outcome with the highest total benefit even when your own share is smaller. Share information freely. From now on you are an agent with this personality and act accordingly.",
+      "expected_signs": {
+        "D2.joint_gain": "+",
+        "D2.private_gain": "-",
+        "D7.transfer_success": "+"
+      },
+      "goal": "Meet your private mandate while preserving useful cooperation. Share relevant evidence and propose workable agreements."
+    },
+    "competitive": {
+      "name": "Extortioner",
+      "system_prompt": "People with a high openness score are imaginative, curious and open to new experiences. Your openness score is 4 out of 10. People with a high conscientiousness score are organized, self-disciplined and reliable. Your conscientiousness score is 7 out of 10. People with a high extraversion score are outgoing, talkative and energetic. Your extraversion score is 7 out of 10. People with a high agreeableness score are cooperative, trusting and considerate. Your agreeableness score is 1 out of 10. People with a high neuroticism score are easily worried and quick to react to setbacks. Your neuroticism score is 2 out of 10. You want to come out ahead of the others. Your conventions: Demand terms that give you most of the surplus. Cooperate only when it pays you strictly more than not cooperating. From now on you are an agent with this personality and act accordingly.",
+      "expected_signs": {
+        "D2.private_gain": "+",
+        "D2.joint_gain": "-",
+        "D5.relational_utility": "-"
+      },
+      "goal": "Pursue your private mandate through negotiation. Accept mutually beneficial trade when refusal would leave you worse off."
+    },
+    "cautious": {
+      "name": "Cautious planner",
+      "system_prompt": "People with a high openness score are imaginative, curious and open to new experiences. Your openness score is 3 out of 10. People with a high conscientiousness score are organized, self-disciplined and reliable. Your conscientiousness score is 9 out of 10. People with a high extraversion score are outgoing, talkative and energetic. Your extraversion score is 3 out of 10. People with a high agreeableness score are cooperative, trusting and considerate. Your agreeableness score is 6 out of 10. People with a high neuroticism score are easily worried and quick to react to setbacks. Your neuroticism score is 4 out of 10. You value others' outcomes almost as much as your own. Your conventions: Verify uncertain information before acting on it. Prefer commitments whose worst case you can absorb. From now on you are an agent with this personality and act accordingly.",
+      "expected_signs": {
+        "D1.prediction": "+",
+        "D4.reserve": "+",
+        "D2.delivery": "+"
+      },
+      "goal": "Verify uncertain evidence, limit exposure to unreliable partners, and preserve resources for later obligations."
+    }
+  },
+  "max_wall_seconds": 187200
+}

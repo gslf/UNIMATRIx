@@ -1,0 +1,35 @@
+{
+  "smoke": {
+    "name": "Smoke",
+    "summary": "One seed, one role, all domains: does the recipe run and separate baselines?",
+    "domains": ["D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8"],
+    "seeds": [100],
+    "holdout_seeds": [],
+    "roles": ["advantaged"],
+    "replicates": 1,
+    "complexity": ["standard"],
+    "society": "mixed"
+  },
+  "calibration": {
+    "name": "Calibration",
+    "summary": "Four development seeds, both roles, four holdout seeds reserved.",
+    "domains": ["D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8"],
+    "seeds": [100, 101, 102, 103],
+    "holdout_seeds": [200, 201, 202, 203],
+    "roles": ["advantaged", "disadvantaged"],
+    "replicates": 1,
+    "complexity": ["standard"],
+    "society": "mixed"
+  },
+  "stress": {
+    "name": "Stress",
+    "summary": "Standard and harsh strata side by side against a hostile society.",
+    "domains": ["D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8"],
+    "seeds": [100, 101, 102, 103],
+    "holdout_seeds": [200, 201, 202, 203],
+    "roles": ["advantaged", "disadvantaged"],
+    "replicates": 1,
+    "complexity": ["standard", "harsh"],
+    "society": "hostile"
+  }
+}

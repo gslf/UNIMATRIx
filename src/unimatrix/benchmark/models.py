@@ -5,7 +5,7 @@ import uuid
 from pathlib import Path
 
 from ..persistence.json_files import read_json, write_json
-from .validation import validate_policy
+from .validation import is_model, validate_policy
 
 
 class ModelRepository:
@@ -24,7 +24,7 @@ class ModelRepository:
     def get(self, ident):
         config = read_json(self.path(ident))
         validate_policy(config)
-        if not isinstance(config, dict):
+        if not is_model(config):
             raise ValueError("A candidate file must contain a model configuration")
         return config
 
@@ -41,6 +41,27 @@ class ModelRepository:
                 )
         return result
 
+    def validate_peer_credentials(self, peers):
+        known = [r["config"] for r in self.all() if "config" in r]
+        for peer in peers:
+            if not isinstance(peer, dict) or not any(k in peer for k in ("api_key_env", "api_key_file")):
+                continue
+            if not any(all(peer.get(k) == saved.get(k) for k in ("api_key_env", "api_key_file", "endpoint")) for saved in known):
+                raise ValueError("peer_credentials_require_a_saved_model_and_unchanged_endpoint")
+
+    def save_from_web(self, ident, config, api_key=None):
+
+
+        if api_key is None and any(k in config for k in ("api_key_env", "api_key_file")):
+            try:
+                previous = self.get(ident)
+            except (OSError, ValueError):
+                raise ValueError("credential_reference_must_be_provisioned_locally") from None
+            if (any(config.get(k) != previous.get(k) for k in ("api_key_env", "api_key_file"))
+                    or config.get("endpoint") != previous.get("endpoint")):
+                raise ValueError("credential_reference_or_endpoint_changed_supply_new_key")
+        return self.save(ident, config, api_key)
+
     def save(self, ident, config, api_key=None):
         path = self.path(ident)
         config = dict(config)
@@ -49,7 +70,7 @@ class ModelRepository:
             config.pop("api_key_env", None)
             config.pop("api_key_file", None)
             if api_key:
-                # A new key gets a new path: an older run keeps its original credentials.
+
                 secret = self.directory / ("." + uuid.uuid4().hex + "-credentials.json")
                 config["api_key_file"] = str(secret)
         validate_policy(config)

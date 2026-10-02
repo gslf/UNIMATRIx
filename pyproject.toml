@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "unimatrix"
-version = "3.0.0.dev0"
+version = "4.0.0"
 description = "Deterministic material worlds and social evaluation for LLM agents"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -30,11 +30,19 @@ unimatrix = "unimatrix.main:cli"
 where = ["src"]
 
 [tool.setuptools.package-data]
-unimatrix = ["web/static/*", "actions/*.json", "benchmark/*.json", "benchmark/plans/*.json"]
+unimatrix = ["web/static/*", "actions/*.json", "benchmark/*.json", "benchmark/plans/*.json", "benchmark/presets/*.json"]
 
 [tool.ruff]
 target-version = "py311"
 line-length = 100
 
 [tool.ruff.lint]
-select = ["E4", "E7", "E9", "F", "I"]
+select = ["E4", "E7", "E9", "F", "I", "B"]
+ignore = ["B905", "B007", "B023"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B017"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

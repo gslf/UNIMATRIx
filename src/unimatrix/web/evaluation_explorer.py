@@ -6,12 +6,24 @@ from urllib.parse import urlsplit, urlunsplit
 
 from fastapi import HTTPException, Query
 
-from ..benchmark.recipes import recipe_text
+from ..benchmark.manifests import case_fields
+from ..benchmark.validation import is_model
+from ..core.visibility import observe
+from ..core.waiting import is_waiting
 from ..persistence.event_store import EventStore
+from ..research.debugger import explain_episode
+from ..scenarios import get_scenario
 
 
 def policy_info(policy):
-    if isinstance(policy, str):
+    if not is_model(policy):
+        if isinstance(policy, dict):
+            return dict(
+                kind="scripted",
+                name=policy["policy"],
+                disposition=policy.get("disposition", {}),
+                role=policy.get("role"),
+            )
         return dict(kind="scripted", name=policy)
     endpoint = urlsplit(policy["endpoint"])
     host = endpoint.hostname or ""
@@ -22,6 +34,11 @@ def policy_info(policy):
     return dict(
         kind="model",
         name=policy["model"],
+        role=policy.get("role"),
+        goal=policy.get("goal"),
+        briefing=policy.get("briefing"),
+        personality=policy.get("personality"),
+        system_prompt=policy.get("system_prompt"),
         snapshot=policy["snapshot"],
         context_tokens=policy.get("context_tokens"),
         endpoint=urlunsplit((endpoint.scheme, host, endpoint.path, "", "")),
@@ -34,7 +51,7 @@ def opened(path):
         raise HTTPException(404, "This episode has no recorded evidence yet")
     store = EventStore(path, read_only=True)
     try:
-        store.db.execute("BEGIN")  # One consistent view while the runner commits new ticks.
+        store.db.execute("BEGIN")
         yield store
     finally:
         store.close()
@@ -48,6 +65,7 @@ def progress(path, manifest, live):
             phase="Queued",
             saved_decisions=0,
             waiting=[],
+            authorized_waiting=[],
             agents=[],
             provider_attempts=0,
         )
@@ -59,6 +77,7 @@ def progress(path, manifest, live):
                 phase="Preparing episode",
                 saved_decisions=0,
                 waiting=[],
+                authorized_waiting=[],
                 agents=[],
                 provider_attempts=0,
             )
@@ -67,13 +86,18 @@ def progress(path, manifest, live):
             result["status"] = "interrupted"
         tick = result["completed_tick"]
         saved = {r[0] for r in store.db.execute("SELECT slot FROM decisions WHERE tick=?", (tick,))}
-        state = store.load().dump()
-        agents = [s for s, a in state["agents"].items() if a["alive"]]
-        waiting = [s for s in agents if s not in saved] if tick < manifest["ticks"] else []
+        snapshot = store.snapshot()
+        agents = [s for s, a in snapshot["agents"].items() if a["alive"]]
+        authorized = []
+        if tick < manifest["ticks"] and any(snapshot["agents"][s].get("_wait") for s in agents):
+            state = store.load()
+            scenario = get_scenario(state.domain)
+            authorized = [s for s in agents if is_waiting(state, s, observe(state, s, scenario))]
+        waiting = [s for s in agents if s not in saved and s not in authorized] if tick < manifest["ticks"] else []
         phase = "Awaiting decisions" if waiting else "Committing world tick"
         if result["status"] != "running":
             phase = result["status"].replace("_", " ").capitalize()
-        model_slots = [s for s, p in manifest["policies"].items() if isinstance(p, dict)]
+        model_slots = [s for s, p in manifest["policies"].items() if is_model(p)]
         provider_attempts = store.db.execute(
             "SELECT COUNT(*) FROM model_calls WHERE json_extract(body,'$.slot') IN "
             "(SELECT value FROM json_each(?))",
@@ -84,6 +108,7 @@ def progress(path, manifest, live):
             phase=phase,
             saved_decisions=len(saved),
             waiting=waiting,
+            authorized_waiting=authorized,
             agents=agents,
             provider_attempts=provider_attempts,
         )
@@ -156,13 +181,14 @@ def add_explorer_routes(router, campaign, folder, runner):
                     error=study.get("error"),
                     completed_episodes=study["completed_episodes"],
                     total_episodes=len(manifests),
+                    ticks_per_episode=manifests[0]["ticks"],
                     current_episode=study["current_episode"],
                     current_episodes=current_ids,
                     current_ticks=active_ticks,
                     current=details,
                     candidate=policy_info(manifests[0]["policies"][manifests[0]["focal_slot"]]),
                     provider_agents=sum(
-                        isinstance(p, dict) for p in manifests[0]["policies"].values()
+                        is_model(p) for p in manifests[0]["policies"].values()
                     ),
                     score=study["report"]["usi"] if study.get("report") else None,
                 )
@@ -183,7 +209,7 @@ def add_explorer_routes(router, campaign, folder, runner):
             split=record.get("split", "development"),
             status=status,
             phase=phase,
-            error=recipe_text(record["error"]) if record.get("error") else None,
+            error=record.get("error") or None,
             studies=studies,
         )
 
@@ -193,10 +219,14 @@ def add_explorer_routes(router, campaign, folder, runner):
         study_id: str,
         offset: int = Query(0, ge=0),
         limit: int = Query(48, ge=1, le=100),
+        locate: str | None = None,
     ):
         record = campaign(ident)
         study = study_for(record, study_id)
         manifests = study["execution"]["episodes"]
+        found = next((i for i, m in enumerate(manifests) if m["run_id"] == locate), None)
+        if found is not None:
+            offset = found // limit * limit
         rows = []
         for index, manifest in enumerate(manifests[offset : offset + limit], offset):
             path = folder("campaigns", ident) / "studies" / study["id"] / "episodes"
@@ -207,7 +237,7 @@ def add_explorer_routes(router, campaign, folder, runner):
                 dict(
                     index=index + 1,
                     id=manifest["run_id"],
-                    **{k: manifest[k] for k in ["domain", "level", "seed", "role", "replicate"]},
+                    **case_fields(manifest),
                     ticks=manifest["ticks"],
                     **detail,
                 )
@@ -249,15 +279,15 @@ def add_explorer_routes(router, campaign, folder, runner):
                 dict(phase=p, events=n)
                 for p, n in store.db.execute(
                     "SELECT json_extract(body,'$.phase'),COUNT(*) FROM events WHERE tick=? "
-                    "AND json_extract(body,'$.type') NOT IN ('world_initialized','state_committed') "
+                    "AND type NOT IN ('world_initialized','state_committed') "
                     "GROUP BY json_extract(body,'$.phase') ORDER BY MIN(seq)",
                     (detail["completed_tick"],),
                 )
             ]
             event_rows = store.db.execute(
-                "SELECT tick, COUNT(*), SUM(json_extract(body,'$.type')='message_sent'), "
-                "SUM(json_extract(body,'$.type') IN ('operation_rejected','decision_rejected')) "
-                "FROM events WHERE json_extract(body,'$.type') NOT IN "
+                "SELECT tick, COUNT(*), SUM(type='message_sent'), "
+                "SUM(type IN ('operation_rejected','decision_rejected')) "
+                "FROM events WHERE type NOT IN "
                 "('world_initialized','state_committed') GROUP BY tick ORDER BY tick"
             ).fetchall()
             base["series"] = [
@@ -283,14 +313,30 @@ def add_explorer_routes(router, campaign, folder, runner):
             ).fetchone()[0]
         return base
 
+    @router.get(prefix + "/metrics")
+    def metrics(ident: str, study_id: str, episode_id: str):
+        """Every metric of a completed episode with the events that produced it."""
+        record, _, manifest, path = episode_for(ident, study_id, episode_id)
+        weights = {
+            metric: weight
+            for entry in record["plan"]["domains"].values()
+            for metric, weight in entry["metrics"].items()
+        }
+        if not path.is_file():
+            raise HTTPException(404, "This episode has no recorded evidence yet")
+        try:
+            return explain_episode(path, weights)
+        except ValueError as error:
+            raise HTTPException(409, "Metrics exist once the episode has completed") from error
+
     @router.get(prefix + "/state")
     def state(ident: str, study_id: str, episode_id: str, tick: int = Query(ge=0)):
         _, _, _, path = episode_for(ident, study_id, episode_id)
         with opened(path) as store:
-            row = store.db.execute("SELECT state FROM snapshots WHERE tick=?", (tick,)).fetchone()
-            if row is None:
+            state = store.snapshot(tick)
+            if state is None:
                 raise HTTPException(404, "No saved world state at this tick")
-            return json.loads(row[0])
+            return state
 
     @router.get(prefix + "/decision")
     def decision(ident: str, study_id: str, episode_id: str, agent: str, tick: int = Query(ge=0)):
@@ -298,19 +344,7 @@ def add_explorer_routes(router, campaign, folder, runner):
         if agent not in manifest["policies"]:
             raise HTTPException(404, "Unknown agent")
         with opened(path) as store:
-            row = store.db.execute(
-                "SELECT observation,raw,request_id FROM decisions WHERE tick=? AND slot=?",
-                (tick, agent),
-            ).fetchone()
-            if row is None:
-                return dict(recorded=False, observation=None, response=None, calls=[])
-            calls = [
-                json.loads(r[0])
-                for r in store.db.execute(
-                    "SELECT body FROM model_calls WHERE request_id=? ORDER BY attempt", (row[2],)
-                )
-            ]
-            return dict(recorded=True, observation=json.loads(row[0]), response=row[1], calls=calls)
+            return decision_evidence(store, agent, tick)
 
     @router.get(prefix + "/events")
     def events(
@@ -323,11 +357,11 @@ def add_explorer_routes(router, campaign, folder, runner):
     ):
         _, _, _, path = episode_for(ident, study_id, episode_id)
         with opened(path) as store:
-            clause = "json_extract(body,'$.type') NOT IN ('world_initialized','state_committed')"
+            clause = "type NOT IN ('world_initialized','state_committed')"
             if kind == "messages":
-                clause = "json_extract(body,'$.type')='message_sent'"
+                clause = "type='message_sent'"
             elif kind == "errors":
-                clause = "json_extract(body,'$.type') IN ('operation_rejected','decision_rejected')"
+                clause = "type IN ('operation_rejected','decision_rejected')"
             rows = [
                 json.loads(r[0])
                 for r in store.db.execute(
@@ -349,7 +383,7 @@ def add_explorer_routes(router, campaign, folder, runner):
         limit: int = Query(40, ge=1, le=100),
     ):
         _, _, manifest, path = episode_for(ident, study_id, episode_id)
-        slots = [s for s, p in manifest["policies"].items() if isinstance(p, dict)]
+        slots = [s for s, p in manifest["policies"].items() if is_model(p)]
         with opened(path) as store:
             rows = store.db.execute(
                 "SELECT c.request_id,c.attempt,c.body,d.tick FROM model_calls c "
@@ -366,3 +400,29 @@ def add_explorer_routes(router, campaign, folder, runner):
                 more=len(rows) > limit,
                 offset=offset,
             )
+
+
+def decision_evidence(store, agent, tick):
+    """Recorded response or explicit evidence that no response was requested."""
+    row = store.db.execute(
+        "SELECT observation,raw,request_id FROM decisions WHERE tick=? AND slot=?",
+        (tick, agent),
+    ).fetchone()
+    if row is None:
+        result = dict(recorded=False, observation=None, response=None, calls=[])
+        waited = store.db.execute(
+            "SELECT body FROM events WHERE tick=? AND type='decision_waited' "
+            "AND json_extract(body,'$.actor_id')=?", (tick + 1, agent),
+        ).fetchone()
+        if waited:
+            result["authorized_wait"] = json.loads(waited[0])["payload"]
+        return result
+    calls = [
+        json.loads(r[0])
+        for r in store.db.execute(
+            "SELECT body FROM model_calls WHERE request_id=? ORDER BY attempt", (row[2],)
+        )
+    ]
+    return dict(
+        recorded=True, observation=store.observation(row[0]), response=row[1], calls=calls
+    )

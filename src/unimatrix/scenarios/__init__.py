@@ -1,3 +1,4 @@
+from . import d3, d4, d5, d8
 from .d1 import Information
 from .d2 import Market
 from .d3 import Coordination
@@ -7,6 +8,8 @@ from .d6 import Institutions
 from .d7 import Transmission
 from .d8 import Adaptation
 from .social import SocialWorld
+
+RULE_TEXTS = [d3.ASSIGNMENT, d4.COVENANT, d4.REGENERATION, d5.RELEASE, d8.GRAMMAR, d8.SUGGESTION]
 
 SCENARIOS = {
     c.domain: c

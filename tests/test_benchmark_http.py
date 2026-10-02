@@ -8,7 +8,7 @@ from unimatrix.policies.llm_policy import LLMPolicy
 
 
 @pytest.mark.asyncio
-async def test_legacy_adapter_has_no_fixed_generation_cap():
+async def test_openai_compatible_adapter_has_no_fixed_generation_cap():
     cfg = dict(
         model="test",
         snapshot="sha256:immutable",
@@ -22,7 +22,7 @@ async def test_legacy_adapter_has_no_fixed_generation_cap():
         assert "max_tokens" not in json.loads(request.content)
         fmt = json.loads(request.content)["response_format"]
         assert fmt["type"] == "json_schema"
-        # Do not force a valid decision: malformed envelopes must still be scored.
+
         assert fmt["json_schema"]["schema"] == {"type": "object"}
         return httpx.Response(
             200,

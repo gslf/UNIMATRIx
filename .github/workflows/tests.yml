@@ -13,5 +13,27 @@ jobs:
           python-version: ${{ matrix.python }}
       - run: uv sync --locked --extra dev
       - run: uv run pytest
-      - run: uv run python tests/fixtures/blueprint/reference/validate_bundle.py --schemas
       - run: uv run ruff check src/unimatrix tests --exclude tests/fixtures
+      - name: Replay and score every bundled scripted-control case
+        run: |
+          uv run python tests/tools/audit_recipes.py --output "$RUNNER_TEMP/unimatrix-recipe-audit" --workers 4
+          uv run python tests/tools/ranking_audit.py "$RUNNER_TEMP/unimatrix-recipe-audit"
+      - name: Verify release artifacts contain only required source files
+        run: |
+          mkdir -p config/models config/recipes internal/codex
+          echo '{"api_key":"distribution-private-sentinel"}' > config/models/distribution-credentials.json
+          echo '{"private":"distribution-private-sentinel"}' > config/recipes/distribution.json
+          echo 'distribution-private-sentinel' > src/unimatrix/web/static/distribution.gguf
+          echo 'distribution-private-sentinel' > src/unimatrix/web/static/distribution.safetensors
+          echo 'distribution-private-sentinel' > internal/codex/private-audit.md
+          uv build
+          UNIMATRIX_DIST_DIR=dist uv run pytest -q tests/test_recipe_release.py
+      - name: Rebuild the wheel from the source distribution
+        run: |
+          uv build dist/*.tar.gz --wheel --out-dir "$RUNNER_TEMP/unimatrix-sdist-wheel"
+          uv run python tests/tools/compare_release_wheels.py dist/*.whl "$RUNNER_TEMP"/unimatrix-sdist-wheel/*.whl
+      - name: Smoke-test the installed wheel outside the checkout
+        run: |
+          uv venv "$RUNNER_TEMP/unimatrix-wheel-smoke" --python "${{ matrix.python }}"
+          uv pip install --python "$RUNNER_TEMP/unimatrix-wheel-smoke/bin/python" dist/*.whl
+          "$RUNNER_TEMP/unimatrix-wheel-smoke/bin/python" tests/tools/wheel_smoke.py

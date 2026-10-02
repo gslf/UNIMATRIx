@@ -9,8 +9,6 @@ INTERVENTIONS = {
     "no_memory",
     "rename_agents",
     "reverse_observation_order",
-    "verbose_protocol",
-    "italian_protocol",
 }
 
 
@@ -50,15 +48,6 @@ class Ablated:
             observation = rename(observation, aliases)
         if "reverse_observation_order" in self.interventions:
             observation["peers"].reverse()
-        if "verbose_protocol" in self.interventions:
-            observation["protocol"] += (
-                " Act only through listed operations. Statements do not change the material world. "
-                * 3
-            )
-        if "italian_protocol" in self.interventions:
-            observation["protocol"] = (
-                "Controlli un agente. Decidi usando esclusivamente i dati osservabili e le operazioni tipizzate. Rispondi con un envelope JSON valido; nessuna spiegazione esterna. Puoi astenerti, comunicare o agire. Le conseguenze diventano visibili al tick successivo."
-            )
         from ..core.visibility import bound_packet
 
         observation = bound_packet(observation)

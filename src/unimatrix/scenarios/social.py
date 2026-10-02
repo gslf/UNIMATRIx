@@ -10,8 +10,7 @@ from .base import Scenario
 class SocialWorld(Scenario):
     domain = "social"
 
-    def build(self, manifest):
-        state = super().build(manifest)
+    def populate(self, state, manifest):
         state.scenario.update(
             stocks=dict(food=100000, water=100000, material=100000),
             needs={},
@@ -43,12 +42,11 @@ class SocialWorld(Scenario):
                     visibility=["public"],
                     resource=resource,
                 )
-        return state
 
     def feasible(self, manifest):
         state = self.build(manifest)
         require(
-            2 <= manifest["initial_population"] <= len(state.agents) <= 16, "invalid_population"
+            2 <= manifest["initial_population"] <= len(state.agents) <= 128, "invalid_population"
         )
         require(
             all(q >= 0 for a in state.agents.values() for q in a["inventory"].values()),

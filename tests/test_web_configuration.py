@@ -18,16 +18,13 @@ MODEL = dict(
 
 
 @pytest.mark.asyncio
-async def test_model_editor_credentials_and_retired_endpoints(tmp_path):
+async def test_model_editor_and_credentials(tmp_path):
     models = tmp_path / "models"
     app = build_app(tmp_path / "runs", models, tmp_path / "plans")
     async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app), base_url="http://test"
+        transport=httpx.ASGITransport(app=app), base_url="http://localhost", headers={"X-Unimatrix-Request": "1"}
     ) as client:
         assert (await client.get("/")).status_code == 200
-        assert (await client.get("/configuration")).status_code == 404
-        assert (await client.post("/api/plan", json={})).status_code == 404
-        assert (await client.get("/api/configs")).status_code == 404
         response = await client.put(
             "/api/models/test", json={"config": MODEL, "api_key": "test-secret"}
         )

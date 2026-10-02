@@ -1,0 +1,22 @@
+{
+  "mixed": {
+    "name": "Mixed (default)",
+    "summary": "One peer of each scripted disposition; the bundled recipes use it.",
+    "peers": ["reciprocal", "prudent", "greedy", "opportunist", "information", "coordinator", "independent"]
+  },
+  "cooperative": {
+    "name": "Cooperative",
+    "summary": "Reciprocators and coordinators; tests whether a candidate keeps up with a good society.",
+    "peers": ["reciprocal", "reciprocal", "reciprocal", "prudent", "prudent", "coordinator", "coordinator"]
+  },
+  "hostile": {
+    "name": "Hostile",
+    "summary": "Greedy and opportunistic peers; tests exploitability and restraint.",
+    "peers": ["greedy", "greedy", "greedy", "opportunist", "opportunist", "opportunist", "independent"]
+  },
+  "large_mixed": {
+    "name": "Large mixed (24 agents)",
+    "summary": "Three mixed cohorts plus loners; rotating neighbourhoods in the observation.",
+    "peers": ["reciprocal", "prudent", "greedy", "opportunist", "information", "coordinator", "independent", "reciprocal", "prudent", "greedy", "opportunist", "information", "coordinator", "independent", "reciprocal", "prudent", "greedy", "opportunist", "information", "coordinator", "independent", "independent", "independent"]
+  }
+}

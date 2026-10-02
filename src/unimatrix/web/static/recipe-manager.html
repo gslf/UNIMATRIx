@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>UNIMATRIx · recipeManager</title>
+<link rel="stylesheet" href="/static/benchmark.css?v=4">
+<link rel="stylesheet" href="/static/recipe-manager.css">
+<script src="/static/security.js" defer></script><script src="/static/recipe-manager.js" defer></script>
+</head>
+<body>
+<header class="shell"><div class="brand-row"><h1>UNIMATRIx <span>recipeManager</span></h1><nav class="controls" aria-label="Pages"><a class="button" href="/">Benchmarks</a><a class="button" href="/recipe-lab">Recipe lab</a></nav></div><p class="muted">Create benchmark recipes from saved Lab drafts and manage the catalog.</p></header>
+<main>
+<div id="error" role="alert" hidden></div><p id="notice" role="status" aria-live="polite"></p>
+<div class="section-title"><h2>Recipe catalog</h2><button id="refresh">Refresh</button></div>
+<div id="catalog-stats" class="stats"></div>
+<section class="card">
+<h2>Create a recipe from a draft</h2><p class="muted">Input: a saved Recipe Lab draft. Output: a fixed recipe selectable on the Benchmarks page.</p>
+<div class="config-grid"><label>Saved draft <select id="draft"><option value="">Choose a draft…</option></select></label><label>Cases to publish <select id="split" disabled><option value="development">Development</option><option value="holdout">Holdout</option></select></label></div>
+<p id="draft-empty" class="muted" hidden>No saved drafts. <a href="/recipe-lab">Create a draft in Recipe Lab</a> first.</p>
+<div id="draft-summary" hidden><h3 id="draft-name"></h3><p id="draft-description" class="muted"></p><dl id="draft-facts" class="manager-facts"></dl></div>
+<div class="controls"><button id="create" class="primary" disabled>Create recipe</button><button id="delete-draft" class="danger" disabled>Delete draft and related data</button></div>
+<p class="muted small">Creation preserves the draft’s ID, name and cases. To change them, build a new version in Recipe Lab. Existing recipes are never overwritten.</p>
+</section>
+<section class="manager-section"><h2>Available benchmark recipes</h2><p class="muted small">Run statistics below refer to each current recipe revision. Catalog totals include runs from archived revisions.</p><div id="recipes" class="manager-catalog"></div></section>
+<dialog id="delete-dialog" aria-labelledby="delete-title">
+<h2 id="delete-title">Delete recipe and related data</h2>
+<p id="delete-name"></p><p class="warning">This permanently removes the following data, including recorded episodes, conversations and results.</p>
+<dl id="delete-impact" class="manager-facts"></dl><p id="delete-error" role="alert" hidden></p>
+<div class="controls"><button id="cancel-delete">Cancel</button><button id="confirm-delete" class="danger">Permanently delete</button></div>
+</dialog>
+</main>
+</body></html>

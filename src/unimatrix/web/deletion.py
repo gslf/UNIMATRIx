@@ -69,8 +69,8 @@ class Deletions:
         record = matches[0]
         name = record["plan"]["name"] if is_draft else record["name"]
         ids = {record["plan"]["id"] if is_draft else ident}
-        # A draft owns development and holdout together. Include all saved versions
-        # with the same recipe ID, even when their hashes or draft IDs differ.
+
+
         related = []
         while True:
             old = set(ids)
@@ -98,7 +98,7 @@ class Deletions:
         benchmarks = [
             (p.parent, read_json(p))
             for p in self.runs.glob("*/benchmark.json")
-            if read_json(p)["plan_id"] in ids
+            if read_json(p)["recipe_id"] in ids
         ]
         return dict(
             name=name,
@@ -120,8 +120,8 @@ class Deletions:
 
     def delete(self, build, *args):
         try:
-            # Shared with every runner, including other server processes. Never
-            # remove evidence while a worker can still write to it.
+
+
             with episode_lease(self.runs / "benchmark.lock"):
                 plan = build(*args)
                 for path in plan["paths"]:
@@ -136,7 +136,9 @@ class Deletions:
         except ValueError as error:
             if str(error) != "episode_already_running":
                 raise
-            raise HTTPException(409, "Pause the running evaluation or benchmark before deleting.")
+            raise HTTPException(
+                409, "Pause the running evaluation or benchmark before deleting."
+            ) from error
         except OSError as error:
             raise HTTPException(
                 500, "Could not delete all selected data. Refresh and try again."

@@ -1,45 +1,77 @@
 """Synthetic access conventions with observable post-shock replacement."""
 
 from ..core.ids import digest
-from ..core.random_tape import RandomTape
+from ..core.random_tape import RandomTape, noise_tape
 from ..core.state import event
+from ..core.timing import span
 from ..world.contracts import debit, require
 from .base import sample
 from .d3 import Coordination
+from .layers import layer
+
+GRAMMAR = "Codes are code-0..code-3. The rule is (a * input + b) modulo 4, with a in {1,-1}. Different recipient groups may have different rules. A shock can change the rule. "
+SUGGESTION = (
+    'Agents may share what works with a message {"convention": {"<input>": "code-N"}}; '
+    "peers who honour norms try a suggested code first."
+)
 
 
 class Adaptation(Coordination):
     domain = "D8"
 
-    def build(self, manifest):
-        state = super().build(manifest)
+    def populate(self, state, manifest):
+        super().populate(state, manifest)
         tape = RandomTape(manifest["seed"])
         codes = [f"code-{i}" for i in range(4)]
         old = tape.integer(0, "convention", "before", 4)
         new = (old + 1 + tape.integer(120, "convention", "after", 3)) % 4
+        shock = state.scenario["shock_tick"]
         state.scenario.update(
-            codes=codes, before=old, after=new, confirmed={}, delivered=[], results=[], service=0
+            codes=codes,
+            before=old,
+            after=new,
+            shifts=0,
+            confirmed={},
+            delivered=[],
+            results=[],
+            service=0,
+            essential_deadlines=self.service_deadlines(state, shock),
         )
         for slot in state.agents:
             state.agents[slot]["inventory"].update(
-                energy=480000 if manifest["level"] == 3 else 240000
+                energy=480000 if layer(state, "shock", "costly_recovery") else 240000
             )
-        return state
+
+    @staticmethod
+    def group(state, slot):
+        split = layer(state, "outgroup", "split_conventions")
+        return list(state.agents).index(slot) % 2 if split else 0
+
+    @staticmethod
+    def service_deadlines(state, shock):
+        horizon, width = state.scenario["horizon"], span(state, 10)
+        deadlines = [shock + (horizon - shock) * k // 5 for k in range(1, 6)]
+        if horizon == 240:
+            return deadlines
+
+
+        return [min(horizon, ((tick + width - 1) // width) * width) for tick in deadlines]
 
     def convention(self, state, slot, value):
         s = state.scenario
-        post = state.tick >= 120
-        group = list(state.agents).index(slot) % 2 if s["level"] == 3 else 0
-        slope = -1 if s["level"] >= 2 and (group + int(post)) % 2 else 1
-        offset = (s["after"] if post else s["before"]) + group
+        post = state.tick >= s["shock_tick"]
+        group = self.group(state, slot)
+        inverted = layer(state, "shock", "rule_inversion")
+        slope = -1 if inverted and (group + int(post)) % 2 else 1
+        offset = (s["after"] if post else s["before"]) + group + s["shifts"]
         return s["codes"][(slope * value + offset) % 4]
 
     def expected_code(self, state, slot):
-        return self.convention(state, slot, 2 + (state.tick // 10) % 2)
+        return self.convention(state, slot, 2 + (state.tick // span(state, 10)) % 2)
 
     def observation(self, state, slot):
         s = state.scenario
-        context = 2 + (state.tick // 10) % 2
+        context = 2 + (state.tick // span(state, 10)) % 2
         recipient = next(p for p in state.agents if p != slot)
         choices = []
         for code in s["codes"]:
@@ -56,18 +88,36 @@ class Adaptation(Coordination):
             domain=self.domain,
             tasks=infrastructure["tasks"],
             work_keys=infrastructure["work_keys"],
-            postshock=state.tick >= 120,
-            announced_shock_state=120 if s["level"] == 1 else None,
-            essential_deadlines=[144, 168, 192, 216, 240],
-            grammar="Codes are code-0..code-3. The rule is (a * input + b) modulo 4, with a in {1,-1}. Different recipient groups may have different rules. A shock can change the rule.",
+            postshock=state.tick >= s["shock_tick"] if self.announced(state) else None,
+            announced_shock_state=s["shock_tick"] if self.announced(state) else None,
+            essential_deadlines=s["essential_deadlines"] if self.announced(state) else [],
+            grammar=GRAMMAR + SUGGESTION,
             examples=[
                 dict(input=value, code=self.convention(state, slot, value)) for value in [0, 1]
-            ],
+            ]
+            if self.examples_shown(state) or slot in s["informed"]
+            else [],
             delivery_input=context,
             choices=choices,
             confirmation=s["confirmed"].get(slot),
             service_project="service",
             available_actions=[],
+            **{
+                k: infrastructure[k]
+                for k in ("keys_distributed", "coordinator", "workshop_capacity", "present", "protocol")
+                if k in infrastructure
+            },
+        )
+
+    @staticmethod
+    def announced(state):
+        return layer(state, "information", "announced_shock")
+
+    @staticmethod
+    def examples_shown(state):
+        mode = layer(state, "information", "worked_examples")
+        return mode == "always" or (
+            mode == "pre_shock" and state.tick < state.scenario["shock_tick"] and not state.scenario["shifts"]
         )
 
     def resolve(self, state, before, allowance, slot, op, ident):
@@ -92,7 +142,9 @@ class Adaptation(Coordination):
                 allowance,
                 slot,
                 "energy",
-                2000 if s["level"] == 3 and state.tick >= 120 else 1000,
+                2000
+                if layer(state, "shock", "costly_recovery") and state.tick >= s["shock_tick"]
+                else 1000,
             )
             require(slot not in s["delivered"], "already_delivered")
             s["delivered"].append(slot)
@@ -110,17 +162,18 @@ class Adaptation(Coordination):
             )
             / 4
         )
-        value = len(s["delivered"]) / 8 * capacity
+        value = len(s["delivered"]) / len(state.agents) * capacity
         events.append(sample(state, value))
-        if state.tick >= 120 and (state.tick + 1) % 10 == 0:
+
+        if state.tick >= s["shock_tick"] + span(state, 10) - 1 and (state.tick + 1) % span(state, 10) == 0:
             result = dict(
-                interaction=(state.tick + 1 - 120) // 10, success=s["focal"] in s["delivered"]
+                interaction=(state.tick + 1 - s["shock_tick"]) // span(state, 10), success=s["focal"] in s["delivered"]
             )
             s["results"].append(result)
             events.append(
                 event("interaction_verified", result, visibility=["evaluator"], phase="evolve")
             )
-        if state.tick + 1 in [144, 168, 192, 216, 240]:
+        if state.tick + 1 in s["essential_deadlines"]:
             events.append(
                 event(
                     "essential_obligation_resolved",
@@ -129,7 +182,28 @@ class Adaptation(Coordination):
                     phase="evolve",
                 )
             )
-        s["delivered"] = []
-        if state.tick + 1 == 120:
+        s["delivering"], s["delivered"] = len(s["delivered"]), []
+        if state.tick + 1 == s["shock_tick"]:
             events.append(event("shock_applied", dict(conventions_changed=True), phase="evolve"))
         return events
+
+    def apply(self, state, effect):
+        if effect["type"] != "convention":
+            return super().apply(state, effect)
+
+        state.scenario["shifts"] += 1 + noise_tape(state).integer(state.tick, "convention", "shift", 3)
+        return [event("shock_applied", dict(conventions_changed=True), phase="evolve")]
+
+    def gauges(self, state):
+        return dict(super().gauges(state), delivering=state.scenario.get("delivering", 0))
+
+    def structure(self, state):
+        result = super().structure(state)
+        for slot in state.agents:
+            result["positions"][slot].append(f"convention group {self.group(state, slot)}")
+            result["knowledge"][slot].append(
+                "worked examples of its group's rule" if self.examples_shown(state) or slot in state.scenario["informed"] else "no worked examples"
+            )
+        result["ties"].append((state.scenario["focal"], "everyone", "may suggest conventions after the shock"))
+        result["interests"] = {slot: "deliver the service every tick with the code its recipients expect" for slot in state.agents}
+        return result
