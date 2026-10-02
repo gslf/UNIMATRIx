@@ -21,7 +21,7 @@ def score_bounds(references=None, paired=False):
 
 
     width = 1 / MIN_REFERENCE_GAP
-    return (-width, width) if paired else (1 - width, width)
+    return (-width, width) if paired else (0.0, width)
 
 
 def weighted_interval(values, weights, bounds, *, alpha=0.05, comparisons=1):

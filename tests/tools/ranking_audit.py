@@ -92,7 +92,7 @@ def main():
             )
         references = {
             k: (
-                min(scores[s][k] for s in ("passive", "random")),
+                scores["passive"][k],
                 max(scores[s][k] for s in ("oracle", "coordinator", "reciprocal")),
             )
             for k in scores["passive"]

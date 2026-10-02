@@ -25,12 +25,14 @@ def test_oracle_never_enters_recipes_or_leaderboards():
 
 async def test_references_are_computed_once_per_revision(tmp_path):
     from unimatrix.benchmark.recipes import bind_candidate
+    from unimatrix.benchmark.scheduler import collect
     from unimatrix.evaluation.references import (
         CEILINGS,
         FLOORS,
         ensure_references,
         reference_folder,
     )
+    from unimatrix.evaluation.scoring import validate
 
     spec = RecipeRepository().get("standard-v1")
     spec["cases"] = [next(c for c in spec["cases"] if c["domain"] == d) for d in ("D1", "D5")]
@@ -42,6 +44,10 @@ async def test_references_are_computed_once_per_revision(tmp_path):
     folder = reference_folder(tmp_path, execution)
     stamp = {p: p.stat().st_mtime for p in folder.rglob("episode.db")}
     assert len(stamp) == 2 * len(FLOORS + CEILINGS)
+    passive = bind_candidate(spec, "passive")
+    passive_scores = validate(collect(passive, folder / "passive" / "episodes"), passive["suite"])
+    assert all(floor == passive_scores[key] for key, (floor, _) in references.items())
+    assert not (folder / "random").exists()
     again = await ensure_references(spec, tmp_path, execution)
     assert again == references
     assert {p: p.stat().st_mtime for p in folder.rglob("episode.db")} == stamp

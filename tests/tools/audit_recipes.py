@@ -192,7 +192,7 @@ def summarize(output, specs):
             key
             for key in systems["passive"]
             if max(systems[s][key] for s in ("oracle", "coordinator", "reciprocal"))
-            - min(systems[s][key] for s in ("passive", "random"))
+            - systems["passive"][key]
             < 0.05
         ]
         report[recipe] = dict(

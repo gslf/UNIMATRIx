@@ -129,7 +129,7 @@ def common_cases(left: dict, left_spec: dict, right: dict, right_spec: dict):
 
 
 def normalized_scores(values: dict[tuple, float], references: dict) -> dict:
-    """Signed per-case reference gain; the strong reference is an anchor, not a cap."""
+    """Per-case reference gain, floored at zero with no upper cap."""
     from .stats import normalize
 
     result = {}
@@ -154,7 +154,7 @@ def summarize(data: dict, manifest: dict, references: dict | None = None) -> dic
         complete = len(usable) == len(values)
         rating = fmean(domain_means(usable, manifest).values()) if complete else None
         robust.update(
-            scoring_version="reference-gain-v1",
+            scoring_version="reference-gain-v2",
             rating=rating,
             rating_ci95=seed_interval(usable, references=references, comparisons=len(means) + 1)
             if complete

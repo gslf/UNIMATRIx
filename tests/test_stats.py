@@ -54,6 +54,6 @@ def test_discrimination_and_normalization():
     assert single["within"] is None and single["index"] is None and single["systems"] == 2
     assert normalize(0.5, 0.2, 0.8) == pytest.approx(0.5)
     assert normalize(0.9, 0.2, 0.8) == pytest.approx(7 / 6)
-    assert normalize(0.1, 0.2, 0.8) == pytest.approx(-1 / 6)
+    assert normalize(0.1, 0.2, 0.8) == 0
     assert normalize(0.5, 0.48, 0.5) is None
     assert required_pairs(0.1, 0.05) == 32 and required_pairs(0, 0.05) == 1

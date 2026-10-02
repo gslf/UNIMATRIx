@@ -42,13 +42,19 @@ def panel(seeds=4):
     return spec, refs, data
 
 
-def test_reference_gain_is_signed_uncapped_and_complete():
+def test_reference_gain_has_zero_floor_no_upper_cap_and_requires_complete_references():
     spec, refs, data = panel()
     high = summarize(data("high", lambda c: 1.0), spec, refs)
     low = summarize(data("low", lambda c: 0.0), spec, refs)
     assert high["rating"] == pytest.approx(2)
     assert high["rating_ci95"][0] < 2 < high["rating_ci95"][1]
-    assert low["rating"] == pytest.approx(-0.5)
+    assert low["rating"] == 0
+    assert low["rating_ci95"][0] == 0
+    mixed = summarize(
+        data("mixed", lambda c: 0.0 if c["domain"] == "D1" else 0.6), spec, refs
+    )
+    assert mixed["rating_domains"]["D1"]["score"] == 0
+    assert mixed["rating"] == pytest.approx(0.5)
     refs.pop(next(iter(refs)))
     incomplete = summarize(data("high", lambda c: 1.0), spec, refs)
     assert incomplete["rating"] is None and incomplete["rating_ci95"] is None
@@ -138,7 +144,7 @@ def test_leaderboard_uses_dominance_and_excludes_legacy(monkeypatch, tmp_path):
     def row(name, raw, rating=None):
         report = dict(usi=raw)
         if rating is not None:
-            report.update(rating=rating, scoring_version="reference-gain-v1")
+            report.update(rating=rating, scoring_version="reference-gain-v2")
         return dict(
             candidate_id=name,
             cohort="same",

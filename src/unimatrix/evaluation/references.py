@@ -1,6 +1,6 @@
 """Per-case floor and anchor scores from scripted reference policies, cached per revision.
 
-The floor is the weakest trivial policy (random or passive), the strong anchor the best
+The floor is the passive policy, the strong anchor the best
 scripted reference (the oracle, the leading coordinator or the reciprocal peer); neither anchor bounds candidate performance. All are
 deterministic and cost no provider calls, so every candidate of a recipe revision shares them.
 """
@@ -14,7 +14,7 @@ from ..core.ids import digest
 from ..persistence.json_files import read_json, write_json
 from .scoring import validate
 
-FLOORS = ("random", "passive")
+FLOORS = ("passive",)
 CEILINGS = ("oracle", "coordinator", "reciprocal")
 
 
