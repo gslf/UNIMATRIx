@@ -631,7 +631,7 @@ class PolisRecipes:
         self.directory = Path(directory) if directory else None
 
     def bundled_ids(self):
-        return {json.loads(p.read_text())["id"] for p in BUNDLED.glob("*.json")}
+        return {json.loads(p.read_text(encoding="utf8"))["id"] for p in BUNDLED.glob("*.json")}
 
     def all(self):
         """Bundled recipes first (the default recipe leads), then authored ones, by id."""
@@ -639,7 +639,7 @@ class PolisRecipes:
         for folder in [BUNDLED] + ([self.directory] if self.directory and self.directory.is_dir() else []):
             for path in sorted(folder.glob("*.json"), key=lambda p: (p.stem != DEFAULT, p.name)):
                 try:
-                    recipe = normalize(json.loads(path.read_text()))
+                    recipe = normalize(json.loads(path.read_text(encoding="utf8")))
                 except (ValueError, OSError):
                     continue
                 if recipe["id"] not in found:
@@ -656,7 +656,7 @@ class PolisRecipes:
         for folder in [BUNDLED] + ([self.directory] if self.directory else []):
             path = folder / f"{key}.json"
             if IDENT.fullmatch(key) and path.is_file():
-                return json.loads(path.read_text())
+                return json.loads(path.read_text(encoding="utf8"))
         raise ValueError("Unknown society recipe: " + str(key))
 
     def save(self, recipe):

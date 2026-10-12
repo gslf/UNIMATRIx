@@ -40,7 +40,7 @@ class ManagedModel:
         if self.config.get("api_key_env"):
             token = os.environ[self.config["api_key_env"]]
         elif self.config.get("api_key_file"):
-            token = json.loads(Path(self.config["api_key_file"]).read_text())["api_key"]
+            token = json.loads(Path(self.config["api_key_file"]).read_text(encoding="utf8"))["api_key"]
         try:
             async with asyncio.timeout(5):
                 async with lmstudio.AsyncClient(

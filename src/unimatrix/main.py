@@ -15,7 +15,7 @@ def load_recipe(recipes, value):
 
     path = Path(value)
     if path.suffix == ".json" and path.is_file():
-        return normalize(json.loads(path.read_text()))
+        return normalize(json.loads(path.read_text(encoding="utf8")))
     return recipes.get(value)
 
 
@@ -105,7 +105,7 @@ def execute(args):
 
         report = simulate(load_recipe(recipes, args.recipe), args.seed, args.policy, trace=bool(args.output))
         if args.output:
-            Path(args.output).write_text(json.dumps(report, ensure_ascii=False))
+            Path(args.output).write_text(json.dumps(report, ensure_ascii=False), encoding="utf8")
         return dict(score=report["score"], narrative=report["narrative"],
                     diagnosis=[f"[{d['level']}] {d['title']}: {d['text']}" for d in report["diagnosis"]],
                     path=[f"wk{p['week']} {p['source']} → {p['target']}" for p in report["story"]["path"]])
@@ -159,7 +159,7 @@ def execute(args):
         from .models.health import check_model
         from .polis.runner import engine_fingerprint
 
-        config = json.loads(Path(args.model).read_text())
+        config = json.loads(Path(args.model).read_text(encoding="utf8"))
         validate_model(config)
         result = dict(model_configuration_sha256=digest(config), engine=engine_fingerprint(),
                       python=platform.python_version(), platform=platform.platform(),
@@ -174,7 +174,7 @@ def execute(args):
     from .models.config import is_model, validate_model
     from .polis.service import SocietyService
 
-    candidate = json.loads(Path(args.model).read_text())
+    candidate = json.loads(Path(args.model).read_text(encoding="utf8"))
     validate_model(candidate)
     if not is_model(candidate):
         raise ValueError("--model requires a candidate model JSON object")
@@ -193,6 +193,10 @@ def execute(args):
 
 
 def cli(argv=None):
+    # Results are printed with ensure_ascii=False: without this, a redirected stdout on Windows
+    # uses the locale code page (cp1252) and fails on characters such as "≈".
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf8")
     root = parser()
     args = root.parse_args(sys.argv[1:] if argv is None else argv)
     try:

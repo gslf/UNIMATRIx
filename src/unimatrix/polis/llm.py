@@ -82,8 +82,11 @@ def system_prompt(recipe):
 SCHEMA = {
     "type": "object",
     "properties": {
+        # Every verb's own fields ("to", "project", "who", ...) must stay allowed: llama.cpp-based
+        # constrained decoding (LM Studio GGUF) treats a missing additionalProperties as false, so
+        # the model could only write {"do": "..."} and stuffed its arguments into that string.
         "actions": {"type": "array", "items": {"type": "object", "properties": {"do": {"type": "string"}},
-                                               "required": ["do"]}},
+                                               "required": ["do"], "additionalProperties": True}},
         "forecasts": {"type": "object", "additionalProperties": {"type": "number"}},
         "note": {"type": "string"},
     },

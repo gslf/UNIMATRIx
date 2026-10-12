@@ -22,7 +22,7 @@ from unimatrix.polis.world import World
 
 @pytest.fixture(scope="module")
 def raw():
-    return json.loads((BUNDLED / "standard-v2.json").read_text())
+    return json.loads((BUNDLED / "standard-v2.json").read_text(encoding="utf8"))
 
 
 @pytest.fixture(scope="module")
@@ -206,7 +206,8 @@ async def test_society_runs_through_the_web_api(tmp_path, monkeypatch):
     models = tmp_path / "models"
     models.mkdir()
     (models / "m.json").write_text(json.dumps({"model": "m", "snapshot": "s", "endpoint": "http://127.0.0.1:9",
-                                                "budget_track": "opaque_compute", "context_bytes_verified": 24000}))
+                                                "budget_track": "opaque_compute", "context_bytes_verified": 24000}),
+                                    encoding="utf8")
     router = build_polis_router(tmp_path / "runs", models, tmp_path / "societies",
                                tmp_path / "explorer")
     app = FastAPI()
@@ -243,9 +244,9 @@ async def test_society_runs_through_the_web_api(tmp_path, monkeypatch):
         board = (await client.get("/api/polis/leaderboard?recipe=standard-v2")).json()
         assert board["rows"][0]["id"] == started["id"] and board["references"]["expert"]["total"] > 0
         exported = tmp_path / "explorer" / "data" / "runs" / f"{started['id']}.xcdn"
-        assert exported.is_file() and exported.read_text().count("#week {") == 53
-        assert exported.read_text().count("decision: #decision {") == 52
-        assert started["id"] in (tmp_path / "explorer" / "data" / "index.xcdn").read_text()
+        assert exported.is_file() and exported.read_text(encoding="utf8").count("#week {") == 53
+        assert exported.read_text(encoding="utf8").count("decision: #decision {") == 52
+        assert started["id"] in (tmp_path / "explorer" / "data" / "index.xcdn").read_text(encoding="utf8")
         assert (await client.delete(f"/api/polis/runs/{started['id']}")).status_code == 200
         assert not exported.exists()
 

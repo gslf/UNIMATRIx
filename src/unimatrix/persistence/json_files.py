@@ -7,7 +7,7 @@ from pathlib import Path
 
 
 def read_json(path):
-    return json.loads(Path(path).read_text())
+    return json.loads(Path(path).read_text(encoding="utf8"))
 
 
 def write_json(path, data):
@@ -15,7 +15,7 @@ def write_json(path, data):
     path.parent.mkdir(parents=True, exist_ok=True)
     fd, temporary = tempfile.mkstemp(dir=path.parent, prefix=".write-", suffix=".tmp")
     try:
-        with os.fdopen(fd, "w") as stream:
+        with os.fdopen(fd, "w", encoding="utf8") as stream:
             json.dump(data, stream, indent=2, ensure_ascii=False, allow_nan=False)
             stream.write("\n")
             stream.flush()

@@ -166,6 +166,12 @@ async def test_steward_policy_sends_static_system_prompt_and_decision_schema():
     assert first["response_format"]["json_schema"]["schema"] == SCHEMA
 
 
+def test_decision_schema_lets_actions_carry_their_arguments():
+    # Grammar-based decoders read a missing additionalProperties as false: the schema must say
+    # explicitly that an action carries more than "do", or no argument can ever be written.
+    assert SCHEMA["properties"]["actions"]["items"]["additionalProperties"] is True
+
+
 def lmstudio_server(monkeypatch, context=32768, stop_reason="eosFound", generated=9000):
     stats = SimpleNamespace(predicted_tokens_count=generated, prompt_tokens_count=2000,
                             stop_reason=stop_reason, to_dict=lambda: {"stopReason": stop_reason})
@@ -370,7 +376,7 @@ async def test_model_editor_keeps_credentials_apart(tmp_path):
         secret = Path(saved["api_key_file"])
         assert stat.S_IMODE(secret.stat().st_mode) == 0o600
         assert "test-secret" not in response.text
-        assert "test-secret" not in (models / "test.json").read_text()
+        assert "test-secret" not in (models / "test.json").read_text(encoding="utf8")
         assert len((await client.get("/api/models")).json()) == 1
         assert (await client.put("/api/models/test", json={"config": saved})).json() == saved
         assert "neutral" in (await client.get("/api/personalities")).json()
@@ -384,7 +390,7 @@ async def test_model_editor_keeps_credentials_apart(tmp_path):
             await Probe(saved, client=transport).decide({})
         response = await client.put("/api/models/test", json={"config": saved, "api_key": "replacement"})
         assert response.json()["api_key_file"] != str(secret)
-        assert json.loads(secret.read_text())["api_key"] == "test-secret"
+        assert json.loads(secret.read_text(encoding="utf8"))["api_key"] == "test-secret"
         invalid = dict(config, context_bytes_verified=0)
         assert (await client.put("/api/models/test", json={"config": invalid, "api_key": "x"})).status_code == 422
         response = await client.put("/api/models/test", json={"config": saved, "api_key": ""})

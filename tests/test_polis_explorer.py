@@ -38,7 +38,8 @@ def parse_with_official_library(text):
         "annotations: v.value.keys ? v.value.keys().filter(k => v.value.get(k).annotations.length)"
         ".map(k => [k, v.value.get(k).annotations.map(a => [a.name, a.args.map(x => plain(x.unwrap()))])]) : []}))}));"
     )
-    done = subprocess.run([NODE, "-e", script, str(BUNDLE)], input=text, capture_output=True, text=True, check=True)
+    done = subprocess.run([NODE, "-e", script, str(BUNDLE)], input=text, capture_output=True, text=True, encoding="utf8",
+                          check=True)
     return json.loads(done.stdout)
 
 
@@ -99,11 +100,11 @@ def test_run_files_round_trip_through_the_official_parser(recipe):
 def test_exports_write_runs_and_a_combined_index(tmp_path, recipe):
     files = export_references(recipe, tmp_path, policies=("expert", "passive"), data="data")
     assert len(files) == 2 and all(f.is_file() and f.suffix == ".xcdn" for f in files)
-    index = (tmp_path / "data" / "index.xcdn").read_text()
+    index = (tmp_path / "data" / "index.xcdn").read_text(encoding="utf8")
     assert index.count("#entry {") == 2 and "runs: 2" in index
-    assert "badge" not in index and "decision: #decision" not in files[0].read_text()
+    assert "badge" not in index and "decision: #decision" not in files[0].read_text(encoding="utf8")
     assert (tmp_path / "vendor" / "village.js").read_bytes() == (
         ROOT / "src" / "unimatrix" / "web" / "static" / "society-village.js").read_bytes()
     ExplorerExport(tmp_path).remove_run(files[0].stem)
     assert not files[0].exists()
-    assert (tmp_path / "data" / "index.xcdn").read_text().count("#entry {") == 1
+    assert (tmp_path / "data" / "index.xcdn").read_text(encoding="utf8").count("#entry {") == 1

@@ -27,7 +27,7 @@ async def check_model(config, *, timeout=30):
         if config.get("api_key_env"):
             token = os.environ[config["api_key_env"]]
         elif config.get("api_key_file"):
-            token = json.loads(Path(config["api_key_file"]).read_text())["api_key"]
+            token = json.loads(Path(config["api_key_file"]).read_text(encoding="utf8"))["api_key"]
         else:
             token = None
         if token is not None and (not isinstance(token, str) or not token.strip()):

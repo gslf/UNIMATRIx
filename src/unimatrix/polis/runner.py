@@ -19,7 +19,7 @@ RETRY_BACKOFF = (1.0, 4.0)
 @lru_cache(maxsize=1)
 def engine_fingerprint():
     root = Path(__file__).resolve().parent
-    files = {p.name: p.read_text() for p in sorted(root.glob("*.py"))}
+    files = {p.name: p.read_text(encoding="utf8") for p in sorted(root.glob("*.py"))}
     return digest(files)
 
 
@@ -31,7 +31,7 @@ def read_log(path):
     if not path.is_file():
         return []
     rows = []
-    for line in path.read_text().splitlines():
+    for line in path.read_text(encoding="utf8").splitlines():
         if line.strip():
             try:
                 rows.append(json.loads(line))
@@ -103,7 +103,7 @@ async def run_seed(recipe, seed, policy, folder, on_week=None, meta=None):
         await asyncio.sleep(0)
     report = build_report(world, meta)
     report["frames"] = world.frames
-    (folder / "report.json").write_text(canonical(report) + "\n")
+    (folder / "report.json").write_text(canonical(report) + "\n", encoding="utf8")
     return report, world
 
 

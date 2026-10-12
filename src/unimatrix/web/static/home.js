@@ -1621,7 +1621,7 @@
     $("model-constrain").checked = config.constrain_output ?? Boolean(config.model);
     $("model-managed").checked = config.managed_instance ?? !config.model;
     $("model-reasoning").checked = Boolean(config.reasoning_delimiters);
-    $("model-timeout").value = config.request_timeout_seconds ?? (config.model ? 120 : 600);
+    $("model-timeout").value = config.request_timeout_seconds ?? 28800;
     $("model-effort").value = config.reasoning_effort || "";
     $("model-context").value = config.context_tokens ?? config.context_bytes_verified ?? 50000;
     updateBackend();

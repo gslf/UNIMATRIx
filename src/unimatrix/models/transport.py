@@ -16,6 +16,9 @@ from ..core.ids import canonical, digest
 from .managed import ManagedModel
 
 SAMPLING_FIELDS = ("top_p", "top_k", "presence_penalty", "frequency_penalty", "repeat_penalty")
+# Local reasoning models can think for tens of thousands of tokens on one week: the deadline
+# only has to catch a stuck provider, never a slow but healthy one.
+DEFAULT_REQUEST_TIMEOUT_SECONDS = 8 * 60 * 60
 
 
 def requires_http_generation(config):
@@ -50,7 +53,8 @@ class ModelClient:
         self._owns_instance = instance is None
         self.instance_id = self._instance.identifier
         self.fingerprint = digest(config)
-        self.request_timeout_seconds = config.get("request_timeout_seconds", 120)
+        self.request_timeout_seconds = config.get("request_timeout_seconds",
+                                                  DEFAULT_REQUEST_TIMEOUT_SECONDS)
         self.client = client or httpx.AsyncClient(
             timeout=httpx.Timeout(self.request_timeout_seconds), follow_redirects=False
         )
@@ -93,7 +97,7 @@ class ModelClient:
         if self.config.get("api_key_env"):
             headers["Authorization"] = "Bearer " + os.environ[self.config["api_key_env"]]
         elif self.config.get("api_key_file"):
-            key = json.loads(Path(self.config["api_key_file"]).read_text())["api_key"]
+            key = json.loads(Path(self.config["api_key_file"]).read_text(encoding="utf8"))["api_key"]
             headers["Authorization"] = "Bearer " + key
         body = dict(
             model=model_identifier or self.config["model"],
@@ -214,7 +218,7 @@ class ModelClient:
         if self.config.get("api_key_env"):
             token = os.environ[self.config["api_key_env"]]
         elif self.config.get("api_key_file"):
-            token = json.loads(Path(self.config["api_key_file"]).read_text())["api_key"]
+            token = json.loads(Path(self.config["api_key_file"]).read_text(encoding="utf8"))["api_key"]
         load_config = {"contextLength": context}
         if "seed" in self.config:
             load_config["seed"] = self.config["seed"]

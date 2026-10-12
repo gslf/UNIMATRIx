@@ -20,11 +20,12 @@ def main():
     with TemporaryDirectory(prefix="unimatrix-wheel-smoke-") as temporary:
         root = Path(temporary)
         command = Path(sys.prefix) / "bin" / "unimatrix"
-        result = subprocess.run([str(command), "recipes"], cwd=root, capture_output=True, text=True, check=True)
+        result = subprocess.run([str(command), "recipes"], cwd=root, capture_output=True, text=True,
+                                encoding="utf8", check=True)
         if [row["id"] for row in json.loads(result.stdout)] != ["standard-v2", "hell-v1"]:
             raise AssertionError("installed_recipe_catalog_mismatch")
         result = subprocess.run([str(command), "simulate", "--policy", "naive", "--seed", "1"], cwd=root,
-                                capture_output=True, text=True, check=True)
+                                capture_output=True, text=True, encoding="utf8", check=True)
         if "total" not in json.loads(result.stdout)["score"]:
             raise AssertionError("installed_simulation_failed")
 

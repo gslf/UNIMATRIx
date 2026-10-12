@@ -31,7 +31,7 @@ mode `0600`, and tests the endpoint. The steward is called once per simulated we
 | `constrain_output` | `false` sends no response format at all, for providers that reject it. |
 | `system_prompt`, `personality`, `persona` | Optional personality appended to the steward's static instructions (presets: `GET /api/personalities`). |
 | `api_key_env` or `api_key_file` | Credentials from an environment variable or a separate file, never inline. |
-| `request_timeout_seconds` | Whole-decision deadline (default 120 s); a timeout is a non-retryable infrastructure failure. |
+| `request_timeout_seconds` | Whole-decision deadline (default 28,800 s = 8 h); a timeout is a non-retryable infrastructure failure. |
 | `model_sha256`, `backend_revision`, `quantization`, prices | Provenance and cost metadata, recorded with the run. |
 
 Unknown fields are rejected. Provider errors are reported with credentials redacted; HTTP 429 and

@@ -64,6 +64,6 @@ def render(persona):
 def catalog():
     """Every persona with its rendered prompt, ready for model configurations."""
     result = {}
-    for ident, persona in json.loads(PERSONALITIES.read_text()).items():
+    for ident, persona in json.loads(PERSONALITIES.read_text(encoding="utf8")).items():
         result[ident] = dict(persona, id=ident, system_prompt=render(persona))
     return result
