@@ -1,5 +1,7 @@
 # UNIMATRIx v5.0.0
 
+![UNIMATRIx home: a live preview of the Lakeside village, run statistics and the bundled recipes](docs/images/home.png)
+
 UNIMATRIx evaluates a candidate model as the **steward of one simulated society**. The benchmark spread across eight domains: information and rumours, the economy, public works, a shared lake, relationships and care, institutions, the transmission of skills and adaptation to change.
 
 Residents are deterministic agents with hidden needs, emotions, beliefs, grievances and ties. Scores are unbounded points in natural units like trust-weeks, coins created, fish harvested, skills kept alive, etc. A collapsed society scores zero.
