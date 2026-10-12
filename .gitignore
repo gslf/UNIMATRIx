@@ -8,8 +8,7 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 tmp_pytest/
-runs/
-!runs/.gitkeep
+/runs/
 *.db
 *.db-journal
 *.db-wal
@@ -25,13 +24,13 @@ analysis_scripts/
 build/
 dist/
 .ruff_cache/
-.hypothesis/
 
 *-credentials.json
 
 /config/models/*
 
-/config/recipes/*
+/config/societies/*
+/explorer/data/
 .env
 .env.*
 *.pem

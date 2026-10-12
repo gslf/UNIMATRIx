@@ -13,21 +13,22 @@ jobs:
           python-version: ${{ matrix.python }}
       - run: uv sync --locked --extra dev
       - run: uv run pytest
-      - run: uv run ruff check src/unimatrix tests --exclude tests/fixtures
-      - name: Replay and score every bundled scripted-control case
+      - run: uv run ruff check src/unimatrix tests
+      - name: Calibrate the bundled recipes with every reference steward
         run: |
-          uv run python tests/tools/audit_recipes.py --output "$RUNNER_TEMP/unimatrix-recipe-audit" --workers 4
-          uv run python tests/tools/ranking_audit.py "$RUNNER_TEMP/unimatrix-recipe-audit"
+          uv run unimatrix calibrate --recipe standard-v2 --seeds 1,2
+          uv run unimatrix calibrate --recipe hell-v1 --seeds 1,2,19
       - name: Verify release artifacts contain only required source files
         run: |
-          mkdir -p config/models config/recipes internal/codex
+          mkdir -p config/models config/societies internal/codex runs explorer/data
           echo '{"api_key":"distribution-private-sentinel"}' > config/models/distribution-credentials.json
-          echo '{"private":"distribution-private-sentinel"}' > config/recipes/distribution.json
+          echo '{"private":"distribution-private-sentinel"}' > config/societies/distribution.json
+          echo 'distribution-private-sentinel' > explorer/data/index.xcdn
           echo 'distribution-private-sentinel' > src/unimatrix/web/static/distribution.gguf
           echo 'distribution-private-sentinel' > src/unimatrix/web/static/distribution.safetensors
           echo 'distribution-private-sentinel' > internal/codex/private-audit.md
           uv build
-          UNIMATRIX_DIST_DIR=dist uv run pytest -q tests/test_recipe_release.py
+          UNIMATRIX_DIST_DIR=dist uv run pytest -q tests/test_release.py
       - name: Rebuild the wheel from the source distribution
         run: |
           uv build dist/*.tar.gz --wheel --out-dir "$RUNNER_TEMP/unimatrix-sdist-wheel"

@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "unimatrix"
-version = "4.0.0"
-description = "Deterministic material worlds and social evaluation for LLM agents"
+version = "5.0.0"
+description = "A social-simulation benchmark: an LLM stewards a village of scripted residents"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
@@ -16,12 +16,11 @@ dependencies = [
   "fastapi>=0.110",
   "uvicorn>=0.27",
   "httpx>=0.27",
-  "jsonschema>=4.23",
   "lmstudio>=1.6.0b1",
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "hypothesis>=6.100", "ruff>=0.12"]
+dev = ["pytest>=8.0", "pytest-asyncio>=0.23", "ruff>=0.12"]
 
 [project.scripts]
 unimatrix = "unimatrix.main:cli"
@@ -30,7 +29,7 @@ unimatrix = "unimatrix.main:cli"
 where = ["src"]
 
 [tool.setuptools.package-data]
-unimatrix = ["web/static/*", "actions/*.json", "benchmark/*.json", "benchmark/plans/*.json", "benchmark/presets/*.json"]
+unimatrix = ["web/static/*", "models/*.json", "polis/recipes/*.json"]
 
 [tool.ruff]
 target-version = "py311"

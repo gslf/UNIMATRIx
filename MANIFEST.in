@@ -1,6 +1,8 @@
 exclude CHANGELOG.md
 prune config
 prune docs
+prune explorer
+prune runs
 prune internal
 prune tests
 global-exclude *-credentials.json .env .env.* *.pem *.key *.gguf *.safetensors

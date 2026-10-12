@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#121212">
+<meta name="color-scheme" content="dark">
+<title>UNIMATRIx · Society Lab</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Ccircle cx=%2216%22 cy=%2216%22 r=%2213%22 fill=%22none%22 stroke=%22%23b59a00%22 stroke-width=%222%22/%3E%3Ccircle cx=%2216%22 cy=%2210%22 r=%224%22 fill=%22%23e2c21c%22/%3E%3Ccircle cx=%2210%22 cy=%2220%22 r=%223.5%22 fill=%22%234aa3df%22/%3E%3Ccircle cx=%2222%22 cy=%2220%22 r=%223.5%22 fill=%22%238bc34a%22/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/society-lab.css?v=2">
+<script src="/static/security.js"></script>
+<script src="/static/society-village.js?v=2" defer></script>
+<script src="/static/society-lab.js?v=2" defer></script>
+</head>
+<body>
+<a class="skip-link" href="#lab-main">Skip to the editor</a>
+<header class="lab-top" id="lab-top">
+  <a class="brand" href="/" title="UNIMATRIx dashboard">
+    <span class="brand-mark" aria-hidden="true">
+      <svg viewBox="0 0 32 32" width="28" height="28"><defs><radialGradient id="bm" cx="50%" cy="40%" r="60%"><stop offset="0" stop-color="#ffe27a"/><stop offset="1" stop-color="#b59a00"/></radialGradient></defs><circle cx="16" cy="16" r="14" fill="none" stroke="url(#bm)" stroke-width="1.5" opacity=".7"/><circle cx="16" cy="9" r="3" fill="url(#bm)"/><circle cx="9" cy="20" r="3" fill="#4aa3df"/><circle cx="23" cy="20" r="3" fill="#8bc34a"/><path d="M16 9 9 20h14z" fill="none" stroke="#dedede" stroke-opacity=".35"/></svg>
+    </span>
+    <span class="brand-text"><h1>UNIMATRIx <span>SOCIETY LAB</span></h1><span class="brand-sub">Design a society · preview it with reference stewards</span></span>
+  </a>
+  <div class="recipe-bar" role="toolbar" aria-label="Society recipe">
+    <label class="recipe-pick"><span class="sr-only">Society recipe</span><select id="recipe-select" aria-label="Society recipe"></select></label>
+    <span id="recipe-badges" class="badges" aria-live="polite"></span>
+    <div class="bar-actions">
+      <button type="button" id="btn-new" class="bar-extra" title="New society from a template">New</button>
+      <button type="button" id="btn-duplicate" class="bar-extra" title="Duplicate under a new id">Duplicate</button>
+      <button type="button" id="btn-validate" class="bar-validate" title="Validate the authored recipe">Validate</button>
+      <button type="button" id="btn-save" class="primary" title="Save (Ctrl+S)">Save</button>
+      <button type="button" id="btn-delete" class="danger bar-extra" title="Delete this saved society">Delete</button>
+      <span class="bar-sep bar-extra" aria-hidden="true"></span>
+      <button type="button" id="btn-export" class="bar-extra" title="Download the authored JSON">Export</button>
+      <label class="button bar-extra" id="btn-import" title="Load a recipe JSON file">Import<input type="file" id="import-file" accept=".json,application/json" class="sr-only"></label>
+      <button type="button" id="btn-more" class="more-btn" aria-haspopup="dialog" aria-controls="dlg-more" aria-label="More actions" title="More actions"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="1.9"/><circle cx="12" cy="12" r="1.9"/><circle cx="19" cy="12" r="1.9"/></svg></button>
+    </div>
+  </div>
+  <nav class="top-links" aria-label="Other pages">
+    <a href="/">Dashboard</a>
+  </nav>
+</header>
+<div id="validation-banner" class="validation-banner" role="alert" hidden></div>
+<div class="lab-shell">
+  <nav class="lab-nav" aria-label="Lab sections">
+    <ul id="nav-list">
+      <li><a href="#overview" data-section="overview"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5V20a1 1 0 0 1-1 1h-5v-6h-4v6H5a1 1 0 0 1-1-1z"/></svg><span>Overview</span><small class="nav-short" aria-hidden="true">Overview</small><em data-count="overview"></em></a></li>
+      <li><a href="#people" data-section="people"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="7" r="2.5"/><circle cx="18" cy="7" r="2.5"/><circle cx="12" cy="17" r="2.5"/><path d="M7.5 9 11 15M16.5 9 13 15M8.5 7h7"/></svg><span>People &amp; network</span><small class="nav-short" aria-hidden="true">People</small><em data-count="people"></em></a></li>
+      <li><a href="#archetypes" data-section="archetypes"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 20 8v8l-8 5-8-5V8z"/><path d="M12 8l4 2.5v4L12 17l-4-2.5v-4z"/></svg><span>Behaviour</span><small class="nav-short" aria-hidden="true">Behaviour</small><em data-count="archetypes"></em></a></li>
+      <li><a href="#world" data-section="world"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 17c3-4 5-4 8 0s5 4 10-1"/><path d="M3 12c3-4 5-4 8 0s5 4 10-1"/><circle cx="17" cy="6" r="2.5"/></svg><span>World</span><small class="nav-short" aria-hidden="true">World</small></a></li>
+      <li><a href="#merchants" data-section="merchants"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9h18l-2-5H5zM5 9v11h14V9"/><path d="M9 20v-6h6v6"/></svg><span>Merchants</span><small class="nav-short" aria-hidden="true">Merchants</small><em data-count="merchants"></em></a></li>
+      <li><a href="#projects" data-section="projects"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20V10l8-6 8 6v10"/><path d="M9 20v-5h6v5M4 14h16"/></svg><span>Projects</span><small class="nav-short" aria-hidden="true">Projects</small><em data-count="projects"></em></a></li>
+      <li><a href="#facts" data-section="facts"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12h5"/></svg><span>Facts &amp; rumours</span><small class="nav-short" aria-hidden="true">Facts</small><em data-count="facts"></em></a></li>
+      <li><a href="#story" data-section="story"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="5" cy="12" r="2.5"/><circle cx="19" cy="6" r="2.5"/><circle cx="19" cy="18" r="2.5"/><path d="M7.5 11c4-1 6-4 9-4.5M7.5 13c4 1 6 4 9 4.5"/></svg><span>Story graph</span><small class="nav-short" aria-hidden="true">Story</small><em data-count="story"></em></a></li>
+      <li><a href="#collapse" data-section="collapse"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v4M12 17v4M4 12h4M16 12h4"/><circle cx="12" cy="12" r="4"/></svg><span>Collapse &amp; scoring</span><small class="nav-short" aria-hidden="true">Rules</small></a></li>
+      <li><a href="#simulate" data-section="simulate" class="nav-sim"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 5v14l12-7z"/></svg><span>Simulate</span><small class="nav-short" aria-hidden="true">Simulate</small></a></li>
+    </ul>
+    <div class="nav-foot">
+      <p class="small muted" id="nav-summary"></p>
+    </div>
+  </nav>
+  <main id="lab-main" class="lab-main" tabindex="-1">
+    <div id="loading" class="loading" role="status"><span class="spinner" aria-hidden="true"></span> Loading the Society Lab…</div>
+    <section id="sec-overview" class="lab-section" data-section="overview" hidden></section>
+    <section id="sec-people" class="lab-section" data-section="people" hidden></section>
+    <section id="sec-archetypes" class="lab-section" data-section="archetypes" hidden></section>
+    <section id="sec-world" class="lab-section" data-section="world" hidden></section>
+    <section id="sec-merchants" class="lab-section" data-section="merchants" hidden></section>
+    <section id="sec-projects" class="lab-section" data-section="projects" hidden></section>
+    <section id="sec-facts" class="lab-section" data-section="facts" hidden></section>
+    <section id="sec-story" class="lab-section" data-section="story" hidden></section>
+    <section id="sec-collapse" class="lab-section" data-section="collapse" hidden></section>
+    <section id="sec-simulate" class="lab-section" data-section="simulate" hidden></section>
+  </main>
+</div>
+<div id="toasts" class="toasts" role="status" aria-live="polite"></div>
+
+<dialog id="dlg-ident" aria-labelledby="dlg-ident-title">
+  <form method="dialog" id="dlg-ident-form">
+    <h2 id="dlg-ident-title">Duplicate society</h2>
+    <p id="dlg-ident-lead" class="muted"></p>
+    <div class="form-grid two-col">
+      <label class="field"><span class="label">Recipe id</span><input id="dlg-ident-id" required pattern="[a-z0-9][a-z0-9_\-]{0,63}" autocomplete="off" spellcheck="false"><span class="hint">Lowercase letters, digits, '-' or '_'.</span></label>
+      <label class="field"><span class="label">Name</span><input id="dlg-ident-name" required maxlength="80" autocomplete="off"></label>
+      <label class="field" id="dlg-ident-template-wrap"><span class="label">Template</span><select id="dlg-ident-template"></select></label>
+    </div>
+    <p id="dlg-ident-error" class="form-error" role="alert"></p>
+    <div class="dialog-actions"><button type="button" value="cancel" id="dlg-ident-cancel">Cancel</button><button type="submit" class="primary" id="dlg-ident-ok">Create</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlg-confirm" aria-labelledby="dlg-confirm-title">
+  <form method="dialog">
+    <h2 id="dlg-confirm-title">Are you sure?</h2>
+    <p id="dlg-confirm-text" class="muted"></p>
+    <div class="dialog-actions"><button value="cancel" type="submit">Cancel</button><button value="ok" type="submit" class="primary" id="dlg-confirm-ok">Continue</button></div>
+  </form>
+</dialog>
+
+<dialog id="dlg-prompt" aria-labelledby="dlg-prompt-title">
+  <form method="dialog" id="dlg-prompt-form">
+    <h2 id="dlg-prompt-title">Name</h2>
+    <p id="dlg-prompt-text" class="muted"></p>
+    <label class="field"><span class="label" id="dlg-prompt-label">Value</span><input id="dlg-prompt-input" autocomplete="off" spellcheck="false"></label>
+    <p id="dlg-prompt-error" class="form-error" role="alert"></p>
+    <div class="dialog-actions"><button type="button" id="dlg-prompt-cancel">Cancel</button><button type="submit" class="primary">OK</button></div>
+  </form>
+</dialog>
+<dialog id="dlg-more" class="menu-sheet" aria-labelledby="dlg-more-title">
+  <div class="sheet-grabber" aria-hidden="true"></div>
+  <div class="menu-head"><h2 id="dlg-more-title">Society</h2><p id="dlg-more-sub" class="muted"></p></div>
+  <div class="menu-list" role="group" aria-labelledby="dlg-more-title">
+    <button type="button" data-proxy="btn-validate" class="menu-only-phone"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5 10 17l9-10"/></svg>Validate</button>
+    <button type="button" data-proxy="btn-new"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>New society…</button>
+    <button type="button" data-proxy="btn-duplicate"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"/><path d="M16 8V6a1 1 0 0 0-1-1H6a1 1 0 0 0-1 1v9a1 1 0 0 0 1 1h2"/></svg>Duplicate…</button>
+    <button type="button" data-proxy="btn-export"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 19h14"/></svg>Export JSON</button>
+    <button type="button" data-proxy="import-file"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M5 19h14"/></svg>Import JSON…</button>
+    <button type="button" data-proxy="btn-delete" class="menu-danger"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 7h14M10 7V5h4v2M7 7l1 12h8l1-12"/></svg>Delete this society</button>
+    <a href="/" class="menu-link"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5V20h-6v-5h-4v5H4z"/></svg>Dashboard</a>
+  </div>
+  <form method="dialog" class="menu-foot"><button type="submit" value="close" class="menu-close">Close</button></form>
+</dialog>
+<noscript><p class="noscript">The Society Lab needs JavaScript.</p></noscript>
+</body>
+</html>

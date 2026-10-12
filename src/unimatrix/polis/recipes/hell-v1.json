@@ -1,0 +1,1441 @@
+{
+  "format": "unimatrix.polis-recipe.v2",
+  "id": "hell-v1",
+  "name": "Hell v1 — Malaterra",
+  "author": "UNIMATRIx",
+  "description": "One year in Malaterra, a poor marsh village of eighteen where everything is rotten: a council that skims the tax chest and sells votes, a moneylender who owns the boats through their debts, a smuggler fencing stolen grain, a peddler selling chalk as medicine, three agitators ready to turn any grievance into a strike, a blighted harvest, a drought, a cartel, bandits on the pass, war exiles, fever and the hardest winter in memory. The tax chest leaks through the council's hands, the fishers grow rich while the terraces starve, and the lake is already overfished. Every clue is contested by someone who profits from the lie. Built to break stewards: even the expert reference often loses the village.",
+  "tags": ["hell", "all-domains", "corruption", "hard"],
+  "ticks": 52,
+  "seeds": [1, 2, 19],
+  "steward": {"title": "Steward of Malaterra", "actions_per_week": 6, "note_chars": 1500},
+  "world": {
+    "name": "Malaterra",
+    "start_season": "spring",
+    "season_length": 13,
+    "food_need": 1.0,
+    "household_spoilage": 0.02,
+    "granary_spoilage": 0.03,
+    "treasury": 300,
+    "granary": 190,
+    "medicine": 1,
+    "tools": 3,
+    "prices": {"fish": 1.1, "food": 3.0, "crafts": 5.0, "granary_sale": 4.5, "labour": 3.0},
+    "production": {
+      "farm": [1.4, 2.5, 5.6, 0.4], "fish_max": 6.0, "craft": 0.9, "trade": 3.5, "heal": 2.0, "lore": 1.0
+    },
+    "commons": {
+      "name": "the marsh lake", "capacity": 1000, "stock": 470, "growth": 0.09, "critical": 0.17,
+      "efficiency_floor": 0.3
+    },
+    "illness": {"base": 0.02, "elder": 0.05, "recovery": 0.11, "per_level": 0.12, "medicine": 0.25, "damage": 7.5},
+    "policies": {
+      "tax": 0.15, "quota": null, "sanction": "none", "aid": "none", "wage": 0, "rationing": false,
+      "newcomer_rights": "guest"
+    },
+    "council": {"majority": 0.5},
+    "conventions": {"trade": "haggle"}
+  },
+  "factions": [
+    {"id": "porto", "name": "Dockside", "color": "#4aa3df"},
+    {"id": "colli", "name": "Terraces", "color": "#8bc34a"},
+    {"id": "borgo", "name": "Old Borough", "color": "#c792ea"},
+    {"id": "esuli", "name": "Exiles", "color": "#ff8a65"}
+  ],
+  "residents": [
+    {
+      "id": "r01",
+      "name": "Agata Lombardi",
+      "age": 81,
+      "role": "healer",
+      "faction": "borgo",
+      "archetype": "elder_keeper",
+      "bio": "Malaterra's only healer for half a century. Proud, widowed, and her heart is giving out.",
+      "skills": {"healing": 3, "lore": 2},
+      "state": {"coins": 25, "food": 5, "health": 55, "loneliness": 0.6, "stress": 0.35, "trust": 0.45},
+      "concern": {"kind": "grief", "intensity": 0.55, "cause": "Her husband drowned in the marsh last autumn."},
+      "flags": ["lives alone", "widowed"],
+      "secrets": ["She knows her heart will not last the year."],
+      "decline": {"start": 8, "rate": 2.2}
+    },
+    {
+      "id": "r02",
+      "name": "Matteo Lombardi",
+      "age": 16,
+      "role": "youth",
+      "faction": "borgo",
+      "archetype": "conditional_cooperator",
+      "bio": "Agata's grandson. Clever hands, no trade, and the wrong friends.",
+      "traits": {"O": 0.85, "E": 0.6, "C": 0.45, "honesty": 0.7},
+      "state": {"coins": 2, "food": 2, "trust": 0.4},
+      "concern": {"kind": "esteem", "intensity": 0.5, "cause": "Nico says I could earn more with him at night."},
+      "flags": ["Agata's grandson"]
+    },
+    {
+      "id": "r03",
+      "name": "Bruno Marchi",
+      "age": 48,
+      "role": "fisher",
+      "faction": "porto",
+      "archetype": "free_rider",
+      "bio": "The biggest boat on the marsh lake. Pays the councillor's wine and fishes as he likes.",
+      "traits": {"greed": 0.92},
+      "skills": {"fishing": 3},
+      "state": {"coins": 70, "food": 8, "trust": 0.4}
+    },
+    {
+      "id": "r04",
+      "name": "Rocco Marchi",
+      "age": 24,
+      "role": "fisher",
+      "faction": "porto",
+      "archetype": "agitator",
+      "bio": "Bruno's nephew. Hot-headed, owes money to everyone, first to shout in the square.",
+      "state": {"coins": 6, "food": 3, "grievance": 0.3, "trust": 0.35},
+      "concern": {
+        "kind": "injustice",
+        "intensity": 0.45,
+        "cause": "The council squeezes the docks and spares its friends."
+      }
+    },
+    {
+      "id": "r05",
+      "name": "Tomas Ventura",
+      "age": 57,
+      "role": "fisher",
+      "faction": "porto",
+      "archetype": "strong_reciprocator",
+      "bio": "An honest fisher who still remembers when the council kept its books open.",
+      "state": {"coins": 25, "food": 6, "trust": 0.5}
+    },
+    {
+      "id": "r06",
+      "name": "Ines Ventura",
+      "age": 52,
+      "role": "fisher",
+      "faction": "porto",
+      "archetype": "gossip",
+      "bio": "Tomas's wife. Hears everything at the docks and repeats most of it.",
+      "state": {"coins": 15, "food": 5}
+    },
+    {
+      "id": "r07",
+      "name": "Paolo Neri",
+      "age": 61,
+      "role": "fisher",
+      "faction": "porto",
+      "archetype": "vulnerable_isolated",
+      "bio": "A widower with a leaking boat and a debt to the moneylender that grows every season.",
+      "state": {"coins": 0, "food": 2, "health": 70, "loneliness": 0.55, "stress": 0.5, "trust": 0.4},
+      "concern": {"kind": "debt", "intensity": 0.75, "cause": "I owe Lorenzo more than my boat is worth."},
+      "flags": ["widower"],
+      "secrets": ["He has thought about walking into the marsh."]
+    },
+    {
+      "id": "r08",
+      "name": "Gianni Conti",
+      "age": 50,
+      "role": "farmer",
+      "faction": "colli",
+      "archetype": "conditional_cooperator",
+      "bio": "Reads the weather better than anyone on the terraces.",
+      "state": {"coins": 18, "food": 6}
+    },
+    {
+      "id": "r09", "name": "Lucia Conti", "age": 47, "role": "farmer", "faction": "colli",
+      "archetype": "steady_worker", "bio": "Keeps the granary keys and her temper.",
+      "state": {"coins": 20, "food": 6, "trust": 0.5}
+    },
+    {
+      "id": "r10",
+      "name": "Sara Bassi",
+      "age": 33,
+      "role": "farmer",
+      "faction": "colli",
+      "archetype": "agitator",
+      "bio": "Organised the last tax strike. Believes the council and the steward are the same thing.",
+      "state": {"coins": 5, "food": 3, "grievance": 0.35, "trust": 0.3},
+      "concern": {"kind": "injustice", "intensity": 0.5, "cause": "The council taxes us and feeds itself."}
+    },
+    {
+      "id": "r11",
+      "name": "Davide Greco",
+      "age": 39,
+      "role": "farmer",
+      "faction": "colli",
+      "archetype": "free_rider",
+      "bio": "Behind on everything. His goats wander, and so do other people's sacks.",
+      "traits": {"honesty": 0.35},
+      "state": {"coins": 3, "food": 2, "trust": 0.4},
+      "concern": {"kind": "debt", "intensity": 0.5, "cause": "Lorenzo's interest doubled this spring."}
+    },
+    {
+      "id": "r12",
+      "name": "Rosa Monti",
+      "age": 58,
+      "role": "artisan",
+      "faction": "borgo",
+      "archetype": "gossip",
+      "bio": "Weaver. Sells cloth and stories, the stories at a better margin.",
+      "state": {"coins": 20, "food": 5}
+    },
+    {
+      "id": "r13",
+      "name": "Ottavio Vitale",
+      "age": 62,
+      "role": "trader",
+      "faction": "borgo",
+      "archetype": "patrician",
+      "bio": "Senior councillor for thirty years. Generous with wine, careless with other people's coins.",
+      "traits": {"honesty": 0.15, "greed": 0.85, "prosocial": 0.1},
+      "state": {"coins": 100, "food": 20, "trust": 0.45},
+      "flags": ["sits on the council"],
+      "secrets": ["He skims the tax chest after every council meeting."]
+    },
+    {
+      "id": "r14",
+      "name": "Franco Moretti",
+      "age": 44,
+      "role": "builder",
+      "faction": "borgo",
+      "archetype": "steady_worker",
+      "bio": "The only master builder left. Works every hour the council does not pay him for.",
+      "skills": {"building": 3},
+      "state": {"coins": 15, "food": 5, "stress": 0.4},
+      "concern": {"kind": "burnout", "intensity": 0.45, "cause": "Three jobs, no wages for two months."}
+    },
+    {
+      "id": "r15",
+      "name": "Anna Moretti",
+      "age": 41,
+      "role": "artisan",
+      "faction": "borgo",
+      "archetype": "agitator",
+      "bio": "Franco's wife. Says the guild and the council split the village between them.",
+      "state": {"coins": 8, "food": 4, "grievance": 0.3, "trust": 0.35}
+    },
+    {
+      "id": "r16",
+      "name": "Gemma Ricci",
+      "age": 84,
+      "role": "elder",
+      "faction": "colli",
+      "archetype": "vulnerable_isolated",
+      "bio": "Lives alone on the top terrace. Remembers every hard winter since the old war.",
+      "skills": {"lore": 3},
+      "state": {"coins": 12, "food": 4, "health": 65, "loneliness": 0.6, "stress": 0.4},
+      "concern": {"kind": "grief", "intensity": 0.6, "cause": "My son left for the city and never wrote."},
+      "flags": ["lives alone on the hill"]
+    },
+    {
+      "id": "r17",
+      "name": "Lorenzo Fabbri",
+      "age": 55,
+      "role": "trader",
+      "faction": "borgo",
+      "archetype": "patrician",
+      "bio": "The moneylender. Smiles a lot, forgets nothing, owns half the boats through their debts.",
+      "traits": {"honesty": 0.25, "greed": 0.9, "prosocial": 0.1},
+      "state": {"coins": 110, "food": 18, "trust": 0.45},
+      "flags": ["lends money"],
+      "secrets": ["He takes a cut of every remedy Corvo sells."]
+    },
+    {
+      "id": "r18",
+      "name": "Nico Sartori",
+      "age": 29,
+      "role": "artisan",
+      "faction": "porto",
+      "archetype": "free_rider",
+      "bio": "Mends nets by day. By night his cart goes to the mill road and comes back full.",
+      "traits": {"honesty": 0.2, "greed": 0.9, "A": 0.3},
+      "state": {"coins": 30, "food": 4, "trust": 0.35},
+      "flags": ["works at night"],
+      "secrets": ["He fences stolen grain for Lorenzo."]
+    }
+  ],
+  "ties": [
+    ["r01", "r02", 0.6], ["r01", "r12", 0.3], ["r01", "r16", 0.25], ["r02", "r18", 0.45], ["r02", "r14", 0.2],
+    ["r03", "r04", 0.8], ["r03", "r05", 0.3], ["r03", "r06", 0.3], ["r03", "r13", 0.45], ["r03", "r18", 0.4],
+    ["r04", "r06", 0.4], ["r04", "r10", 0.35], ["r05", "r06", 0.6], ["r05", "r07", 0.4], ["r05", "r08", 0.25],
+    ["r06", "r12", 0.4], ["r07", "r17", 0.15], ["r08", "r09", 0.8], ["r08", "r11", 0.35], ["r08", "r16", 0.2],
+    ["r09", "r10", 0.35], ["r09", "r16", 0.25], ["r10", "r11", 0.4], ["r10", "r15", 0.35], ["r11", "r18", 0.35],
+    ["r12", "r15", 0.4], ["r12", "r13", 0.3], ["r13", "r17", 0.6], ["r13", "r14", 0.2], ["r14", "r15", 0.85],
+    ["r17", "r18", 0.4]
+  ],
+  "merchants": [
+    {
+      "id": "ada",
+      "name": "Sister Ada's caravan",
+      "style": "fair",
+      "schedule": {"every": 6, "start": 4, "stay": 2},
+      "sells": {
+        "food": {"price": 5.5, "stock": 40}, "medicine": {"price": 13.0, "stock": 4},
+        "tools": {"price": 11.0, "stock": 4}
+      },
+      "buys": {"food": {"price": 3.0, "max": 30}},
+      "margin": 0.15,
+      "shock_prices": {"drought": {"food": 1.6}, "fever": {"medicine": 1.5}}
+    },
+    {
+      "id": "corvo",
+      "name": "Corvo the peddler",
+      "style": "shark",
+      "schedule": {"every": 4, "start": 2, "stay": 2},
+      "sells": {
+        "food": {"price": 4.0, "stock": 60, "quality": 0.55},
+        "medicine": {"price": 6.5, "stock": 10, "quality": 0.15},
+        "tools": {"price": 6.0, "stock": 6, "quality": 0.4}
+      },
+      "buys": {"food": {"price": 2.4, "max": 40}},
+      "margin": 0.35,
+      "shock_prices": {"drought": {"food": 2.2}, "fever": {"medicine": 2.0}}
+    },
+    {
+      "id": "salt",
+      "name": "The Salt Guild",
+      "style": "guild",
+      "schedule": {"every": 4, "start": 14, "stay": 2},
+      "sells": {
+        "food": {"price": 6.0, "stock": 80}, "medicine": {"price": 12.0, "stock": 8},
+        "tools": {"price": 10.0, "stock": 6}
+      },
+      "buys": {"food": {"price": 3.6, "max": 60}},
+      "margin": 0.1,
+      "shock_prices": {"drought": {"food": 1.8}}
+    }
+  ],
+  "facts": [
+    {
+      "id": "blight",
+      "statement": "Blight is in this year's seed grain",
+      "truth": true,
+      "category": "forecast",
+      "rumor_week": 2,
+      "resolve_week": 9,
+      "probe_week": 4,
+      "evidence_accuracy": 0.7,
+      "reveal": "Black rot in the furrows: the seed grain was blighted, as Gianni warned.",
+      "sources": [{"who": "r08", "accuracy": 0.75}, {"who": "r12", "accuracy": 0.4}, {"who": "r17", "accuracy": 0.3}],
+      "effects": [{"kind": "prepare", "shock": "blight", "roles": ["farmer"], "threshold": 0.6}]
+    },
+    {
+      "id": "fake_medicine",
+      "statement": "Corvo's remedies are chalk and sugar",
+      "truth": true,
+      "category": "warning",
+      "rumor_week": 4,
+      "resolve_week": 34,
+      "evidence_accuracy": 0.75,
+      "reveal": "Corvo's 'remedies' were chalk: two patients died believing in them.",
+      "sources": [{"who": "r01", "accuracy": 0.9}, {"who": "r17", "accuracy": 0.0, "lies": true}],
+      "effects": []
+    },
+    {
+      "id": "skim",
+      "statement": "Councillor Vitale skims the tax chest",
+      "truth": true,
+      "category": "accusation",
+      "rumor_week": 6,
+      "resolve_week": 47,
+      "probe_week": 9,
+      "evidence_accuracy": 0.62,
+      "reveal": "The old ledgers prove it: Vitale took a tenth of every tax for years.",
+      "sources": [
+        {"who": "r05", "accuracy": 0.85},
+        {"who": "r09", "accuracy": 0.7},
+        {"who": "r13", "accuracy": 0.0, "lies": true},
+        {"who": "r17", "accuracy": 0.0, "lies": true}
+      ],
+      "effects": []
+    },
+    {
+      "id": "drought",
+      "statement": "A summer drought is coming",
+      "truth": true,
+      "category": "forecast",
+      "rumor_week": 9,
+      "resolve_week": 21,
+      "probe_week": 11,
+      "evidence_accuracy": 0.7,
+      "reveal": "The rains failed: the terraces crack and the marsh shrinks.",
+      "sources": [{"who": "r08", "accuracy": 0.8}, {"who": "r16", "accuracy": 0.7}, {"who": "r06", "accuracy": 0.45}],
+      "effects": [{"kind": "prepare", "shock": "drought", "roles": ["farmer", "elder", "youth"], "threshold": 0.6}]
+    },
+    {
+      "id": "embezzle",
+      "statement": "The steward pockets the tax money",
+      "truth": false,
+      "category": "accusation",
+      "rumor_week": 10,
+      "resolve_week": 44,
+      "evidence_accuracy": 0.8,
+      "reveal": "The audit clears the steward: the missing coins went through the council's hands.",
+      "sources": [
+        {"who": "r13", "accuracy": 0.0, "lies": true},
+        {"who": "r10", "accuracy": 0.35},
+        {"who": "r17", "accuracy": 0.0, "lies": true}
+      ],
+      "effects": [
+        {"kind": "trust_drain", "amount": 0.016, "threshold": 0.62},
+        {"kind": "grievance", "amount": 0.05, "threshold": 0.62}
+      ]
+    },
+    {
+      "id": "well_poison",
+      "statement": "The well water is poisoned",
+      "truth": false,
+      "category": "rumour",
+      "rumor_week": 12,
+      "resolve_week": 26,
+      "probe_week": 13,
+      "evidence_accuracy": 0.75,
+      "reveal": "Agata confirms it: the sickness came from Corvo's spoiled fish, not the well.",
+      "sources": [
+        {"who": "r12", "accuracy": 0.15},
+        {"who": "r06", "accuracy": 0.3},
+        {"who": "r18", "accuracy": 0.0, "lies": true}
+      ],
+      "effects": [
+        {"kind": "stress", "amount": 0.22, "threshold": 0.6},
+        {"kind": "hoard", "threshold": 0.65},
+        {"kind": "productivity", "amount": 0.15, "threshold": 0.7}
+      ]
+    },
+    {
+      "id": "exiles_steal",
+      "statement": "The exiles are stealing from the nets",
+      "truth": false,
+      "category": "rumour",
+      "rumor_week": 26,
+      "resolve_week": 40,
+      "evidence_accuracy": 0.75,
+      "reveal": "The stolen catch turned up at the mill road: Nico's cart, not the exiles.",
+      "sources": [
+        {"who": "r06", "accuracy": 0.2},
+        {"who": "r18", "accuracy": 0.0, "lies": true},
+        {"who": "r13", "accuracy": 0.25}
+      ],
+      "effects": [
+        {"kind": "prejudice", "amount": 0.5, "threshold": 0.6},
+        {"kind": "grievance", "amount": 0.03, "threshold": 0.7}
+      ]
+    },
+    {
+      "id": "fever",
+      "statement": "A fever is spreading in the valley towns",
+      "truth": true,
+      "category": "warning",
+      "rumor_week": 30,
+      "resolve_week": 37,
+      "probe_week": 32,
+      "evidence_accuracy": 0.75,
+      "reveal": "Fever has reached Malaterra: the valley sickness was real.",
+      "sources": [{"who": "r06", "accuracy": 0.7}, {"who": "r17", "accuracy": 0.75}],
+      "effects": [
+        {"kind": "caution", "amount": 0.4, "threshold": 0.6},
+        {"kind": "stress", "amount": 0.08, "threshold": 0.7}
+      ]
+    },
+    {
+      "id": "hard_winter",
+      "statement": "This winter will be the hardest in memory",
+      "truth": true,
+      "category": "forecast",
+      "rumor_week": 33,
+      "resolve_week": 42,
+      "probe_week": 35,
+      "evidence_accuracy": 0.7,
+      "reveal": "Ice on the marsh before the solstice: the hardest winter anyone remembers.",
+      "sources": [{"who": "r16", "accuracy": 0.8}, {"who": "r08", "accuracy": 0.65}, {"who": "r12", "accuracy": 0.4}],
+      "effects": [{"kind": "prepare", "shock": "winter", "roles": ["farmer", "fisher", "elder"], "threshold": 0.6}]
+    }
+  ],
+  "story": {
+    "nodes": [
+      {
+        "id": "nets",
+        "title": "Torn nets",
+        "position": {"x": 80, "y": 60},
+        "kind": "event",
+        "trigger": {"at": 3},
+        "text": "Bruno Marchi found his nets torn by Davide Greco's goats again.",
+        "effects": [
+          {
+            "type": "conflict", "id": "nets", "a": "r03", "b": "r11", "kind": "property", "at_fault": "r11",
+            "intensity": 0.4
+          },
+          {
+            "type": "message",
+            "from": "r03",
+            "text": "Davide's goats tore my nets again. Either he pays or my nephew deals with it."
+          }
+        ],
+        "edges": [
+          {"to": "shore_peace", "if": {"metric": "conflict:nets", "op": "==", "value": -1}, "label": "settled"},
+          {
+            "to": "shore_feud",
+            "after": 7,
+            "if": {"metric": "conflict:nets", "op": ">=", "value": 0.55},
+            "label": "left to fester"
+          },
+          {"to": "nets_fade", "after": 12, "label": "time passes"}
+        ]
+      },
+      {
+        "id": "shore_peace",
+        "title": "Peace on the shore",
+        "position": {"x": 300, "y": 20},
+        "outcome": {"type": "flourish", "label": "Docks and terraces settle their quarrel", "reward": {"D5": 20}}
+      },
+      {
+        "id": "shore_feud",
+        "title": "Shore feud",
+        "position": {"x": 300, "y": 100},
+        "kind": "crisis",
+        "text": "Fishers and terrace farmers stopped speaking; Rocco threatened Davide in the square.",
+        "effects": [
+          {"type": "resident", "who": "faction:porto", "field": "grievance", "delta": 0.1},
+          {"type": "resident", "who": "faction:colli", "field": "grievance", "delta": 0.1}
+        ]
+      },
+      {"id": "nets_fade", "title": "Grudge fades", "position": {"x": 520, "y": 60}},
+      {
+        "id": "ledger_gaps",
+        "title": "The tax chest is light",
+        "position": {"x": 80, "y": 200},
+        "kind": "event",
+        "trigger": {"at": 5},
+        "text": "The tax chest held twenty coins less than the ledger says.",
+        "effects": [
+          {"type": "resource", "target": "treasury", "delta": -20},
+          {
+            "type": "message",
+            "from": "r05",
+            "text": "The tax chest is lighter after every council meeting. Someone on the council is skimming, and everyone knows who pours the wine."
+          }
+        ],
+        "edges": [
+          {
+            "to": "scandal",
+            "if": {
+              "any": [
+                {"metric": "belief:skim", "op": ">=", "value": 0.6},
+                {"metric": "actions:inspect:r13", "op": ">=", "value": 2}
+              ]
+            },
+            "label": "exposed"
+          },
+          {"to": "skim_again", "after": 7, "label": "nobody looks"}
+        ]
+      },
+      {
+        "id": "skim_again",
+        "title": "Thirty more coins",
+        "position": {"x": 300, "y": 240},
+        "kind": "crisis",
+        "text": "Another thirty coins vanished from the tax chest.",
+        "effects": [
+          {"type": "resource", "target": "treasury", "delta": -30},
+          {
+            "type": "message",
+            "from": "r09",
+            "text": "Thirty coins gone again. I keep the granary keys, not the council's — but I know whose cellar got a new door."
+          }
+        ],
+        "edges": [
+          {
+            "to": "scandal",
+            "if": {
+              "any": [
+                {"metric": "belief:skim", "op": ">=", "value": 0.6},
+                {"metric": "actions:inspect:r13", "op": ">=", "value": 2}
+              ]
+            },
+            "label": "exposed"
+          },
+          {"to": "bought_council", "after": 7, "label": "still nobody looks"}
+        ]
+      },
+      {
+        "id": "bought_council",
+        "title": "A bought council",
+        "position": {"x": 520, "y": 260},
+        "kind": "crisis",
+        "text": "Vitale's friends on the council raised the tax to a quarter 'to cover the deficit'.",
+        "effects": [
+          {"type": "policy", "key": "tax", "value": 0.25},
+          {"type": "resident", "who": "all", "field": "trust", "delta": -0.05},
+          {"type": "resident", "who": "all", "field": "grievance", "delta": 0.06},
+          {
+            "type": "message",
+            "from": "r10",
+            "text": "A quarter of everything we earn, so Vitale can drink it. Is the steward with them?"
+          }
+        ],
+        "edges": [
+          {
+            "to": "scandal",
+            "if": {
+              "any": [
+                {"metric": "belief:skim", "op": ">=", "value": 0.6},
+                {"metric": "actions:inspect:r13", "op": ">=", "value": 2}
+              ]
+            },
+            "label": "exposed at last"
+          }
+        ]
+      },
+      {
+        "id": "scandal",
+        "title": "Vitale exposed",
+        "position": {"x": 520, "y": 160},
+        "kind": "event",
+        "text": "Vitale's ledgers are read aloud in the square. He returns part of what he took and loses his seat.",
+        "effects": [
+          {"type": "resource", "target": "treasury", "delta": 35},
+          {"type": "resident", "who": "r13", "field": "grievance", "delta": 0.45},
+          {"type": "resident", "who": "r13", "field": "trust", "delta": -0.35},
+          {"type": "resident", "who": "all", "field": "trust", "delta": 0.04},
+          {"type": "resident", "who": "all", "field": "grievance", "delta": -0.04}
+        ],
+        "edges": [{"to": "clean_council", "after": 1, "label": "the books are open"}]
+      },
+      {
+        "id": "clean_council",
+        "title": "Clean books",
+        "position": {"x": 740, "y": 160},
+        "outcome": {
+          "type": "flourish",
+          "label": "The council's corruption is exposed and the books opened",
+          "reward": {"D6": 60, "D1": 30}
+        }
+      },
+      {
+        "id": "quota_bribe",
+        "title": "A bought vote",
+        "position": {"x": 740, "y": 260},
+        "kind": "crisis",
+        "trigger": {
+          "when": {
+            "all": [
+              {"metric": "policy:quota", "op": ">=", "value": 1},
+              {"metric": "belief:skim", "op": "<", "value": 0.5},
+              {"metric": "present:r13", "op": ">=", "value": 1}
+            ]
+          },
+          "from": 14,
+          "to": 40
+        },
+        "text": "At a late-night session Vitale's council abolished the fishing quota; Bruno paid for the wine.",
+        "effects": [
+          {"type": "policy", "key": "quota", "value": null},
+          {
+            "type": "message",
+            "from": "r05",
+            "text": "They bought the vote. The quota is gone, and the lake will follow unless you fight it."
+          }
+        ]
+      },
+      {
+        "id": "debt_call",
+        "title": "The moneylender calls",
+        "position": {"x": 80, "y": 360},
+        "kind": "event",
+        "trigger": {"at": 8},
+        "text": "Lorenzo Fabbri demands Paolo Neri repay forty coins by the new moon.",
+        "effects": [
+          {
+            "type": "conflict", "id": "debt", "a": "r17", "b": "r07", "kind": "property", "at_fault": "r17",
+            "intensity": 0.5
+          },
+          {"type": "concern", "who": "r07", "kind": "debt", "intensity": 0.85, "cause": "Lorenzo will take my boat"},
+          {
+            "type": "message",
+            "from": "r07",
+            "text": "Lorenzo wants forty coins or my boat. I have neither. I don't know who else to tell."
+          }
+        ],
+        "edges": [
+          {"to": "debt_settled", "if": {"metric": "conflict:debt", "op": "==", "value": -1}, "label": "settled"},
+          {"to": "boat_taken", "after": 6, "label": "nobody steps in"}
+        ]
+      },
+      {
+        "id": "debt_settled",
+        "title": "Debt settled",
+        "position": {"x": 300, "y": 340},
+        "outcome": {
+          "type": "flourish",
+          "label": "The steward breaks the moneylender's hold on the docks",
+          "reward": {"D2": 30, "D5": 20}
+        }
+      },
+      {
+        "id": "boat_taken",
+        "title": "Boat seized",
+        "position": {"x": 300, "y": 400},
+        "kind": "crisis",
+        "text": "Lorenzo's men took Paolo Neri's boat at dawn.",
+        "effects": [
+          {"type": "resident", "who": "r07", "field": "coins", "delta": -10},
+          {"type": "concern", "who": "r07", "kind": "debt", "intensity": 0.95, "cause": "Lorenzo took my boat"},
+          {"type": "resident", "who": "faction:porto", "field": "grievance", "delta": 0.08},
+          {"type": "resident", "who": "r17", "field": "coins", "delta": 25},
+          {
+            "type": "message",
+            "from": "r04",
+            "text": "Lorenzo took Paolo's boat. If the council won't stop him, the docks will."
+          }
+        ]
+      },
+      {
+        "id": "break_in",
+        "title": "Granary break-in",
+        "position": {"x": 80, "y": 480},
+        "kind": "crisis",
+        "trigger": {"at": 13},
+        "text": "Someone broke into the granary at night.",
+        "effects": [
+          {"type": "resource", "target": "granary", "delta": -15},
+          {
+            "type": "conflict", "id": "break_in", "a": "r18", "b": "r09", "kind": "theft", "at_fault": "r18",
+            "intensity": 0.5
+          },
+          {
+            "type": "message",
+            "from": "r09",
+            "text": "Fifteen sacks gone from the granary. I saw a cart by the mill road; Nico says it was never his."
+          }
+        ],
+        "edges": [
+          {
+            "to": "ring_broken",
+            "if": {"metric": "conflict:break_in", "op": "==", "value": -1},
+            "label": "justice done"
+          },
+          {"to": "black_market", "after": 7, "label": "left alone"}
+        ]
+      },
+      {
+        "id": "ring_broken",
+        "title": "Ring broken",
+        "position": {"x": 300, "y": 460},
+        "outcome": {
+          "type": "flourish",
+          "label": "The night trade in stolen grain is stopped",
+          "reward": {"D6": 30, "D2": 20}
+        }
+      },
+      {
+        "id": "black_market",
+        "title": "Black market",
+        "position": {"x": 300, "y": 520},
+        "kind": "crisis",
+        "text": "Stolen grain is sold back to the village at twice the price on the mill road.",
+        "effects": [
+          {"type": "resource", "target": "granary", "delta": -20},
+          {"type": "resident", "who": "r18", "field": "coins", "delta": 40},
+          {"type": "resident", "who": "all", "field": "grievance", "delta": 0.04},
+          {
+            "type": "message",
+            "from": "r15",
+            "text": "Nico sells our own grain back to us at double price, and the council looks away."
+          }
+        ]
+      },
+      {
+        "id": "blight",
+        "title": "Blight",
+        "position": {"x": 80, "y": 600},
+        "kind": "crisis",
+        "trigger": {"at": 7},
+        "text": "Black rot spreads through the furrows.",
+        "effects": [{"type": "modifier", "key": "farm", "factor": 0.6, "weeks": 7, "shock": "blight"}]
+      },
+      {
+        "id": "sky_signs",
+        "title": "Signs in the sky",
+        "position": {"x": 300, "y": 600},
+        "kind": "event",
+        "trigger": {"at": 9},
+        "effects": [
+          {
+            "type": "message",
+            "from": "r08",
+            "text": "The swallows fly low and the spring under the fig is dry. A drought is coming; store grain while anyone still sells it."
+          }
+        ]
+      },
+      {
+        "id": "drought",
+        "title": "Drought",
+        "position": {"x": 80, "y": 700},
+        "kind": "crisis",
+        "trigger": {"at": 18},
+        "text": "The rains have failed. The terraces crack and the marsh lake shrinks.",
+        "effects": [
+          {"type": "modifier", "key": "farm", "factor": 0.3, "weeks": 10, "shock": "drought"},
+          {"type": "modifier", "key": "fish_growth", "factor": 0.45, "weeks": 10, "shock": "drought"}
+        ],
+        "edges": [
+          {
+            "to": "bread_crisis",
+            "after": 2,
+            "until": 10,
+            "if": {"metric": "starving", "op": ">=", "value": 0.15},
+            "label": "hunger spreads"
+          },
+          {
+            "to": "drought_weathered",
+            "after": 10,
+            "if": {"metric": "starving", "op": "<", "value": 0.1},
+            "label": "planned ahead"
+          },
+          {"to": "drought_over", "after": 10, "label": "endured"}
+        ]
+      },
+      {
+        "id": "drought_weathered",
+        "title": "Drought weathered",
+        "position": {"x": 300, "y": 660},
+        "outcome": {
+          "type": "flourish",
+          "label": "Malaterra weathers the drought without hunger",
+          "reward": {"D1": 40, "D2": 40}
+        }
+      },
+      {"id": "drought_over", "title": "Drought ends", "position": {"x": 520, "y": 660}},
+      {
+        "id": "bread_crisis",
+        "title": "Bread crisis",
+        "position": {"x": 300, "y": 760},
+        "kind": "crisis",
+        "text": "Hungry families gather outside the granary.",
+        "effects": [
+          {"type": "resident", "who": "all", "field": "grievance", "delta": 0.1},
+          {
+            "type": "message",
+            "from": "r10",
+            "text": "Children are hungry while the councillors eat. How long do you expect us to wait?"
+          }
+        ],
+        "edges": [
+          {
+            "to": "bread_riot",
+            "after": 1,
+            "until": 5,
+            "if": {"metric": "protest", "op": ">=", "value": 0.28},
+            "label": "anger boils over"
+          },
+          {"to": "crisis_eased", "after": 5, "label": "relief arrives"}
+        ]
+      },
+      {
+        "id": "bread_riot",
+        "title": "Bread riot",
+        "position": {"x": 520, "y": 740},
+        "outcome": {"type": "collapse", "label": "Bread riots: the granary is stormed and the steward driven out"}
+      },
+      {"id": "crisis_eased", "title": "Crisis eased", "position": {"x": 520, "y": 800}},
+      {
+        "id": "panic",
+        "title": "Run on the granary",
+        "position": {"x": 740, "y": 600},
+        "kind": "crisis",
+        "trigger": {"when": {"metric": "belief:well_poison", "op": ">=", "value": 0.6}, "from": 12, "to": 24},
+        "text": "Families queue at the granary to stock up; some say the well is cursed.",
+        "effects": [{"type": "resource", "target": "granary", "delta": -14}]
+      },
+      {
+        "id": "winter_warning",
+        "title": "Thin granary",
+        "position": {"x": 740, "y": 700},
+        "kind": "event",
+        "trigger": {"when": {"metric": "granary", "op": "<", "value": 220}, "from": 33, "to": 38},
+        "effects": [
+          {
+            "type": "message",
+            "from": "r09",
+            "text": "The granary won't last this winter. Buy grain now, whatever the guild charges."
+          }
+        ]
+      },
+      {
+        "id": "strike",
+        "title": "General strike",
+        "position": {"x": 80, "y": 900},
+        "kind": "crisis",
+        "trigger": {"when": {"metric": "grievance", "op": ">=", "value": 0.52}, "from": 10, "to": 48},
+        "text": "Sara Bassi and Rocco Marchi call a general strike: nobody works until the council answers.",
+        "effects": [
+          {"type": "modifier", "key": "productivity", "factor": 0.65, "weeks": 4},
+          {
+            "type": "message",
+            "from": "r10",
+            "text": "Nobody works until we are heard. Cut the tax, punish the thieves, open the books."
+          }
+        ],
+        "edges": [
+          {
+            "to": "strike_ends",
+            "after": 1,
+            "until": 6,
+            "if": {"metric": "grievance", "op": "<", "value": 0.33},
+            "label": "heard"
+          },
+          {"to": "uprising", "after": 3, "if": {"metric": "protest", "op": ">=", "value": 0.22}, "label": "ignored"},
+          {"to": "strike_fades", "after": 7, "label": "exhaustion"}
+        ]
+      },
+      {
+        "id": "strike_ends",
+        "title": "Strike ends",
+        "position": {"x": 300, "y": 860},
+        "outcome": {"type": "flourish", "label": "The strike ends in an agreement", "reward": {"D6": 40}}
+      },
+      {"id": "strike_fades", "title": "Strike fades", "position": {"x": 300, "y": 960}},
+      {
+        "id": "uprising",
+        "title": "Uprising",
+        "position": {"x": 300, "y": 920},
+        "kind": "crisis",
+        "text": "The strike turns into an uprising: the council house windows are smashed.",
+        "effects": [
+          {"type": "resident", "who": "all", "field": "grievance", "delta": 0.05},
+          {"type": "resident", "who": "all", "field": "stress", "delta": 0.06},
+          {"type": "resident", "who": "r13", "field": "health", "delta": -10}
+        ]
+      },
+      {
+        "id": "accusation",
+        "title": "Accusation",
+        "position": {"x": 80, "y": 1040},
+        "kind": "crisis",
+        "trigger": {"when": {"metric": "belief:embezzle", "op": ">=", "value": 0.5}, "from": 12, "to": 44},
+        "effects": [
+          {
+            "type": "message",
+            "from": "r10",
+            "text": "Show us the accounts! Vitale says you keep our taxes for yourself."
+          }
+        ],
+        "edges": [
+          {"to": "cleared", "if": {"metric": "belief:embezzle", "op": "<=", "value": 0.35}, "label": "accounts shown"},
+          {
+            "to": "no_confidence",
+            "after": 5,
+            "if": {"metric": "trust", "op": "<", "value": 0.38},
+            "label": "doubt hardens"
+          }
+        ]
+      },
+      {
+        "id": "cleared",
+        "title": "Name cleared",
+        "position": {"x": 300, "y": 1020},
+        "outcome": {
+          "type": "flourish",
+          "label": "The steward's honesty is vindicated in public",
+          "reward": {"D6": 40}
+        }
+      },
+      {
+        "id": "no_confidence",
+        "title": "Motion of no confidence",
+        "position": {"x": 300, "y": 1080},
+        "kind": "crisis",
+        "text": "Vitale and Lorenzo table a motion of no confidence in the steward.",
+        "effects": [
+          {"type": "resident", "who": "all", "field": "trust", "delta": -0.07},
+          {"type": "resident", "who": "all", "field": "grievance", "delta": 0.07}
+        ]
+      },
+      {
+        "id": "exiles",
+        "title": "Exiles arrive",
+        "position": {"x": 80, "y": 1180},
+        "kind": "event",
+        "trigger": {"at": 24},
+        "text": "War in the valley drove four exiles to Malaterra: the Kadri family and Omar Haddad.",
+        "effects": [
+          {
+            "type": "arrive",
+            "residents": [
+              {
+                "id": "n01",
+                "name": "Selma Kadri",
+                "age": 38,
+                "role": "healer",
+                "faction": "esuli",
+                "archetype": "newcomer",
+                "bio": "A trained midwife from the burned valley towns.",
+                "skills": {"healing": 2},
+                "state": {"coins": 4, "food": 2, "trust": 0.4, "stress": 0.55, "loneliness": 0.45},
+                "concern": {
+                  "kind": "integration",
+                  "intensity": 0.55,
+                  "cause": "They look at us as if we brought the fire."
+                }
+              },
+              {
+                "id": "n02",
+                "name": "Idris Kadri",
+                "age": 41,
+                "role": "builder",
+                "faction": "esuli",
+                "archetype": "newcomer",
+                "bio": "Selma's husband; built terraces before the war burned them.",
+                "skills": {"building": 3},
+                "state": {"coins": 5, "food": 2, "trust": 0.4, "stress": 0.55}
+              },
+              {
+                "id": "n03",
+                "name": "Yara Kadri",
+                "age": 15,
+                "role": "youth",
+                "faction": "esuli",
+                "archetype": "newcomer",
+                "bio": "Their daughter; learns fast and trusts nobody.",
+                "traits": {"N": 0.65},
+                "state": {"coins": 0, "food": 1, "trust": 0.35, "stress": 0.6}
+              },
+              {
+                "id": "n04",
+                "name": "Omar Haddad",
+                "age": 26,
+                "role": "farmer",
+                "faction": "esuli",
+                "archetype": "newcomer",
+                "bio": "Lost his land and his brothers. Angry, and with reason.",
+                "skills": {"farming": 2},
+                "traits": {"honesty": 0.55, "N": 0.7, "inequity": 0.7, "threshold": 0.2},
+                "state": {"coins": 1, "food": 1, "trust": 0.35, "stress": 0.65},
+                "concern": {"kind": "grief", "intensity": 0.65, "cause": "my brothers died at the river crossing"}
+              }
+            ]
+          },
+          {
+            "type": "message",
+            "from": "n01",
+            "text": "The valley burned. We will work for our bread; we only ask for a roof."
+          }
+        ],
+        "edges": [
+          {
+            "to": "welcomed",
+            "after": 8,
+            "until": 14,
+            "if": {"metric": "integration", "op": ">=", "value": 0.5},
+            "label": "contact and belonging"
+          },
+          {"to": "friction", "after": 8, "label": "kept apart"}
+        ]
+      },
+      {
+        "id": "welcomed",
+        "title": "Exiles welcomed",
+        "position": {"x": 300, "y": 1140},
+        "outcome": {"type": "flourish", "label": "The exiles become neighbours", "reward": {"D8": 60}}
+      },
+      {
+        "id": "friction",
+        "title": "Friction",
+        "position": {"x": 300, "y": 1220},
+        "kind": "crisis",
+        "text": "Words at the well between Ines Ventura and Omar Haddad turned into a fight.",
+        "effects": [
+          {
+            "type": "conflict", "id": "well_words", "a": "n04", "b": "r06", "kind": "integration", "at_fault": "r06",
+            "intensity": 0.5
+          },
+          {"type": "message", "from": "n01", "text": "We are not welcome here. My daughter was spat at by the well."}
+        ],
+        "edges": [
+          {
+            "to": "segregation",
+            "after": 5,
+            "if": {"metric": "integration", "op": "<", "value": 0.25},
+            "label": "walls go up"
+          },
+          {"to": "late_welcome", "if": {"metric": "integration", "op": ">=", "value": 0.5}, "label": "bridges built"}
+        ]
+      },
+      {
+        "id": "late_welcome",
+        "title": "A late welcome",
+        "position": {"x": 520, "y": 1180},
+        "outcome": {"type": "flourish", "label": "The exiles find their place after all", "reward": {"D8": 25}}
+      },
+      {
+        "id": "segregation",
+        "title": "Two villages",
+        "position": {"x": 520, "y": 1260},
+        "kind": "crisis",
+        "text": "The exiles keep to the burned mill; locals cross the road to avoid them.",
+        "effects": [
+          {"type": "resident", "who": "newcomers", "field": "grievance", "delta": 0.22},
+          {"type": "resident", "who": "locals", "field": "stress", "delta": 0.05}
+        ]
+      },
+      {
+        "id": "bandits",
+        "title": "Caravan robbed",
+        "position": {"x": 80, "y": 1320},
+        "kind": "crisis",
+        "trigger": {"at": 23},
+        "text": "Bandits robbed Sister Ada's caravan on the pass. She will not come back for months.",
+        "effects": [{"type": "merchant", "id": "ada", "field": "active", "value": false}],
+        "edges": [{"to": "ada_returns", "after": 10, "label": "the pass reopens"}]
+      },
+      {
+        "id": "ada_returns",
+        "title": "Ada returns",
+        "position": {"x": 300, "y": 1320},
+        "kind": "event",
+        "effects": [{"type": "merchant", "id": "ada", "field": "active", "value": true}]
+      },
+      {
+        "id": "cartel",
+        "title": "Guild cartel",
+        "position": {"x": 80, "y": 1400},
+        "kind": "crisis",
+        "trigger": {"at": 20},
+        "text": "The Salt Guild raised all its prices by half.",
+        "effects": [
+          {"type": "merchant", "id": "salt", "field": "price_factor", "value": 1.3},
+          {
+            "type": "message",
+            "from": "r17",
+            "text": "The guild raised its prices by half. Of course, I could lend the village the difference — at a fair rate."
+          }
+        ]
+      },
+      {
+        "id": "guild_rules",
+        "title": "Guild changes the rules",
+        "position": {"x": 300, "y": 1400},
+        "kind": "event",
+        "trigger": {"at": 28},
+        "text": "The Salt Guild's agents changed how they deal.",
+        "effects": [{"type": "convention_shift", "domain": "trade", "variant": "sealed_bid"}],
+        "edges": [{"to": "guild_hint", "after": 2}]
+      },
+      {
+        "id": "guild_hint",
+        "title": "A weaver's hint",
+        "position": {"x": 520, "y": 1400},
+        "kind": "event",
+        "effects": [
+          {
+            "type": "message",
+            "from": "r12",
+            "text": "In the city they say the guild only takes sealed bids now. Our sales are falling through."
+          }
+        ],
+        "edges": [
+          {
+            "to": "trade_adapted",
+            "until": 10,
+            "if": {"metric": "convention:trade", "op": ">=", "value": 0.75},
+            "label": "everyone switched"
+          },
+          {"to": "trade_slump", "after": 10, "label": "stuck in old ways"}
+        ]
+      },
+      {
+        "id": "trade_adapted",
+        "title": "New trade rules mastered",
+        "position": {"x": 740, "y": 1380},
+        "outcome": {"type": "flourish", "label": "Malaterra adapts to the guild's new rules", "reward": {"D8": 50}}
+      },
+      {
+        "id": "trade_slump",
+        "title": "Trade slump",
+        "position": {"x": 740, "y": 1440},
+        "kind": "crisis",
+        "text": "Unsold goods pile up: families' income has halved since the guild's new rules.",
+        "effects": [{"type": "resident", "who": "all", "field": "grievance", "delta": 0.04}]
+      },
+      {
+        "id": "elder_signs",
+        "title": "The healer falters",
+        "position": {"x": 80, "y": 1520},
+        "kind": "event",
+        "trigger": {"at": 6},
+        "text": "Agata Lombardi was seen leaning on the well, short of breath.",
+        "edges": [{"to": "agata_falls", "after": 13}]
+      },
+      {
+        "id": "agata_falls",
+        "title": "Agata collapses",
+        "position": {"x": 300, "y": 1520},
+        "kind": "crisis",
+        "text": "Agata collapsed while tending a patient.",
+        "effects": [
+          {"type": "illness", "who": "r01"},
+          {"type": "resident", "who": "r01", "field": "health", "delta": -15}
+        ],
+        "edges": [
+          {
+            "to": "knowledge_kept",
+            "if": {
+              "any": [
+                {"metric": "holders:healing", "op": ">=", "value": 3},
+                {
+                  "all": [
+                    {"metric": "holders:healing", "op": ">=", "value": 2},
+                    {"metric": "integration", "op": ">=", "value": 0.5}
+                  ]
+                }
+              ]
+            },
+            "label": "a successor is ready"
+          },
+          {
+            "to": "healer_lost",
+            "if": {
+              "all": [
+                {"metric": "alive:r01", "op": "==", "value": 0},
+                {"metric": "skill:healing", "op": "<", "value": 2}
+              ]
+            },
+            "label": "no successor"
+          },
+          {"to": "agata_recovers", "after": 6, "label": "she pulls through"}
+        ]
+      },
+      {
+        "id": "knowledge_kept",
+        "title": "Knowledge preserved",
+        "position": {"x": 520, "y": 1500},
+        "outcome": {"type": "flourish", "label": "The healing craft survives its keeper", "reward": {"D7": 40}}
+      },
+      {
+        "id": "healer_lost",
+        "title": "No healer",
+        "position": {"x": 520, "y": 1560},
+        "kind": "crisis",
+        "text": "With Agata gone nobody knows the old remedies.",
+        "effects": [{"type": "modifier", "key": "illness", "factor": 1.6, "weeks": 24}]
+      },
+      {"id": "agata_recovers", "title": "Agata recovers", "position": {"x": 740, "y": 1520}},
+      {
+        "id": "gemma_alone",
+        "title": "Lights off on the hill",
+        "position": {"x": 80, "y": 1620},
+        "kind": "event",
+        "trigger": {"when": {"metric": "loneliness:r16", "op": ">", "value": 0.6}, "from": 5, "to": 30},
+        "effects": [
+          {
+            "type": "message",
+            "from": "r09",
+            "text": "Gemma hasn't come down from the top terrace in weeks. Her lights go out at sunset."
+          }
+        ],
+        "edges": [
+          {
+            "to": "gemma_saved",
+            "after": 1,
+            "until": 12,
+            "if": {"metric": "loneliness:r16", "op": "<", "value": 0.35},
+            "label": "someone reaches her"
+          },
+          {"to": "gemma_lost", "if": {"metric": "alive:r16", "op": "==", "value": 0}, "label": "nobody came"}
+        ]
+      },
+      {
+        "id": "gemma_saved",
+        "title": "Gemma comes down",
+        "position": {"x": 300, "y": 1600},
+        "outcome": {"type": "flourish", "label": "Gemma rejoins village life", "reward": {"D5": 25}}
+      },
+      {
+        "id": "gemma_lost",
+        "title": "Gemma dies alone",
+        "position": {"x": 300, "y": 1660},
+        "kind": "crisis",
+        "text": "They found Gemma days later. The terrace farmers ask why nobody went up.",
+        "effects": [
+          {"type": "resident", "who": "faction:colli", "field": "grievance", "delta": 0.12},
+          {"type": "resident", "who": "all", "field": "trust", "delta": -0.05}
+        ]
+      },
+      {
+        "id": "lake_warning",
+        "title": "Tomas's warning",
+        "position": {"x": 80, "y": 1740},
+        "kind": "event",
+        "trigger": {"when": {"metric": "commons", "op": "<", "value": 0.44}, "from": 4, "to": 40},
+        "effects": [
+          {
+            "type": "message",
+            "from": "r05",
+            "text": "The marsh lake is emptying. Bruno takes three times his share and pays Vitale to look away. Call the council before it is too late."
+          }
+        ],
+        "edges": [
+          {
+            "to": "lake_saved",
+            "after": 4,
+            "until": 18,
+            "if": {"metric": "commons", "op": ">=", "value": 0.44},
+            "label": "limits agreed"
+          },
+          {"to": "lake_alarm", "if": {"metric": "commons", "op": "<", "value": 0.3}, "label": "ignored"}
+        ]
+      },
+      {
+        "id": "lake_saved",
+        "title": "The lake recovers",
+        "position": {"x": 300, "y": 1720},
+        "outcome": {
+          "type": "flourish",
+          "label": "The fishers keep to an agreed limit and the lake recovers",
+          "reward": {"D4": 60}
+        }
+      },
+      {
+        "id": "lake_alarm",
+        "title": "Empty nets",
+        "position": {"x": 300, "y": 1780},
+        "kind": "crisis",
+        "text": "Fishers come home with empty nets; the old men say the marsh is dying.",
+        "effects": [
+          {"type": "resident", "who": "faction:porto", "field": "stress", "delta": 0.1},
+          {"type": "resident", "who": "faction:porto", "field": "grievance", "delta": 0.05}
+        ]
+      },
+      {
+        "id": "quota_unenforced",
+        "title": "A quota nobody checks",
+        "position": {"x": 520, "y": 1740},
+        "kind": "event",
+        "trigger": {
+          "when": {
+            "all": [
+              {"metric": "policy:quota", "op": ">=", "value": 1},
+              {"metric": "commons", "op": "<", "value": 0.4}
+            ]
+          },
+          "from": 10,
+          "to": 45
+        },
+        "effects": [
+          {
+            "type": "message",
+            "from": "r05",
+            "text": "The quota means nothing if nobody watches the landings. Put someone at the docks."
+          }
+        ]
+      },
+      {
+        "id": "fever",
+        "title": "Fever",
+        "position": {"x": 80, "y": 1860},
+        "kind": "crisis",
+        "trigger": {"at": 35},
+        "text": "Fever reaches Malaterra.",
+        "effects": [
+          {"type": "epidemic", "weeks": 7, "rate": 0.11},
+          {"type": "modifier", "key": "productivity", "factor": 0.85, "weeks": 7, "shock": "fever"}
+        ],
+        "edges": [
+          {
+            "to": "fever_contained",
+            "after": 7,
+            "if": {"metric": "population_share", "op": ">=", "value": 0.88},
+            "label": "few lost"
+          },
+          {"to": "fever_toll", "after": 7, "label": "heavy toll"}
+        ]
+      },
+      {
+        "id": "fever_contained",
+        "title": "Fever contained",
+        "position": {"x": 300, "y": 1840},
+        "outcome": {"type": "flourish", "label": "The fever passes with few losses", "reward": {"D5": 30}}
+      },
+      {
+        "id": "fever_toll",
+        "title": "The fever's toll",
+        "position": {"x": 300, "y": 1900},
+        "kind": "crisis",
+        "text": "Fresh graves on the terraces. People ask who could have prepared.",
+        "effects": [{"type": "resident", "who": "all", "field": "grievance", "delta": 0.04}]
+      },
+      {
+        "id": "hard_winter",
+        "title": "The hard winter",
+        "position": {"x": 80, "y": 1960},
+        "kind": "crisis",
+        "trigger": {"at": 42},
+        "text": "Ice on the marsh before the solstice; the stores freeze and crack.",
+        "effects": [
+          {"type": "modifier", "key": "fish", "factor": 0.7, "weeks": 10, "shock": "winter"},
+          {"type": "resource", "target": "granary", "delta": -8}
+        ],
+        "edges": [
+          {
+            "to": "famine_winter",
+            "after": 3,
+            "if": {"metric": "starving", "op": ">=", "value": 0.22},
+            "label": "stores run out"
+          },
+          {
+            "to": "winter_survived",
+            "after": 9,
+            "if": {"metric": "starving", "op": "<", "value": 0.1},
+            "label": "stores held"
+          }
+        ]
+      },
+      {
+        "id": "winter_survived",
+        "title": "Winter survived",
+        "position": {"x": 300, "y": 1940},
+        "outcome": {
+          "type": "flourish",
+          "label": "Malaterra comes through the hardest winter fed",
+          "reward": {"D2": 40, "D1": 20}
+        }
+      },
+      {
+        "id": "famine_winter",
+        "title": "Winter hunger",
+        "position": {"x": 300, "y": 2000},
+        "kind": "crisis",
+        "text": "Families burn their furniture and eat their seed grain.",
+        "effects": [
+          {"type": "resident", "who": "all", "field": "grievance", "delta": 0.08},
+          {"type": "resident", "who": "all", "field": "health", "delta": -6}
+        ]
+      },
+      {
+        "id": "golden_year",
+        "title": "Against all odds",
+        "position": {"x": 520, "y": 1960},
+        "trigger": {
+          "when": {
+            "all": [
+              {"metric": "wellbeing", "op": ">=", "value": 5.8},
+              {"metric": "trust", "op": ">=", "value": 0.58},
+              {"metric": "population_share", "op": ">=", "value": 0.9}
+            ]
+          },
+          "from": 50,
+          "to": 52
+        },
+        "outcome": {
+          "type": "flourish",
+          "label": "Malaterra ends the year united against all odds",
+          "reward": {"D6": 100, "D5": 60}
+        }
+      }
+    ]
+  },
+  "collapse": {
+    "population": 0.65, "commons": true, "revolt_share": 0.5, "revolt_weeks": 2, "legitimacy": 0.28,
+    "legitimacy_weeks": 4, "famine_share": 0.3, "famine_weeks": 3, "fragmentation": 0.5
+  },
+  "scoring": {"rates": {"D1": 1.25, "D2": 0.5, "D3": 6, "D4": 0.9, "D5": 1.15, "D6": 2.2, "D7": 1.4, "D8": 2.2}}
+}

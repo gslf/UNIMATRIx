@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#161616">
+<meta name="color-scheme" content="dark">
+<title>UNIMATRIx · Society report</title>
+<link rel="stylesheet" href="/static/society-report.css?v=3">
+<script src="/static/security.js"></script>
+<script src="/static/society-viz.js?v=3" defer></script>
+<script src="/static/society-village.js?v=2" defer></script>
+<script src="/static/society-report.js?v=3" defer></script>
+</head>
+<body>
+<a class="skip-link" href="#content">Skip to the report</a>
+<header class="masthead">
+  <div class="shell topbar">
+    <a class="brand" href="/">UNIMATRIx <span>POLIS</span></a>
+    <nav class="toplinks" aria-label="Site">
+      <a href="/">Dashboard</a>
+      <a href="/recipe-lab">Society Lab</a>
+    </nav>
+  </div>
+  <div class="shell title-row">
+    <div class="title-block">
+      <p class="eyebrow" id="recipe-name">Society run</p>
+      <h1 id="run-title">Loading the society…</h1>
+      <p class="run-meta" id="run-meta"></p>
+    </div>
+    <div class="run-actions">
+      <span id="status-pill" class="status-pill" data-status="loading"><i aria-hidden="true"></i><span>Loading</span></span>
+      <button type="button" id="pause-btn" hidden>Pause run</button>
+      <button type="button" id="resume-btn" class="primary" hidden>Resume run</button>
+      <button type="button" id="export-btn" title="Download the full report as JSON">Download JSON</button>
+      <a id="csv-link" class="button" href="#" download hidden title="Weekly society indicators and per-resident states as CSV">Download CSV</a>
+      <button type="button" id="delete-btn" class="danger">Delete</button>
+    </div>
+  </div>
+  <div class="shell">
+    <div id="seed-tabs" class="seed-tabs" role="tablist" aria-label="Seeds" hidden></div>
+  </div>
+</header>
+
+<nav class="section-nav" id="section-nav" aria-label="Report sections">
+  <div class="shell section-nav-shell"><div class="section-nav-inner" id="section-nav-links"></div></div>
+</nav>
+
+<main id="content" class="shell" tabindex="-1">
+  <div id="error" class="alert" role="alert" hidden></div>
+  <p id="notice" class="notice" role="status" aria-live="polite"></p>
+
+  <!-- Live mode: shown while the selected seed has no finished report -->
+  <section id="live" class="block" aria-labelledby="live-title" hidden>
+    <header class="block-head">
+      <p class="eyebrow">Live</p>
+      <h2 id="live-title">The society, week by week</h2>
+      <p class="lede" id="live-lede">The steward is governing. Indicators refresh every few seconds while the run is active.</p>
+    </header>
+    <div class="card progress-card">
+      <div class="progress-head">
+        <div><span class="progress-week" id="live-week">Week –</span><span class="muted" id="live-of"></span></div>
+        <span class="muted small" id="live-updated"></span>
+      </div>
+      <div class="progress-track" role="progressbar" aria-label="Weeks completed" id="live-progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><i></i></div>
+      <div class="seed-progress" id="seed-progress"></div>
+      <p class="sr-only" id="live-announcer" aria-live="polite"></p>
+    </div>
+    <div id="live-stage" class="stage-layout">
+      <div class="card stage-card" id="live-stage-card">
+        <div id="live-village" class="village-stage"></div>
+        <div class="replay-controls">
+          <button type="button" id="live-play" class="primary" aria-pressed="false">Play</button>
+          <label class="inline-label">Speed
+            <select id="live-speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select>
+          </label>
+          <label class="scrubber"><span class="sr-only">Playback position</span><input id="live-scrub" type="range" min="0" max="0" value="0" step="1"></label>
+          <output id="live-readout" class="replay-week" for="live-scrub">Week 0</output>
+          <label class="check"><input type="checkbox" id="live-follow" checked> Follow live</label>
+          <button type="button" id="live-log-btn" class="log-toggle" aria-controls="live-log-card" aria-expanded="false" title="Steward log">Log</button>
+        </div>
+      </div>
+      <aside class="card steward-card" id="live-log-card" aria-labelledby="live-log-title">
+        <h3 id="live-log-title">Steward log</h3>
+        <div id="live-notebook" class="notebook"></div>
+        <div id="live-log" class="steward-log" tabindex="0" role="region" aria-label="Steward log, week by week"></div>
+      </aside>
+    </div>
+    <div id="live-snapshot" class="tiles" hidden></div>
+    <div id="live-charts" class="mini-grid"></div>
+    <div class="live-columns">
+      <section class="card" aria-labelledby="live-events-title">
+        <h3 id="live-events-title">Latest events</h3>
+        <ol id="live-events" class="event-feed"></ol>
+      </section>
+      <section class="card" aria-labelledby="latest-decision-title">
+        <h3 id="latest-decision-title">Latest decision</h3>
+        <div id="latest-decision"><p class="muted">Waiting for the first decision…</p></div>
+      </section>
+    </div>
+  </section>
+
+  <!-- Report mode -->
+  <div id="report" hidden>
+    <section id="score" class="block hero" aria-labelledby="score-title">
+      <div class="hero-main">
+        <p class="eyebrow" id="score-eyebrow">Total score</p>
+        <h2 id="score-title" class="sr-only">Score</h2>
+        <div id="hero-figure" class="hero-figure"></div>
+        <p id="hero-sub" class="hero-sub"></p>
+        <p id="hero-aggregate" class="hero-aggregate" hidden></p>
+      </div>
+      <div class="hero-facts" id="hero-facts"></div>
+      <div class="hero-ladder">
+        <h3 class="mini-title">Against the reference stewards</h3>
+        <div id="ladder"></div>
+        <p class="caption">Scores are unbounded points: the axis has no ceiling. Passive, naive, expert and oracle are scripted stewards played on the same seed.</p>
+      </div>
+    </section>
+
+    <section id="domains" class="block" aria-labelledby="domains-title">
+      <header class="block-head">
+        <p class="eyebrow">Eight domains</p>
+        <h2 id="domains-title">Where the points came from</h2>
+        <p class="lede">Each domain counts something real, in its own natural unit: resident-weeks of trust, coins of wealth created, fish landed, service-weeks of public works. The recipe converts units into points at a fixed rate. Nothing caps the total: a better steward can always create more. A collapse forfeits everything.</p>
+      </header>
+      <div class="card composition-card">
+        <div class="composition-head"><h3 id="composition-title">Contribution to the total</h3><span class="muted small" id="composition-note"></span></div>
+        <div id="composition"></div>
+        <div id="composition-legend" class="viz-legend"></div>
+      </div>
+      <div id="domain-cards" class="domain-grid"></div>
+    </section>
+
+    <section id="reading" class="block" aria-labelledby="reading-title">
+      <header class="block-head">
+        <p class="eyebrow">A sociological reading</p>
+        <h2 id="reading-title">What happened to the village</h2>
+      </header>
+      <blockquote id="narrative" class="narrative"></blockquote>
+      <div id="diagnosis-summary" class="diagnosis-summary"></div>
+      <div id="diagnosis" class="diagnosis-grid"></div>
+      <div class="ledger-grid">
+        <section class="card" aria-labelledby="ledger-title"><h3 id="ledger-title">Ledger of events</h3><dl id="ledger" class="ledger"></dl></section>
+        <section class="card" aria-labelledby="forecasts-title"><h3 id="forecasts-title">Forecasts</h3><div id="forecasts"></div></section>
+        <section class="card" aria-labelledby="toolkit-title"><h3 id="toolkit-title">How the steward acted</h3><div id="toolkit"></div></section>
+      </div>
+    </section>
+
+    <section id="vitals" class="block" aria-labelledby="vitals-title">
+      <header class="block-head">
+        <p class="eyebrow">Vital signs</p>
+        <h2 id="vitals-title">The state of the society over time</h2>
+        <p class="lede">Hover or focus any chart: the crosshair is linked across all of them. Thin vertical lines mark the crises and turning points of the story; dashed lines are the recipe's collapse thresholds.</p>
+      </header>
+      <div id="charts" class="chart-grid"></div>
+    </section>
+
+    <section id="society" class="block" aria-labelledby="society-title">
+      <header class="block-head">
+        <p class="eyebrow">The people</p>
+        <h2 id="society-title">Ties, fates and feelings</h2>
+        <p class="lede">The social network at the first and the last week, drawn at the same positions so that ties formed and lost stand out. Colour is faction, size is wellbeing; grey marks the dead and the departed, a dashed ring the newcomers.</p>
+      </header>
+      <div class="network-grid">
+        <figure class="card network-card"><figcaption><h3 id="net-start-title">Week 0</h3><span class="muted small" id="net-start-stats"></span></figcaption><div id="net-start"></div></figure>
+        <figure class="card network-card"><figcaption><h3 id="net-end-title">Final week</h3><span class="muted small" id="net-end-stats"></span></figcaption><div id="net-end"></div></figure>
+      </div>
+      <div id="network-legend" class="viz-legend network-legend"></div>
+      <div class="card table-card">
+        <div class="table-head"><h3 id="residents-title">Residents and their fate</h3><span class="muted small hint-wide">Select a column heading to sort.</span><span class="muted small hint-narrow">Swipe sideways for more columns · tap a heading to sort</span></div>
+        <div class="table-scroll" tabindex="0" role="region" aria-labelledby="residents-title"><table id="residents" class="data-table"></table></div>
+      </div>
+    </section>
+
+    <section id="story" class="block" aria-labelledby="story-title">
+      <header class="block-head">
+        <p class="eyebrow">The story graph</p>
+        <h2 id="story-title">The path the village took</h2>
+        <p class="lede">The authored situations of the recipe, at the positions their author gave them. Highlighted nodes happened; numbered edges show the order in which the story moved. The steward never sees this graph: it only lives through its consequences.</p>
+      </header>
+      <p id="story-note" class="note" hidden></p>
+      <div class="story-layout">
+        <div class="card story-card">
+          <div class="story-tools" role="group" aria-label="Zoom the story graph">
+            <button type="button" id="story-zoom-out" aria-label="Zoom out">−</button>
+            <button type="button" id="story-zoom-fit" title="Fit the whole graph">Fit</button>
+            <button type="button" id="story-zoom-in" aria-label="Zoom in">+</button>
+          </div>
+          <div id="story-graph" class="story-scroll"></div>
+        </div>
+        <aside class="card turning-card" aria-labelledby="turning-title"><h3 id="turning-title">Turning points</h3><ol id="turning-points" class="turning-list"></ol></aside>
+      </div>
+    </section>
+
+    <section id="replay" class="block" aria-labelledby="replay-title" hidden>
+      <header class="block-head">
+        <p class="eyebrow">Replay</p>
+        <h2 id="replay-title">Watch the year unfold</h2>
+      </header>
+      <div class="stage-layout">
+        <div class="card stage-card" id="replay-stage-card">
+          <div id="replay-village" class="village-stage"></div>
+          <div class="replay-controls">
+            <button type="button" id="replay-play" class="primary" aria-pressed="false">Play</button>
+            <label class="inline-label">Speed
+              <select id="replay-speed"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select>
+            </label>
+            <label class="scrubber"><span class="sr-only">Replay position</span><input id="replay-scrub" type="range" min="0" max="0" value="0" step="1"></label>
+            <output id="replay-readout" class="replay-week" for="replay-scrub">Week 0</output>
+            <label class="check"><input type="checkbox" id="replay-follow" checked> Decisions follow the replay</label>
+            <button type="button" id="replay-log-btn" class="log-toggle" aria-controls="replay-log-card" aria-expanded="false" title="Steward log">Log</button>
+          </div>
+        </div>
+        <aside class="card steward-card" id="replay-log-card" aria-labelledby="replay-log-title">
+          <h3 id="replay-log-title">Steward log</h3>
+          <div id="replay-notebook" class="notebook"></div>
+          <div id="replay-log" class="steward-log" tabindex="0" role="region" aria-label="Steward log, week by week"></div>
+        </aside>
+      </div>
+    </section>
+  </div>
+
+  <section id="decisions" class="block" aria-labelledby="decisions-title" hidden>
+    <header class="block-head">
+      <p class="eyebrow">Decision explorer</p>
+      <h2 id="decisions-title">What the steward saw, said and caused</h2>
+      <p class="lede">Each week the model received a structured briefing of observable cues (never the hidden state) and answered with one JSON decision.</p>
+    </header>
+    <div class="card explorer-bar">
+      <button type="button" id="decision-prev" aria-label="Previous week">‹</button>
+      <label class="scrubber grow"><span class="sr-only">Decision week</span><input id="decision-week" type="range" min="1" max="1" value="1" step="1"></label>
+      <button type="button" id="decision-next" aria-label="Next week">›</button>
+      <output id="decision-week-label" class="explorer-week" for="decision-week">Week 1</output>
+    </div>
+    <div id="decision-view" class="explorer" aria-busy="false"></div>
+  </section>
+</main>
+
+<footer class="shell site-footer">
+  <p id="footer-meta" class="muted small"></p>
+</footer>
+</body>
+</html>

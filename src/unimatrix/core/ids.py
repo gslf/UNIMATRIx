@@ -1,4 +1,4 @@
-"""Canonical serialization used by requests, events and immutable manifests."""
+"""Canonical JSON serialization and content hashes for runs, recipes and model configurations."""
 
 import hashlib
 import json
@@ -17,7 +17,3 @@ def digest_text(text: str) -> str:
 
 def digest(value) -> str:
     return digest_text(canonical(value))
-
-
-def entity_id(run, tick, slot, index):
-    return digest([run, tick, slot, index])[:24]

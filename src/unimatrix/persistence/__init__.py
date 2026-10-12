@@ -1,1 +1,1 @@
-"""Canonical event persistence for all simulation modes."""
+"""Atomic JSON files and single-writer leases."""

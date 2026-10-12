@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#121212">
+<meta name="description" content="UNIMATRIx Explorer: a static leaderboard of society runs and a week-by-week explorer of everything each steward did.">
+<title>UNIMATRIx Explorer</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Ccircle cx=%2216%22 cy=%2216%22 r=%2213%22 fill=%22none%22 stroke=%22%23b59a00%22 stroke-width=%222%22/%3E%3Ccircle cx=%2216%22 cy=%2210%22 r=%224%22 fill=%22%23e2c21c%22/%3E%3Ccircle cx=%2210%22 cy=%2220%22 r=%223.5%22 fill=%22%234aa3df%22/%3E%3Ccircle cx=%2222%22 cy=%2220%22 r=%223.5%22 fill=%22%238bc34a%22/%3E%3C/svg%3E">
+<link rel="stylesheet" href="explorer.css">
+<!-- Static and self-contained: the official xCDN library, the village renderer shared with UNIMATRIx, and the app. -->
+<script src="vendor/xcdn.js" defer></script>
+<script src="vendor/village.js" defer></script>
+<script src="data.js" defer></script>
+<script src="ui.js" defer></script>
+<script src="replay.js" defer></script>
+<script src="explorer.js" defer></script>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<header class="app-top">
+  <a class="brand" href="#/" aria-label="UNIMATRIx Explorer, leaderboard">
+    <span class="brand-mark" aria-hidden="true">
+      <svg viewBox="0 0 32 32" width="28" height="28"><defs><radialGradient id="bm" cx="50%" cy="40%" r="60%"><stop offset="0" stop-color="#ffe27a"/><stop offset="1" stop-color="#b59a00"/></radialGradient></defs><circle cx="16" cy="16" r="14" fill="none" stroke="url(#bm)" stroke-width="1.5" opacity=".7"/><circle cx="16" cy="9" r="3" fill="url(#bm)"/><circle cx="9" cy="20" r="3" fill="#4aa3df"/><circle cx="23" cy="20" r="3" fill="#8bc34a"/><path d="M16 9 9 20h14z" fill="none" stroke="#dedede" stroke-opacity=".35"/></svg>
+    </span>
+    <span class="brand-text">UNIMATRIx <span>EXPLORER</span></span>
+  </a>
+  <nav class="top-nav" aria-label="Main">
+    <a href="#/" id="nav-board" class="nav-link" aria-current="page"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16"/><path d="M6 20v-7h3v7M10.5 20V5h3v15M15 20v-10h3v10"/></svg><span>Leaderboard</span></a>
+  </nav>
+  <div class="top-actions">
+    <button type="button" class="source-pill" id="source-pill" data-kind="loading"><i aria-hidden="true"></i><span id="source-text">Loading…</span></button>
+    <button type="button" class="primary cta-top" id="load-btn" aria-label="Open .xcdn files"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 16V4M7 9l5-5 5 5M4 20h16"/></svg><span>Open files</span></button>
+  </div>
+</header>
+
+<main id="main" tabindex="-1"><div id="view"></div></main>
+
+<footer class="app-foot">
+  <p>UNIMATRIx Explorer · static and read-only · it reads xCDN files, never the application</p>
+  <p class="foot-keys">Run explorer keys: Space · ←/→ · [ ] · F · 1–4</p>
+</footer>
+
+<div id="toasts" class="toasts" role="status" aria-live="polite"></div>
+
+<div class="drop-overlay" id="drop-overlay" hidden>
+  <div class="drop-box">
+    <svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a1.5 1.5 0 0 1 1.5-1.5H9l2 2h8.5A1.5 1.5 0 0 1 21 9v8.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 17.5z"/></svg>
+    <b>Drop .xcdn files or folders</b>
+    <span>data/ with its index and runs, or single run files. Read in this tab only.</span>
+  </div>
+</div>
+
+<input type="file" id="file-input" accept=".xcdn" multiple hidden>
+<input type="file" id="folder-input" webkitdirectory multiple hidden>
+
+<dialog id="data-dialog" class="panel-dialog" aria-labelledby="data-title">
+  <div class="dd-head">
+    <div><p class="eyebrow">Static data</p><h2 id="data-title">Explorer data</h2></div>
+    <button type="button" class="icon-btn" id="data-close" aria-label="Close the data panel"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button>
+  </div>
+  <div id="data-body"></div>
+</dialog>
+
+<noscript><p class="noscript">The UNIMATRIx Explorer needs JavaScript.</p></noscript>
+</body>
+</html>
