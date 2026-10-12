@@ -39,15 +39,16 @@ class ContextConfigurationError(ValueError):
 class ModelClient:
     """Subclasses define the prompt (`system_prompt`, `render_prompt`) and `response_schema`."""
 
-    def __init__(self, config, client=None):
+    def __init__(self, config, client=None, instance=None):
+        """`instance` shares one loaded model between clients (parallel seeds of a run); the client
+        then leaves loading and unloading to whoever created it."""
         from .config import validate_model
 
         validate_model(config)
         self.config = deepcopy(config)
-
-        self._instance = ManagedModel(config)
+        self._instance = instance if instance is not None else ManagedModel(config)
+        self._owns_instance = instance is None
         self.instance_id = self._instance.identifier
-        self._instance_load_lock = self._instance.load_lock
         self.fingerprint = digest(config)
         self.request_timeout_seconds = config.get("request_timeout_seconds", 120)
         self.client = client or httpx.AsyncClient(
@@ -75,6 +76,14 @@ class ModelClient:
             async with asyncio.timeout(self.request_timeout_seconds):
                 if "context_tokens" in self.config:
                     return await self._decide_with_context(observation, diagnostic_tokens=diagnostic_tokens)
+                if not self._instance.ready:
+                    # A server that loads the model on its first request (LM Studio's just-in-time
+                    # loading) must see one request before the parallel ones, or it loads it twice.
+                    async with self._instance.load_lock:
+                        if not self._instance.ready:
+                            result = await self._decide_http(observation, diagnostic_tokens=diagnostic_tokens)
+                            self._instance.ready = True
+                            return result
                 return await self._decide_http(observation, diagnostic_tokens=diagnostic_tokens)
         except TimeoutError as error:
             raise InfrastructureFailure("provider_decision_timeout", retryable=False) from error
@@ -229,7 +238,9 @@ class ModelClient:
                 api_host=urlparse(self.config["endpoint"]).netloc,
                 api_token=token,
             ) as client:
-                async with self._instance_load_lock:
+                # Serialized so that parallel seeds sharing the instance load it at most once;
+                # their predictions below run concurrently on the same loaded weights.
+                async with self._instance.load_lock:
                     if self.instance_id and not self._instance.loaded:
                         if self._instance.load_failed:
                             raise InfrastructureFailure("managed_instance_load_incomplete", retryable=False)
@@ -246,6 +257,7 @@ class ModelClient:
                     else:
                         model = await client.llm.model(self.instance_id or self.config["model"], config=load_config,
                                                        **({"ttl": 120} if self.instance_id else {}))
+                    self._instance.ready = True
                 actual = await model.get_context_length()
                 if actual < context:
                     raise ContextConfigurationError(
@@ -340,6 +352,7 @@ class ModelClient:
 
     async def close(self):
         try:
-            await self._instance.close()
+            if self._owns_instance:
+                await self._instance.close()
         finally:
             await self.client.aclose()

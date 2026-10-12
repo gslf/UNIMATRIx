@@ -94,8 +94,8 @@ SCHEMA = {
 class StewardPolicy(ModelClient):
     """The steward prompt over the shared transport (retries, accounting, LM Studio control)."""
 
-    def __init__(self, config, recipe, client=None):
-        super().__init__(config, client)
+    def __init__(self, config, recipe, client=None, instance=None):
+        super().__init__(config, client, instance)
         self.recipe = recipe
         self._system = system_prompt(recipe)
 

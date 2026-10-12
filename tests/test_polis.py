@@ -202,7 +202,7 @@ async def test_society_runs_through_the_web_api(tmp_path, monkeypatch):
     import unimatrix.polis.llm as llm
     from unimatrix.web.polis import build_polis_router
 
-    monkeypatch.setattr(llm, "StewardPolicy", lambda config, recipe: ScriptedPolicy())
+    monkeypatch.setattr(llm, "StewardPolicy", lambda config, recipe, **shared: ScriptedPolicy())
     models = tmp_path / "models"
     models.mkdir()
     (models / "m.json").write_text(json.dumps({"model": "m", "snapshot": "s", "endpoint": "http://127.0.0.1:9",
@@ -258,6 +258,49 @@ def test_authored_recipes_live_outside_the_bundle(tmp_path, raw):
         repository.save(raw)
     repository.delete("harsher")
     assert list(repository.all()) == ["standard-v2", "hell-v1"]
+
+
+MODEL = {"model": "m", "snapshot": "s", "endpoint": "http://127.0.0.1:9", "budget_track": "opaque_compute",
+         "context_bytes_verified": 24000}
+
+
+@pytest.mark.asyncio
+async def test_parallel_seeds_share_one_model_instance(tmp_path, monkeypatch, raw):
+    import unimatrix.polis.llm as llm
+
+    shared = []
+
+    def steward(config, recipe, **kw):
+        shared.append(kw["instance"])
+        return ScriptedPolicy()
+
+    monkeypatch.setattr(llm, "StewardPolicy", steward)
+    service = SocietyService(tmp_path, PolisRecipes(tmp_path / "s"))
+    run = await service.start(MODEL, "m", normalize(dict(raw, id="twin", seeds=[1, 2])), parallelism=2)
+    await service.active[run["id"]][0]
+    assert service.read(run["id"])["status"] == "completed"
+    assert len(shared) == 2 and shared[0] is shared[1] and shared[0].closed
+
+
+@pytest.mark.asyncio
+async def test_a_failing_seed_stops_its_parallel_siblings(tmp_path, monkeypatch, raw):
+    import unimatrix.polis.llm as llm
+
+    class Broken(ScriptedPolicy):
+        async def decide(self, observation):
+            if observation["week"] == 3:
+                raise RuntimeError("provider exploded")
+            return await super().decide(observation)
+
+    policies = []
+    monkeypatch.setattr(llm, "StewardPolicy", lambda config, recipe, **kw: policies.append(
+        Broken() if not policies else ScriptedPolicy()) or policies[-1])
+    service = SocietyService(tmp_path, PolisRecipes(tmp_path / "s"))
+    run = await service.start(MODEL, "m", normalize(dict(raw, id="twin", seeds=[1, 2])), parallelism=2)
+    await service.active[run["id"]][0]
+    stored = service.read(run["id"])
+    assert stored["status"] == "failed" and "provider exploded" in stored["error"]
+    assert {s["status"] for s in stored["seeds"].values()} == {"paused"}
 
 
 def test_service_rejects_concurrent_runs(tmp_path, recipe):

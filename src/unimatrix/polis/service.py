@@ -142,6 +142,9 @@ class SocietyService:
             raise
         except Exception as error:  # recorded for the dashboard; the log allows a resume
             run.update(status="failed", error=f"{type(error).__name__}: {error}")
+            for seed in run["seeds"].values():
+                if seed["status"] == "running":
+                    seed["status"] = "paused"
         finally:
             self.save(run)
             active = self.active.pop(run["id"], None)
@@ -149,16 +152,19 @@ class SocietyService:
                 active[1].close()
 
     async def _execute(self, run):
+        from ..models.managed import ManagedModel
         from .llm import StewardPolicy
 
         recipe = run["recipe"]
         folder = self.folder(run["id"])
         pending = [s for s in run["seeds"].values() if s["status"] != "completed"]
         gate = asyncio.Semaphore(run["parallelism"])
+        # One loaded model for the whole run: parallel seeds are concurrent predictions on it.
+        instance = ManagedModel(run["candidate"])
 
         async def play(entry):
             async with gate:
-                policy = StewardPolicy(run["candidate"], recipe)
+                policy = StewardPolicy(run["candidate"], recipe, instance=instance)
                 entry["status"] = "running"
                 self.save(run)
 
@@ -185,7 +191,14 @@ class SocietyService:
                              earned=report["score"]["earned"])
                 self.save(run)
 
-        await asyncio.gather(*(play(entry) for entry in pending))
+        try:
+            async with asyncio.TaskGroup() as seeds:  # a failing seed stops its siblings
+                for entry in pending:
+                    seeds.create_task(play(entry))
+        except BaseExceptionGroup as failure:
+            raise failure.exceptions[0] from None
+        finally:
+            await instance.close()
         run["score"] = self.aggregate(run)
         run["status"] = "completed"
         write_json(folder / "report.json", self.combined(run))

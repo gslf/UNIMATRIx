@@ -11,6 +11,7 @@ import httpx
 import pytest
 
 from unimatrix.models.config import validate_model
+from unimatrix.models.managed import ManagedModel
 from unimatrix.models.personas import catalog, validate_persona
 from unimatrix.models.transport import InfrastructureFailure, ModelClient
 from unimatrix.polis.llm import SCHEMA, StewardPolicy, system_prompt
@@ -260,6 +261,67 @@ async def test_managed_sdk_instance_is_reused_then_only_own_instance_unloaded(mo
     finally:
         await policy.close()
     client.llm.unload.assert_awaited_once_with(policy.instance_id)
+
+
+def overlapping(target, name, seconds=0.01):
+    """Wrap an async mock so the test can see how many calls were in flight at once."""
+    inner, flight = getattr(target, name), dict(now=0, peak=0, calls=0)
+
+    async def tracked(*args, **kwargs):
+        flight.update(now=flight["now"] + 1, calls=flight["calls"] + 1)
+        flight["peak"] = max(flight["peak"], flight["now"])
+        await asyncio.sleep(seconds)
+        flight["now"] -= 1
+        return await inner(*args, **kwargs)
+
+    setattr(target, name, AsyncMock(side_effect=tracked))
+    return flight
+
+
+async def test_parallel_seeds_load_one_managed_instance_and_predict_concurrently(monkeypatch):
+    _, _, client, model = lmstudio_server(monkeypatch)
+    client.llm.load_new_instance = AsyncMock(return_value=model)
+    client.llm.unload = AsyncMock()
+    loads = overlapping(client.llm, "load_new_instance")
+    predictions = overlapping(model, "respond")
+    config = dict(CONTEXT, managed_instance=True)
+    instance = ManagedModel(config)
+    seeds = [Probe(config, instance=instance) for _ in range(2)]
+    for _ in range(2):
+        await asyncio.gather(*(seed.decide({"observation": "test"}) for seed in seeds))
+    assert loads["calls"] == 1 and predictions["calls"] == 4 and predictions["peak"] == 2
+    for seed in seeds:
+        await seed.close()
+    client.llm.unload.assert_not_awaited()
+    await instance.close()
+    client.llm.unload.assert_awaited_once_with(instance.identifier)
+
+
+async def test_parallel_seeds_never_race_to_load_the_model_key(monkeypatch):
+    _, _, client, model = lmstudio_server(monkeypatch)
+    lookups = overlapping(client.llm, "model")
+    predictions = overlapping(model, "respond", seconds=0.1)  # predictions outlast lookups
+    instance = ManagedModel(CONTEXT)
+    seeds = [Probe(CONTEXT, instance=instance) for _ in range(3)]
+    await asyncio.gather(*(seed.decide({"observation": "test"}) for seed in seeds))
+    assert lookups["peak"] == 1 and predictions["peak"] == 3
+
+
+async def test_first_http_request_runs_alone_then_requests_overlap():
+    flight = dict(now=0, starts=[])
+
+    async def handler(request):
+        flight["now"] += 1
+        flight["starts"].append(flight["now"])
+        await asyncio.sleep(0.01)
+        flight["now"] -= 1
+        return reply(completion_tokens=3)
+
+    instance = ManagedModel(MODEL)
+    async with mocked(handler) as http:
+        seeds = [Probe(MODEL, http, instance) for _ in range(3)]
+        await asyncio.gather(*(seed.decide({}) for seed in seeds))
+    assert flight["starts"][0] == 1 and max(flight["starts"]) == 2
 
 
 async def test_input_token_budget_stops_before_generation(monkeypatch):

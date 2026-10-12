@@ -46,7 +46,7 @@ async def main():
     service = SocietyService(runs, recipes, explorer="explorer")
     import unimatrix.polis.llm as llm
 
-    llm.StewardPolicy = lambda config, recipe: ScriptedPolicy(policy, partial)
+    llm.StewardPolicy = lambda config, recipe, **shared: ScriptedPolicy(policy, partial)
     run = await service.start(dict(CONFIG, model=f"scripted-{policy}"), f"scripted-{policy}", recipe)
     task = service.active[run["id"]][0]
     if partial:

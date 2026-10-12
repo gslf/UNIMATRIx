@@ -38,6 +38,23 @@ Unknown fields are rejected. Provider errors are reported with credentials redac
 5xx are retried up to three times; a run that still fails is marked *failed* with the error, and its
 decision log lets it resume from the last recorded week.
 
+## Parallel seeds
+
+A recipe with several seeds (`hell-v1` plays three) can play them side by side: `--parallelism N`
+on the command line, **Parallel seeds** in the dashboard. The run loads the model **once** and every
+seed sends its weekly decision to that same instance, so memory does not grow with `N`:
+
+- with `managed_instance`, the run loads its own instance on the first decision and unloads it when
+  the run ends, pauses or fails;
+- without it, the run uses the instance LM Studio already has for the model key (or lets LM Studio
+  load it once); the first lookup or request is serialized, so parallel seeds never trigger two loads.
+
+LM Studio 0.4 and later answers several predictions at once on one instance (continuous batching;
+**Max Concurrent Predictions** in the model's load settings, 4 by default; further requests wait in
+a queue). With the default unified KV cache the context is shared by the predictions in flight, so
+`context_tokens` should cover `N` weekly prompts and answers at once (about `N × 4k` tokens, more for
+reasoning models). If a seed fails, the others stop too and the run can be resumed.
+
 Before a long run, record a health check and the runtime identity:
 
 ```bash

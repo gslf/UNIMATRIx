@@ -1105,7 +1105,7 @@
     $("par-plus").disabled = max === 1 || wiz.parallel >= max;
     $("par-hint").textContent = max === 1
       ? "This recipe plays a single seed, so the run is sequential."
-      : `Up to ${max} seeds side by side. Useful only if your server answers several requests at once.`;
+      : `Up to ${max} seeds side by side on one loaded model (never loaded twice). LM Studio 0.4+ serves up to its "Max Concurrent Predictions" (default 4) at once; the context is shared between them.`;
     $("sec-value").value = String(wiz.seconds);
     const alert = $("start-alert");
     if (alert.dataset.auto !== "1") alert.hidden = true;
