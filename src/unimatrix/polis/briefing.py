@@ -149,9 +149,12 @@ def briefing(world):
                                 your_statements=[a["stance"] for a in fact["announcements"]]))
     probes = [dict(id=p["id"], question=p["question"], answer_by_week=p["closes"], your_answer=p["answer"])
               for p in world.probes.values() if p["points"] is None and world.week <= p["closes"]]
+    # Every message is shown exactly once: residents write during a week and are read the next one,
+    # story events fire at the start of a week and are read that same week (never again, or a
+    # settled matter would look like a fresh complaint).
     inbox = [dict(sender=m["sender"], name=world.residents[m["sender"]]["name"] if m["sender"] in world.residents
-                  else m["sender"], text=m["text"]) for m in world.inbox if m["week"] == world.week - 1
-             or (m["kind"] == "story" and m["week"] == world.week)]
+                  else m["sender"], text=m["text"]) for m in world.inbox
+             if m["week"] == (world.week if m["kind"] == "story" else world.week - 1)]
     requests = [dict(id=q["id"], sender=q["from"], kind=q["kind"], week=q["week"])
                 for q in world.requests if not q["closed"]]
     recent = [dict(week=c["week"], text=c["text"]) for c in world.chronicle if c["week"] >= world.week - 2]

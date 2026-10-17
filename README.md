@@ -4,7 +4,7 @@
 
 UNIMATRIx evaluates a candidate model as the **steward of one simulated society**. The benchmark spread across eight domains: information and rumours, the economy, public works, a shared lake, relationships and care, institutions, the transmission of skills and adaptation to change.
 
-Residents are deterministic agents with hidden needs, emotions, beliefs, grievances and ties. Scores are unbounded points in natural units like trust-weeks, coins created, fish harvested, skills kept alive, etc. A collapsed society scores zero.
+Residents are deterministic agents with hidden needs, emotions, beliefs, grievances and ties. Scores are unbounded points in natural units like trust-weeks, coins created, fish harvested, skills kept alive, etc. A collapsed society keeps the points accumulated up to its collapse.
 
 Two recipes are bundled. `standard-v2` (Lakeside) is passable by a weak but attentive model and rewards strong ones without limit. `hell-v1` (Malaterra) is built to break stewards by introducing a corrupt council, a moneylender, a smuggler, three agitators, a cartel and a famine winter.
 

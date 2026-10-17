@@ -15,6 +15,7 @@ from ..persistence.lease import episode_lease
 from . import ENGINE
 from .catalog import DOMAINS
 from .runner import engine_fingerprint, live_view, run_seed
+from .scoring import SCORING_RULE, retained_score
 from .simulate import calibrate
 
 
@@ -234,12 +235,13 @@ class SocietyService:
         usage["seconds"] = round(usage["seconds"], 1)
         run["usage"] = usage
 
-    def aggregate(self, run):
-        reports = []
-        for seed in run["seeds"].values():
-            path = self.folder(run["id"]) / f"seed-{seed['seed']}" / "report.json"
-            if path.is_file():
-                reports.append(read_json(path))
+    def aggregate(self, run, reports=None):
+        if reports is None:
+            reports = []
+            for seed in run["seeds"].values():
+                path = self.folder(run["id"]) / f"seed-{seed['seed']}" / "report.json"
+                if path.is_file():
+                    reports.append(read_json(path))
         if not reports:
             return None
         totals = [r["score"]["total"] for r in reports]
@@ -247,6 +249,7 @@ class SocietyService:
         expert = references["expert"]["total"] or None
         domains = {d: round(fmean(r["score"]["domains"][d]["points"] for r in reports), 3) for d in DOMAINS}
         return dict(
+            rule=SCORING_RULE,
             total=round(fmean(totals), 3),
             totals=totals,
             collapsed=sum(1 for r in reports if r["score"]["collapsed"]),
@@ -256,6 +259,46 @@ class SocietyService:
             relative_to_expert=round(fmean(totals) / expert, 3) if expert else None,
             references={k: v["total"] for k, v in references.items()},
         )
+
+    def rescore(self, ident):
+        """Migrate completed reports in place, preserving original data and model decisions."""
+        from .report import collapse_finding
+
+        run = self.read(ident)
+        if run["status"] != "completed" or ident in self.active:
+            raise ValueError("Only completed runs can be rescored")
+        folder = self.folder(ident)
+        reports = {}
+        for key, seed in run["seeds"].items():
+            report = read_json(folder / f"seed-{seed['seed']}" / "report.json")
+            report["score"] = retained_score(report["score"])
+            score = report["score"]
+            if score["collapsed"]:
+                report["diagnosis"] = [collapse_finding(score) if f["title"] == "Collapse" else f
+                                       for f in report["diagnosis"]]
+            seed.update(total=score["total"], earned=score["earned"], collapsed=score["collapsed"])
+            reports[key] = report
+        run["score"] = self.aggregate(run, list(reports.values()))
+        combined = dict(run=self.summary(run), score=run["score"],
+                        references=self.references(run["recipe"]), seeds=reports)
+        files = {folder / "run.json": run, folder / "report.json": combined}
+        files.update({folder / f"seed-{run['seeds'][key]['seed']}" / "report.json": report
+                      for key, report in reports.items()})
+        changed = {path: value for path, value in files.items()
+                   if not path.is_file() or read_json(path) != value}
+        if not changed:
+            return False
+        # Back up every original before the first write; repeated migrations retain that backup.
+        backup = folder / "score-backup-before-retained-points"
+        for path in files:
+            target = backup / path.relative_to(folder)
+            if path.is_file() and not target.exists():
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(path.read_bytes())
+        for path, value in changed.items():
+            write_json(path, value)
+        self.live.pop(ident, None)
+        return True
 
     def combined(self, run):
         reports = {}

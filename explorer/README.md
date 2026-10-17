@@ -28,10 +28,63 @@ Nothing leaves the browser tab.
 Each export writes `data/runs/<run>.xcdn` and `data/entries/<run>.xcdn`, regenerates
 `data/index.xcdn` (the concatenation of the entries) and refreshes `vendor/village.js`.
 
+### Update runs scored under the old collapse rule
+
+```bash
+uv run unimatrix rescore --run <run-id> --explorer-dir explorer
+```
+
+Omit `--run` to update all completed runs. The command recovers each seed's final score from
+its recorded domain points, updates the seed reports, combined report, leaderboard and xCDN
+export, and refreshes the scripted references. It does not call the model or replay its decisions.
+Original JSON files are kept under `runs/<run-id>/score-backup-before-retained-points/`.
+Repeating the command is safe. `unimatrix export` also applies this migration before exporting.
+Collapse week/cause, domain values, frames, decisions and completion timestamps are preserved;
+`earned` equals `total` and the legacy `forfeited` field is zero.
+
+### Publish via FTP
+
+1. Export the experiment with `uv run unimatrix export --run <run-id> --explorer-dir explorer`.
+   Optionally run `uv run unimatrix demo --recipe standard-v2 --explorer-dir explorer` to include
+   the four scripted reference runs in the leaderboard and replay them too.
+2. Upload the **contents** of `explorer/` to the public folder chosen for the Explorer, keeping
+   this structure (the Python application is not needed on the server):
+
+   ```text
+   index.html
+   explorer.css
+   data.js
+   ui.js
+   explorer.js
+   replay.js
+   vendor/
+     xcdn.js
+     xcdn-LICENSE
+     village.js
+   data/
+     index.xcdn
+     entries/<run-id>.xcdn
+     runs/<run-id>.xcdn
+   ```
+
+3. For an existing installation, replace the updated JavaScript/CSS as well as the run data:
+   the old JavaScript explicitly displayed zero for collapsed runs. Upload `data/index.xcdn`
+   **last**, after the run files, so the leaderboard never points to a file still being uploaded.
+4. Open the public Explorer folder. A direct experiment link is
+   `<explorer-url>/#/run/<run-id>`; append `?seed=1&week=52` to start at that frame.
+   Refresh the browser cache if it still shows the old score.
+
+`data/index.xcdn` lists all runs to show: uploading a run file alone does not add it to the
+leaderboard. If the server contains runs absent locally, download its `data/` folder before
+exporting so rebuilding the index preserves those entries. Entry files are used to rebuild the
+index locally; the browser fetches only the index and run files. Exports include the recorded
+briefings, model answers and available reasoning. Upload the Explorer files only; `runs/` and
+`config/` are local application data, not part of the public site.
+
 ## What it shows
 
 - **Leaderboard** (`#/`): one table per recipe and revision. Model runs are ranked by score (the
-  mean over seeds; a collapsed seed scores zero), with × expert, seeds, WELLBY and the eight domains.
+  mean over seeds, retaining points accumulated up to a collapse), with × expert, seeds, WELLBY and the eight domains.
   Reference stewards are shown as marked, unranked milestone rows. "Latest per steward" keeps each
   steward's newest run; "All runs" lists every run. Click a row to explore the run.
 - **Run explorer** (`#/run/<id>?seed=&week=`): the animated village (the steward walks to where it

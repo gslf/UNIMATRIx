@@ -10,7 +10,7 @@ model call per week.
 | Model calls | 52 per seed (1 seed per run) |
 | Prompt | ~1.2k static tokens (cacheable) + ~1.3k-token weekly briefing |
 | Other agents | residents with hidden needs, emotions, beliefs, grievances and ties |
-| Score | unbounded points in natural units; collapse = 0 |
+| Score | unbounded points in natural units; points retained at collapse |
 
 On a single RTX 5090 a 27B model at ~15 s per answer finishes `standard-v2` in about 13 minutes.
 
@@ -144,7 +144,7 @@ forced policies, forecast probes and epidemics.
 
 ## Collapse
 
-Collapse ends the run and sets the score to zero. Rules (each optional): population below a
+Collapse ends the run and retains its accumulated score. Rules (each optional): population below a
 share of the initial residents; the lake below its critical stock; a revolt (protest share
 above a threshold for consecutive weeks); legitimacy below a floor for consecutive weeks
 (no confidence); famine (share of residents short of food for consecutive weeks); and
@@ -168,8 +168,10 @@ Each domain counts something real; a recipe's exchange rates convert units into 
 | D8 Adaptation | residents using a changed convention each week after the change; integrated newcomers |
 
 Flourishing outcomes of the choice graph add points. Nothing caps the total: more trust,
-wealth, harvest, knowledge or integration is always worth more. A collapse forfeits
-everything (reported as *forfeited*). References — passive, naive, expert and oracle
+wealth, harvest, knowledge or integration is always worth more. A collapse stops the run and
+retains the points accumulated up to that point. The leaderboard uses the mean final score
+over all seeds, including collapsed seeds; the week and cause of collapse remain visible.
+The legacy `forfeited` field is always zero. References — passive, naive, expert and oracle
 scripted stewards on the same seeds — place a model on the scale (e.g. "1.3× expert"); they
 are not bounds. The report also gives WELLBYs above a neutral point of 2 (Frijters et al.
 2020) as a summary of human welfare.
@@ -181,11 +183,11 @@ without limit. Reference stewards over 8 seeds (`unimatrix calibrate --seeds 1,2
 
 | Steward | mean points | collapses |
 | --- | ---: | ---: |
-| passive | 0 | 8/8 (lake or revolt, ~week 37) |
-| random | 0 | 8/8 (lake, ~week 33) |
-| naive (answers requests, follows explicit advice) | ≈ 4,750 | 1/8 |
+| passive | ≈ 2,972 | 8/8 |
+| random | ≈ 2,987 | 8/8 |
+| naive (answers requests, follows explicit advice) | ≈ 5,296 | 3/8 |
 | expert (observation-only heuristics) | ≈ 8,100 | 0/8 |
-| oracle (expert with hidden-state access) | ≈ 8,550 | 0/8 |
+| oracle (expert with hidden-state access) | ≈ 8,571 | 0/8 |
 
 Exchange rates are set so the expert earns ≈1,000 points per domain. Strong play exceeds
 the expert: earlier public works, better trades, faster integration and adaptation, more
@@ -202,11 +204,11 @@ works out who is at fault.
 
 | Steward | run seeds 1, 2, 19 | collapses | 20 seeds | collapses |
 | --- | ---: | ---: | ---: | ---: |
-| passive | 0 | 3/3 (revolt, week 17) | 0 | 20/20 |
-| random | 0 | 3/3 (revolt, week 20) | 0 | 20/20 |
-| naive | 0 | 3/3 (revolt, ~week 32) | 0 | 20/20 |
-| expert | ≈ 2,270 | 2/3 (famine, ~week 50) | ≈ 880 | 17/20 |
-| oracle | ≈ 5,290 | 1/3 (famine, week 49) | ≈ 5,200 | 7/20 |
+| passive | ≈ 1,177 | 3/3 (revolt, week 17) | ≈ 1,168 | 20/20 |
+| random | ≈ 1,392 | 3/3 (revolt, week 20) | ≈ 1,369 | 20/20 |
+| naive | ≈ 2,608 | 3/3 (revolt, ~week 32) | ≈ 2,220 | 20/20 |
+| expert | ≈ 7,945 | 2/3 (famine, ~week 50) | ≈ 6,668 | 17/20 |
+| oracle | ≈ 7,993 | 1/3 (famine, week 49) | ≈ 7,995 | 7/20 |
 
 A model that survives Malaterra earns as much as in Lakeside; what makes it hard is surviving:
 exposing the councillor, reading who lies, redistributing before the poor revolt and storing grain

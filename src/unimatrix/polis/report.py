@@ -55,16 +55,20 @@ def finding(level, title, text, basis):
     return dict(level=level, title=title, text=text, basis=basis)
 
 
+def collapse_finding(final):
+    c = final["collapsed"]
+    return finding("bad", "Collapse", f"{c['label']} in week {c['week']}. "
+                   f"The final score retains {final['total']:.3f} points accumulated up to the collapse.",
+                   "Collapse rules of the recipe")
+
+
 def diagnosis(world, final):
     present = world.present()
     start = world.frames[0]["metrics"]
     end = world.frames[-1]["metrics"]
     out = []
     if final["collapsed"]:
-        c = final["collapsed"]
-        out.append(finding("bad", "Collapse", f"{c['label']} in week {c['week']}. The score is zero; "
-                           f"{final['forfeited']:.0f} points accumulated before the collapse were forfeited.",
-                           "Collapse rules of the recipe"))
+        out.append(collapse_finding(final))
         warning = ewi([f["metrics"]["wellbeing"] for f in world.frames])
         if warning:
             out.append(finding("watch", "Early warning signals",

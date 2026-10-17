@@ -612,7 +612,7 @@ select.speed { width: auto; min-height: 44px; padding: 4px 8px; font-variant-num
 .sb-total.collapse { color: #ffb3aa; letter-spacing: 3px; text-transform: uppercase; text-shadow: 0 0 30px rgba(239, 83, 80, 0.4); font-size: 36px; }
 .sb-cause { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: #f3d6d2; font-size: 14px; }
 .sb-cause.good { color: var(--good); }
-.sb-forfeit { font-size: 13px; color: var(--faint); }
+.sb-retained { font-size: 13px; color: var(--faint); }
 .sb-run { align-items: flex-start; }
 .sb-run b { font-size: 26px; color: var(--ink-strong); font-variant-numeric: tabular-nums; }
 .sb-run > span:not(.label):not(.muted) { color: var(--accent-hi); font-size: 13px; }

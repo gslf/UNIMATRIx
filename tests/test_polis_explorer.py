@@ -108,3 +108,23 @@ def test_exports_write_runs_and_a_combined_index(tmp_path, recipe):
     ExplorerExport(tmp_path).remove_run(files[0].stem)
     assert not files[0].exists()
     assert (tmp_path / "data" / "index.xcdn").read_text(encoding="utf8").count("#entry {") == 1
+
+
+@pytest.mark.skipif(NODE is None, reason="node is needed to run the Explorer leaderboard")
+def test_leaderboard_ranks_collapsed_runs_by_retained_points():
+    script = """
+        global.window = {ExplorerData: {store: {}}, ExplorerUI: {}};
+        global.document = {readyState: 'loading', addEventListener() {}};
+        require(process.argv[1]);
+        const entry = (id, total, collapsed, isRef = false) => ({
+            id, model: id, snapshot: '', revision: 'rev', total, isRef,
+            fullyCollapsed: collapsed, created: '2026-10-12'
+        });
+        const recipe = {entries: [entry('survived', 2000, false),
+            entry('collapsed', 4000, true), entry('expert', 3000, false, true)]};
+        const rows = window.ExplorerApp.boardRows(recipe, 'rev', false);
+        console.log(JSON.stringify(rows.map(r => [r.entry.id, r.rank, r.entry.total])));
+    """
+    done = subprocess.run([NODE, "-e", script, str(ROOT / "explorer" / "explorer.js")],
+                          capture_output=True, text=True, encoding="utf8", check=True)
+    assert json.loads(done.stdout) == [["collapsed", 1, 4000], ["expert", None, 3000], ["survived", 2, 2000]]

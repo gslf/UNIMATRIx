@@ -584,7 +584,7 @@
     if (before === "running" && run.status === "completed") {
       state.boards.delete(run.recipe_id);
       if (fullyCollapsed(run.score)) {
-        toast(`The village collapsed under ${run.model}. A collapsed society scores zero.`, "bad", { link });
+        toast(`The village collapsed under ${run.model}. Final score: ${pts(run.score.total)} points retained.`, "bad", { link });
       } else {
         const total = run.score ? pts(run.score.total) : "—";
         const rel = run.score && isNum(run.score.relative_to_expert) ? ` (${times(run.score.relative_to_expert)})` : "";
@@ -1441,7 +1441,7 @@
       const label = collapseLabel(run);
       const r = collapsedTag(cw ? `Collapsed · week ${cw}` : "Collapsed");
       if (label) r.title = label;
-      return [r, h("span", null, "0 points")];
+      return [h("strong", null, pts(run.score.total)), h("span", null, "points"), r];
     }
     if (run.status === "completed" && run.score) {
       const strong = h("strong");

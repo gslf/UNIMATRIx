@@ -60,6 +60,10 @@ def parser():
     exp.add_argument("--runs-dir", default="runs")
     exp.add_argument("--explorer-dir", default="explorer")
     exp.add_argument("--run", help="Only this run id")
+    rescore = commands.add_parser("rescore", help="Retain accumulated points in completed runs and refresh exports")
+    rescore.add_argument("--runs-dir", default="runs")
+    rescore.add_argument("--explorer-dir", default="explorer")
+    rescore.add_argument("--run", help="Only this run id (default: all completed runs)")
     demo = commands.add_parser("demo", help="Export the scripted reference stewards of a recipe to the Explorer")
     demo.add_argument("--recipe", default="standard-v2")
     demo.add_argument("--explorer-dir", default="explorer")
@@ -132,19 +136,25 @@ def execute(args):
         report = build_report(world)
         return dict(weeks_replayed=len(world.decisions), score=report["score"]["total"],
                     collapsed=report["score"]["collapsed"], providers_called=0)
-    if args.command == "export":
-        from .polis.explorer import export_run_folder
+    if args.command in {"export", "rescore"}:
         from .polis.service import SocietyService
 
-        service = SocietyService(args.runs_dir, recipes)
-        written = []
-        for row in service.runs():
-            if row["status"] != "completed" or (args.run and row["id"] != args.run):
+        service = SocietyService(args.runs_dir, recipes, explorer=args.explorer_dir)
+        written, rescored = [], []
+        rows = [service.read(args.run)] if args.run else service.runs()
+        for row in rows:
+            if row["status"] != "completed":
+                if args.run:
+                    raise ValueError("Only completed runs can be exported or rescored")
                 continue
+            if service.rescore(row["id"]):
+                rescored.append(row["id"])
             run = service.read(row["id"])
-            written.append(str(export_run_folder(service.folder(row["id"]), args.explorer_dir,
-                                                 service.references(run["recipe"]))))
-        return dict(exported=written)
+            path = service.export(run)
+            if path is None:
+                raise ValueError(run.get("explorer_error") or "Run export failed")
+            written.append(str(path))
+        return dict(rescored=rescored, exported=written)
     if args.command == "demo":
         from .polis.explorer import export_references
 

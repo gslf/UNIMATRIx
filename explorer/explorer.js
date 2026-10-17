@@ -15,7 +15,7 @@
   // ================================================================== derived model
   let derived = { version: -1 };
   const byCreatedDesc = (a, b) => String(b.created || "").localeCompare(String(a.created || ""));
-  const scoreOf = (e) => (e.fullyCollapsed ? 0 : e.total);
+  const scoreOf = (e) => e.total;
 
   /** Recipes with their revisions (newest first), memoised per store version. */
   function model() {
@@ -297,7 +297,7 @@
     rows.forEach((row, i) => tbody.append(boardRow(row, ex, scales, header, i)));
     table.append(tbody);
     const el = h("section", { class: "view board-view" },
-      sectionHead("Arena", "Leaderboard", "Every exported run of a recipe, ranked by score: the mean over seeds, where a collapsed seed scores zero. Reference stewards are scripted milestones and are not ranked. Open a run to see everything its steward did, week by week."),
+      sectionHead("Arena", "Leaderboard", "Every exported run of a recipe, ranked by score: the mean over seeds, including points accumulated up to a collapse. Reference stewards are scripted milestones and are not ranked. Open a run to see everything its steward did, week by week."),
       controls,
       h("div", { class: "board-meta" },
         h("span", { class: "bm-title" }, h("b", null, recipe.title), recipe.subtitle ? h("span", null, recipe.subtitle) : null),
@@ -321,7 +321,7 @@
             h("small", null, [e.isRef ? null : e.snapshot || null, row.older ? "older run" : null].filter(Boolean).join(" · "), h("span", { class: "only-phone" }, `${!e.isRef && e.snapshot ? " · " : ""}${U.dateShort(e.created)}`)),
             e.isRef ? U.refTag() : null))),
       h("td", { class: "c-score" },
-        e.fullyCollapsed ? h("span", { class: "score zero" }, "0") : h("span", { class: "score" }, U.pts(e.total)),
+        h("span", { class: "score" }, U.pts(e.total)),
         h("small", { class: "only-phone" }, e.fullyCollapsed ? "collapsed" : `${U.times(e.relative)} expert`),
         e.fullyCollapsed ? U.ruinsBadge(e.collapse && U.isNum(e.collapse.week) ? `week ${e.collapse.week}` : "collapsed") : null),
       h("td", { class: "c-rel" }, U.times(e.relative)),
@@ -339,7 +339,7 @@
   }
 
   // ================================================================== boot
-  const App = { store, D, U, model, expertFor, runHref, boardHref, go, replaceHash, openDataPanel, backLink, sectionHead, notFound };
+  const App = { store, D, U, model, boardRows, expertFor, runHref, boardHref, go, replaceHash, openDataPanel, backLink, sectionHead, notFound };
   window.ExplorerApp = App;
 
   function boot() {

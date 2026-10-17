@@ -3,7 +3,7 @@
 Points accumulate week by week (resident-weeks of trust, coins of net worth created,
 fish harvested, service-weeks of public works ...). Recipe exchange rates convert each
 domain's units into points. Nothing caps the total: a better steward can always create
-more. A collapsed society scores zero; what it had accumulated is reported as forfeited.
+more. A collapse stops the run; the points accumulated up to that point remain its score.
 """
 
 import math
@@ -11,6 +11,14 @@ from statistics import fmean
 
 from .catalog import DOMAINS
 from .metrics import gini, integrated, networth, successor_depth
+
+SCORING_RULE = "accumulated-v1"
+
+
+def retained_score(score):
+    """Apply the scoring rule to a recorded ledger without replaying the simulation."""
+    total = round(sum(domain["points"] for domain in score["domains"].values()), 3)
+    return dict(score, total=total, earned=total, forfeited=0.0, rule=SCORING_RULE)
 
 
 class Ledger:
@@ -133,9 +141,10 @@ class Ledger:
         earned = sum(item["points"] for item in domains.values())
         collapsed = world.collapsed
         self.final = dict(
-            total=0.0 if collapsed else round(earned, 3),
+            total=round(earned, 3),
             earned=round(earned, 3),
-            forfeited=round(earned, 3) if collapsed else 0.0,
+            forfeited=0.0,  # Kept for compatibility with existing report/export consumers.
+            rule=SCORING_RULE,
             collapsed=collapsed,
             survived_weeks=(collapsed["week"] - 1) if collapsed else world.horizon,
             domains=domains,

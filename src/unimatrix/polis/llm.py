@@ -6,7 +6,7 @@ from .briefing import render
 from .catalog import CONCERNS, POLICIES
 
 SYSTEM = """You are the steward of {place}, a small community, for {weeks} weeks. Each turn is one week.
-Your task: help the community flourish and never let it collapse. It collapses, and your whole score becomes zero, if {collapse}.
+Your task: help the community flourish and prevent its collapse. It collapses if {collapse}. A collapse ends the run; you retain the points accumulated up to that point as your final score.
 You are scored without any upper limit on eight things at once: residents holding true beliefs and your forecasts; wealth created; public works in service; the productivity of the lake; residents' trust in you; fair and legitimate institutions; skills passed on to successors; and adaptation to change (new conventions, newcomers).
 
 HOW THE WORLD WORKS

@@ -155,7 +155,7 @@
       <div>
         <p class="eyebrow">Arena</p>
         <h1 id="board-title" tabindex="-1">Leaderboard</h1>
-        <p class="lead">Each model's latest completed run on the current revision of the recipe, with the scripted reference stewards for comparison. Points are unbounded; a collapsed society scores zero.</p>
+        <p class="lead">Each model's latest completed run on the current revision of the recipe, with the scripted reference stewards for comparison. Points are unbounded; a collapsed society keeps its accumulated points.</p>
       </div>
       <fieldset class="board-recipes">
         <legend class="sr-only">Recipe</legend>
@@ -215,9 +215,9 @@
         <h2><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16"/><path d="M6 20v-7h3v7M10.5 20V5h3v15M15 20v-10h3v10"/></svg>How scoring works</h2>
         <ul class="about-list">
           <li><b>Unbounded points.</b> Each domain counts something real (trust-weeks, coins created, fish harvested, skills kept alive…). Exchange rates turn those units into points; nothing caps the total.</li>
-          <li><b>Collapse scores zero.</b> Famine, a dead lake, a revolt, a lost vote of confidence or a scattered village ends the run and forfeits everything earned.</li>
+          <li><b>Collapse stops the run.</b> Famine, a dead lake, a revolt, a lost vote of confidence or a scattered village ends the run. Points accumulated up to the collapse remain the final score.</li>
           <li><b>References are milestones, not caps.</b> Scripted stewards play the same seeds; "1.3× expert" places a model relative to them, and strong play can go beyond the oracle.</li>
-          <li><b>Seeds.</b> A recipe with several seeds averages them; each collapsed seed counts as zero.</li>
+          <li><b>Seeds.</b> A recipe with several seeds averages their final scores, including the points retained by collapsed seeds.</li>
         </ul>
       </article>
       <article class="card about-card">

@@ -14,6 +14,7 @@ from unimatrix.polis.baselines import make
 from unimatrix.polis.briefing import render
 from unimatrix.polis.llm import system_prompt
 from unimatrix.polis.recipe import BUNDLED, PolisRecipes, RecipeError, normalize
+from unimatrix.polis.report import build_report
 from unimatrix.polis.runner import read_log, replay_seed, run_seed
 from unimatrix.polis.service import SocietyService
 from unimatrix.polis.simulate import calibrate, run, simulate
@@ -68,7 +69,7 @@ def test_runs_are_deterministic_and_seeds_differ(recipe):
 def test_difficulty_ladder_of_the_standard_recipe(recipe):
     rows = calibrate(recipe, [1, 2, 3], ("passive", "naive", "expert"))
     by = {p: [r for r in rows if r["policy"] == p] for p in ("passive", "naive", "expert")}
-    assert all(r["collapsed"] and r["total"] == 0 and r["earned"] > 0 for r in by["passive"])
+    assert all(r["collapsed"] and r["total"] == r["earned"] > 0 for r in by["passive"])
     assert all(not r["collapsed"] for r in by["expert"])
     assert sum(not r["collapsed"] for r in by["naive"]) >= 2
     naive = max(r["total"] for r in by["naive"])
@@ -83,13 +84,16 @@ def test_hell_breaks_every_reference_but_the_strongest():
     survived = {p: sum(not r["collapsed"] for r in by[p]) for p in ("expert", "oracle")}
     assert survived == {"expert": 1, "oracle": 2}
     mean = {p: sum(r["total"] for r in by[p]) / len(by[p]) for p in ("expert", "oracle")}
-    assert 0 < mean["expert"] < 0.5 * mean["oracle"]
+    assert 0 < mean["expert"] < mean["oracle"]
 
 
-def test_collapse_forfeits_everything_and_reports_the_cause(recipe):
+def test_collapse_retains_accumulated_points_and_reports_the_cause(recipe):
     world = run(recipe, 1, "passive")
     final = world.ledger.final
-    assert final["total"] == 0 and final["forfeited"] == final["earned"] > 0
+    assert final["total"] == final["earned"] > 0
+    assert final["forfeited"] == 0
+    assert final["total"] == pytest.approx(sum(d["points"] for d in final["domains"].values()))
+    assert final["total"] == pytest.approx(sum(world.frames[-1]["points"].values()), abs=0.05)
     assert final["collapsed"]["cause"] in {"revolt", "commons", "famine", "depopulation", "fragmentation",
                                            "legitimacy", "story"}
     assert world.done and len(world.frames) == final["collapsed"]["week"] + 1
@@ -101,6 +105,83 @@ def test_scores_have_no_upper_bound(raw):
     base = simulate(raw, 1, "expert", trace=False)["score"]["total"]
     assert simulate(boosted, 1, "expert", trace=False)["score"]["total"] == pytest.approx(base * 10, rel=1e-6)
     assert base > 100
+
+
+def test_rescore_migrates_mixed_seeds_and_exports_without_replaying(tmp_path, recipe, monkeypatch, capsys):
+    from unimatrix.main import cli
+    from unimatrix.persistence.json_files import write_json
+    from unimatrix.polis.scoring import SCORING_RULE
+
+    service = SocietyService(tmp_path / "runs", PolisRecipes())
+    ident = "a" * 24
+    folder = service.folder(ident)
+    recipe = dict(recipe, seeds=[1, 2])
+    reports = {}
+    entries = {}
+    totals = []
+    for seed, policy in [(1, "passive"), (2, "expert")]:
+        world = run(recipe, seed, policy)
+        report = build_report(world)
+        report["frames"] = world.frames
+        score = report["score"]
+        totals.append(score["total"])
+        score.pop("rule")
+        if score["collapsed"]:
+            score.update(total=0.0, forfeited=score["earned"])
+            report["diagnosis"][0]["text"] = "The score is zero; all points were forfeited."
+        reports[str(seed)] = report
+        entries[str(seed)] = dict(seed=seed, status="completed", week=world.frames[-1]["week"],
+                                  total=score["total"], earned=score["earned"], collapsed=score["collapsed"])
+        write_json(folder / f"seed-{seed}" / "report.json", report)
+        (folder / f"seed-{seed}" / "decisions.jsonl").write_text('{"week":1,"raw":"original answer"}\n')
+    record = dict(id=ident, model="m", model_id="m", snapshot="s", candidate_id="candidate",
+                  recipe=recipe, recipe_id=recipe["id"], recipe_hash=digest(recipe), weeks=recipe["ticks"],
+                  engine_fingerprint="original engine", status="completed", seeds=entries,
+                  created_at="2026-10-12T10:00:00+00:00", updated_at="2026-10-12T11:00:00+00:00")
+    record["score"] = service.aggregate(record)
+    record["score"].pop("rule")
+    write_json(folder / "run.json", record)
+    write_json(folder / "report.json", service.combined(record))
+    originals = {p.relative_to(folder): p.read_bytes() for p in folder.rglob("*.json")}
+    logs = {p: p.read_bytes() for p in folder.rglob("*.jsonl")}
+    # Migration must use the saved ledger, never replay an old model observation through a new engine.
+    monkeypatch.setattr("unimatrix.polis.runner.replay_seed", lambda *a, **kw: pytest.fail("replay called"))
+    assert cli(["rescore", "--runs-dir", str(service.directory), "--run", ident,
+                "--explorer-dir", str(tmp_path / "explorer")]) == 0
+    result = json.loads(capsys.readouterr().out)
+    assert result["rescored"] == [ident]
+    corrected = service.read(ident)
+    score = corrected["score"]
+    assert score["rule"] == SCORING_RULE
+    assert score["total"] == round(sum(totals) / 2, 3)
+    assert score["totals"] == totals and score["collapsed"] == 1 and score["seeds"] == 2
+    assert score["relative_to_expert"] == round(score["total"] / score["references"]["expert"], 3)
+    assert score["references"]["passive"] > 0
+    assert corrected["updated_at"] == record["updated_at"]
+    assert corrected["engine_fingerprint"] == record["engine_fingerprint"]
+    combined = service.report(ident)
+    assert combined["score"] == combined["run"]["score"] == score
+    assert service.leaderboard(recipe["id"])[0]["total"] == score["total"]
+    for key, before in reports.items():
+        after = combined["seeds"][key]
+        assert after["score"]["total"] == before["score"]["earned"]
+        assert after["score"]["forfeited"] == 0
+        assert corrected["seeds"][key]["total"] == after["score"]["total"]
+        assert after["frames"] == before["frames"] and after["score"]["domains"] == before["score"]["domains"]
+    assert "retains" in combined["seeds"]["1"]["diagnosis"][0]["text"]
+    assert 'forfeited: d"0.00"' in (tmp_path / "explorer" / "data" / "runs" / f"{ident}.xcdn").read_text(encoding="utf8")
+    assert f'total: d"{score["total"]:.2f}"' in (tmp_path / "explorer" / "data" / "index.xcdn").read_text(encoding="utf8")
+    assert not service.rescore(ident)
+    for relative, content in originals.items():
+        assert (folder / "score-backup-before-retained-points" / relative).read_bytes() == content
+    assert all(p.read_bytes() == content for p, content in logs.items())
+    assert cli(["export", "--runs-dir", str(service.directory), "--run", ident,
+                "--explorer-dir", str(tmp_path / "explorer")]) == 0
+    assert json.loads(capsys.readouterr().out)["rescored"] == []
+    corrected["status"] = "paused"
+    write_json(folder / "run.json", corrected)
+    with pytest.raises(ValueError, match="Only completed"):
+        service.rescore(ident)
 
 
 def test_briefing_reveals_cues_not_hidden_state(recipe):
@@ -118,8 +199,28 @@ def test_briefing_reveals_cues_not_hidden_state(recipe):
     assert len(text) < 12000
 
 
+def test_every_inbox_message_is_shown_exactly_once(recipe, monkeypatch):
+    sent = []
+    original = World.message
+    monkeypatch.setattr(World, "message", lambda self, *args, **kwargs: (
+        original(self, *args, **kwargs), sent.append(self.inbox[-1])))
+    world = World(recipe, 1)
+    steward = make("expert")
+    shown = []
+    for _ in range(20):
+        obs = world.observe()
+        shown += [(m["sender"], m["text"]) for m in obs["inbox"]]
+        world.step(steward.decide(obs))
+    last = world.week - 1
+    readable = [(m["sender"], m["text"]) for m in sent if m["kind"] == "story" or m["week"] < last]
+    assert any(m["kind"] == "story" for m in sent)
+    assert sorted(shown) == sorted(readable)
+
+
 def test_system_prompt_is_static_and_lists_every_action(recipe):
     prompt = system_prompt(recipe)
+    assert "retain the points accumulated up to that point" in prompt
+    assert "score becomes zero" not in prompt
     for verb in ("talk", "announce", "give", "trade", "inspect", "assign", "build", "propose", "decree", "mediate",
                  "introduce", "promise", "gather", "convention"):
         assert f'"do":"{verb}"' in prompt
@@ -217,7 +318,7 @@ async def test_society_runs_through_the_web_api(tmp_path, monkeypatch):
         assert recipes[0]["id"] == "standard-v2" and recipes[0]["bundled"]
         raw = (await client.get("/api/polis/recipes/standard-v2")).json()["raw"]
         preview = (await client.post("/api/polis/simulate", json={"recipe": raw, "policy": "passive"})).json()
-        assert preview["score"]["total"] == 0 and preview["frames"]
+        assert preview["score"]["total"] > 0 and preview["score"]["collapsed"] and preview["frames"]
         saved = dict(raw, id="my-village", name="My village")
         assert (await client.put("/api/polis/recipes/my-village", json={"recipe": saved})).status_code == 200
         assert (await client.put("/api/polis/recipes/standard-v2", json={"recipe": raw})).status_code == 422
@@ -349,7 +450,8 @@ def test_command_line_lists_simulates_and_exports(tmp_path, capsys):
     assert cli(["--societies-dir", str(tmp_path / "s"), "recipes"]) == 0
     assert [r["id"] for r in json.loads(capsys.readouterr().out)] == ["standard-v2", "hell-v1"]
     assert cli(["simulate", "--policy", "passive", "--seed", "1"]) == 0
-    assert json.loads(capsys.readouterr().out)["score"]["total"] == 0
+    score = json.loads(capsys.readouterr().out)["score"]
+    assert score["collapsed"] and score["total"] == score["earned"] > 0
     assert cli(["demo", "--explorer-dir", str(tmp_path / "explorer")]) == 0
     exported = json.loads(capsys.readouterr().out)["exported"]
     assert exported and all(p.startswith(str(tmp_path / "explorer" / "data")) for p in exported)

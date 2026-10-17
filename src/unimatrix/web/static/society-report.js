@@ -613,10 +613,10 @@
       add(figure, [
         h("p", { class: "collapse-word", text: "Collapse" }),
         h("p", { class: "collapse-detail" }, h("span", { class: "collapse-week", text: `Week ${collapsed.week}` }), h("span", { text: collapsed.label || humanize(collapsed.cause) })),
-        h("div", { class: "hero-number is-zero" }, value, spoken, h("span", { class: "hero-unit", text: "points" })),
-        h("p", { class: "forfeit" }, "Forfeited ", h("s", { text: pts(score.forfeited) }), " points earned before the collapse."),
+        h("div", { class: "hero-number" }, value, spoken, h("span", { class: "hero-unit", text: "points" })),
+        h("p", { class: "retained" }, "Points accumulated up to the collapse remain the final score."),
       ]);
-      value.textContent = "0";
+      countUp(value, score.total);
     } else {
       add(figure, h("div", { class: "hero-number" }, value, spoken, h("span", { class: "hero-unit", text: "points" })));
       countUp(value, score.total);
@@ -668,7 +668,6 @@
       kind: "ref",
       note: `${ref.note}${ref.collapsed ? ` Collapsed on ${ref.collapsed} of ${ref.seeds} seed(s).` : ""}`,
     }));
-    if (score.collapsed && score.earned > 0) marks.push({ label: `forfeited ${pts(score.earned)}`, value: score.earned, kind: "ghost", note: "Points earned before the collapse; all of them were forfeited." });
     marks.push({ label: "This run", value: score.total, valueText: pts(score.total), kind: "model", collapsed: Boolean(score.collapsed), note: score.collapsed ? `Collapsed in week ${score.collapsed.week}.` : "" });
     const container = $("ladder");
     if (!marks.length) {
@@ -686,16 +685,14 @@
   }
 
   function renderDomains(ctx) {
-    const score = ctx.score;
-    const collapsed = Boolean(score.collapsed);
     const total = DOMAINS.reduce((sum, d) => sum + domainMeta(ctx, d).points, 0);
     const segments = DOMAINS.map((d, i) => {
       const meta = domainMeta(ctx, d);
       return { key: d, short: d, label: `${d} · ${meta.name}`, value: meta.points, color: V.palette.categorical[i] };
     });
-    V.compositionBar($("composition"), { segments, muted: collapsed, unit: "points", label: "Points by domain", format: v => pts(v) });
-    $("composition-title").textContent = collapsed ? "What was earned before the collapse" : "Contribution to the total";
-    $("composition-note").textContent = collapsed ? `${pts(score.earned)} points earned, all forfeited` : `${pts(total)} points in total`;
+    V.compositionBar($("composition"), { segments, unit: "points", label: "Points by domain", format: v => pts(v) });
+    $("composition-title").textContent = "Contribution to the total";
+    $("composition-note").textContent = `${pts(total)} points in total`;
     const legend = clear($("composition-legend"));
     DOMAINS.forEach((d, i) => {
       const key = h("i", { class: "viz-key box" });
@@ -721,7 +718,7 @@
       h("span", { text: `${isNum(meta.units) ? fmt.number(meta.units, Math.abs(meta.units) < 100 ? 1 : 0) : "–"} ${meta.unit}` }),
       isNum(meta.rate) ? h("span", { class: "muted", text: ` × ${meta.rate} pts per unit` }) : null));
     if (meta.help) add(card, h("p", { class: "domain-help", text: meta.help }));
-    const rows = [{ label: ctx.score.collapsed ? "Forfeited" : "This run", value: meta.points, own: true }]
+    const rows = [{ label: "This run", value: meta.points, own: true }]
       .concat(ctx.references.map(ref => ({ label: ref.label, value: ref.domains[d], key: ref.key })));
     const max = Math.max(1, ...rows.map(r => (isNum(r.value) ? r.value : 0)));
     const list = h("ul", { class: "compare", "aria-label": `${meta.name}: this run against the references` });
@@ -964,7 +961,7 @@
     renderKnowledge(ctx, grid);
 
     // Points
-    track(V.timeChart(chartCard(grid, { title: "Points accumulated", description: ctx.score.collapsed ? "Cumulative points by domain until the collapse, when all of them were forfeited." : "Cumulative points by domain. Their sum at the last week is the score.", unit: "points", wide: true }), baseSpec(ctx, {
+    track(V.timeChart(chartCard(grid, { title: "Points accumulated", description: "Cumulative points by domain. Their sum at the last week played is the score, including when the society collapses.", unit: "points", wide: true }), baseSpec(ctx, {
       label: "Cumulative points by domain, stacked",
       height: 300,
       stack: true,

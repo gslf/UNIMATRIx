@@ -46,7 +46,7 @@
     const recipeTitle = U.splitName(entry.recipeName)[0];
 
     // ============================================================ static layout
-    const headScore = h("strong", null, entry.fullyCollapsed ? "0" : U.pts(entry.total));
+    const headScore = h("strong", null, U.pts(entry.total));
     const seedBox = h("div", { class: "seed-box", hidden: true });
     const jumpCollapse = h("button", { type: "button", class: "small danger-ghost", hidden: true }, icon("skull", "sm"), h("span", null, "Jump to the collapse"));
     const headEl = h("div", { class: "run-head" },
@@ -301,8 +301,8 @@
     function updateScore(f, prev, total) {
       scoreCard.classList.toggle("collapsed", Boolean(f.collapsed));
       if (f.collapsed) {
-        tkTotal.textContent = "0";
-        U.fill(tkSub, h("s", null, U.pts(total)), " forfeited");
+        U.countTo(tkTotal, total, 700);
+        tkSub.textContent = "final points · retained at collapse";
         tkDelta.className = "tk-delta bad";
         U.fill(tkDelta, U.ruinsBadge("collapse"));
       } else {
@@ -908,13 +908,13 @@
         h("p", { class: "es-kicker" }, collapsed ? `Week ${s.collapsed.week}` : `${run.recipe.weeks || frames[frames.length - 1].week} weeks survived`),
         h("h2", { class: "es-title" }, collapsed ? "Collapse" : "Year complete"),
         collapsed ? h("p", { class: "es-cause" }, s.collapsed.label) : null,
-        h("div", { class: "es-score" }, total, h("span", null, collapsed ? `points · ${U.pts(s.forfeited)} forfeited` : `points${run.seeds.length > 1 ? ` · seed ${s.seed}` : ""}`)),
+        h("div", { class: "es-score" }, total, h("span", null, collapsed ? "points retained at collapse" : `points${run.seeds.length > 1 ? ` · seed ${s.seed}` : ""}`)),
         h("div", { class: "es-actions" },
           U.actionButton("refresh", "Watch again", "small", () => { endscreen.hidden = true; village.seek(0); village.play(); }),
           U.actionButton("board", "Final scoreboard", "primary small", () => { endscreen.hidden = true; results.scrollIntoView({ behavior: U.reduced() ? "auto" : "smooth", block: "start" }); })));
       endscreen.querySelector(".es-close").addEventListener("click", () => { endscreen.hidden = true; });
       endscreen.hidden = false;
-      U.countTo(total, collapsed ? 0 : s.total, 1200);
+      U.countTo(total, s.total, 1200);
     }
     function buildResults() {
       const s = seedInfo();
@@ -927,17 +927,17 @@
       const scales = U.domainScales([seedDomains, expertDomains]);
       const headline = h("div", { class: "sb-headline" },
         h("div", { class: "sb-main" + (collapsed ? " lost" : "") }, h("span", { class: "label" }, run.seeds.length > 1 ? `Seed ${s.seed}` : "Final score"),
-          h("strong", { class: "sb-total" + (collapsed ? " collapse" : "") }, collapsed ? "Collapse" : U.pts(s.total)),
+          h("strong", { class: "sb-total" + (collapsed ? " collapse" : "") }, U.pts(s.total)),
           collapsed ? h("p", { class: "sb-cause" }, U.ruinsBadge(`week ${s.collapsed.week}`), h("span", null, `${s.collapsed.label}${s.collapsed.cause ? ` (${s.collapsed.cause})` : ""}`))
             : h("p", { class: "sb-cause good" }, icon("shield", "sm"), h("span", null, `Survived all ${U.isNum(s.survivedWeeks) ? s.survivedWeeks : run.recipe.weeks} weeks`)),
-          collapsed ? h("p", { class: "sb-forfeit" }, `${U.pts(s.earned)} points earned before the collapse were forfeited: a collapsed seed scores zero.`) : null),
+          collapsed ? h("p", { class: "sb-retained" }, "Points accumulated up to the collapse remain the final score.") : null),
         h("div", { class: "sb-run" },
           h("span", { class: "label" }, run.seeds.length > 1 ? `Run score · mean of ${run.seeds.length} seeds` : "Run score"),
-          h("b", null, entry.fullyCollapsed ? "0" : U.pts(entry.total)),
+          h("b", null, U.pts(entry.total)),
           h("span", null, entry.fullyCollapsed ? "every seed collapsed" : `${U.times(entry.relative)} the expert reference`),
           U.isNum(s.wellby) ? h("span", { class: "muted small" }, `${U.fixed(s.wellby, 1)} WELLBY on this seed`) : null,
           run.seeds.length > 1 ? h("div", { class: "sb-seeds" }, run.seeds.map((x) => h("button", { type: "button", class: "sb-seed" + (x.seed === seed ? " on" : "") + (x.collapsed ? " dead" : ""), onclick: () => switchSeed(x.seed, true) },
-            h("span", null, `Seed ${x.seed}`), h("b", null, x.collapsed ? "0" : U.pts(x.total)), h("small", null, x.collapsed ? `✕ week ${x.collapsed.week}` : `${x.survivedWeeks ?? "?"} weeks`)))) : null));
+            h("span", null, `Seed ${x.seed}`), h("b", null, U.pts(x.total)), h("small", null, x.collapsed ? `✕ week ${x.collapsed.week}` : `${x.survivedWeeks ?? "?"} weeks`)))) : null));
       const diag = s.diagnosis.length ? h("div", { class: "diag-grid" }, s.diagnosis.map((f) => h("div", { class: `diag ${f.level}` },
         h("h4", null, h("span", { class: "lvl" }, f.level === "good" ? "✓" : f.level === "bad" ? "✕" : "!"), f.title), h("p", null, f.text), f.basis ? h("p", { class: "basis" }, f.basis) : null))) : null;
       const outcomes = s.outcomes.length ? h("ul", { class: "sb-outcomes" }, s.outcomes.map((o) => h("li", { class: o.type === "collapse" ? "bad" : "good" },
