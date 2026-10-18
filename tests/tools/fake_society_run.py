@@ -42,7 +42,7 @@ async def main():
     policy = args[1] if len(args) > 1 else "expert"
     partial = int(sys.argv[sys.argv.index("--partial") + 1]) if "--partial" in sys.argv else None
     recipes = PolisRecipes("config/societies")
-    recipe = recipes.get("standard-v2")
+    recipe = recipes.get("standard-v2.1")
     service = SocietyService(runs, recipes, explorer="explorer")
     import unimatrix.polis.llm as llm
 

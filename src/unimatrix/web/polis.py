@@ -261,9 +261,20 @@ def timeline_csv(report):
                "protest", "starving", "sick", "commons", "harvest", "treasury", "granary", "networth", "gini",
                "cohesion", "integration", "distressed", "isolated"]
     domains = sorted(report["score"]["domains"])
-    writer.writerow(["scope", "id"] + columns + [f"points_{d}" for d in domains])
-    for row in report["timeline"]:
-        writer.writerow(["society", ""] + [row.get(c) for c in columns] + [row["points"].get(d) for d in domains])
+    writer.writerow(["scope", "id"] + columns + [f"points_{d}" for d in domains]
+                    + ["gross_points", "collapse_penalty", "final_score", "scoring_rule",
+                       "initial_errors", "consequential_errors", "unclassified_errors"])
+    score = report["score"]
+    for i, row in enumerate(report["timeline"]):
+        last = i == len(report["timeline"]) - 1
+        gross = score["earned"] if last else round(sum(row["points"].values()), 3)
+        failures = [f for f in report.get("action_audit", {}).get("failures", []) if f["week"] == row["week"]]
+        writer.writerow(["society", ""] + [row.get(c) for c in columns]
+                        + [row["points"].get(d) for d in domains]
+                        + [gross, score["penalty"] if last else 0,
+                           score["total"] if last else None, score.get("rule", "legacy")]
+                        + [sum(f["kind"] == kind for f in failures)
+                           for kind in ("initial", "consequential", "unclassified")])
     writer.writerow([])
     fields = ["week", "status", "activity", "wb", "st", "lo", "gr", "tr", "lg", "hp", "coins", "food", "protest",
               "sick", "hungry", "concern"]

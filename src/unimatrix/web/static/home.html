@@ -10,7 +10,7 @@
 <link rel="stylesheet" href="/static/home.css?v=1">
 <script src="/static/security.js"></script>
 <script src="/static/society-village.js?v=1" defer></script>
-<script src="/static/home.js?v=1" defer></script>
+<script src="/static/home.js?v=2" defer></script>
 </head>
 <body>
 <a class="skip-link" href="#main" id="skip-link">Skip to content</a>
@@ -155,7 +155,7 @@
       <div>
         <p class="eyebrow">Arena</p>
         <h1 id="board-title" tabindex="-1">Leaderboard</h1>
-        <p class="lead">Each model's latest completed run on the current revision of the recipe, with the scripted reference stewards for comparison. Points are unbounded; a collapsed society keeps its accumulated points.</p>
+        <p class="lead">Each model's latest completed run on the current revision of the recipe, with the scripted reference stewards for comparison. Scores average final points over seeds; each collapsed seed loses 10% of its gross points. Historical prompts and inference settings may differ.</p>
       </div>
       <fieldset class="board-recipes">
         <legend class="sr-only">Recipe</legend>
@@ -215,9 +215,9 @@
         <h2><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20h16"/><path d="M6 20v-7h3v7M10.5 20V5h3v15M15 20v-10h3v10"/></svg>How scoring works</h2>
         <ul class="about-list">
           <li><b>Unbounded points.</b> Each domain counts something real (trust-weeks, coins created, fish harvested, skills kept alive…). Exchange rates turn those units into points; nothing caps the total.</li>
-          <li><b>Collapse stops the run.</b> Famine, a dead lake, a revolt, a lost vote of confidence or a scattered village ends the run. Points accumulated up to the collapse remain the final score.</li>
+          <li><b>Collapse stops the run.</b> Famine, a dead lake, a revolt, a lost vote of confidence or a scattered village ends the run. A collapsed seed loses 10% of its accumulated points, including a collapse in the final week.</li>
           <li><b>References are milestones, not caps.</b> Scripted stewards play the same seeds; "1.3× expert" places a model relative to them, and strong play can go beyond the oracle.</li>
-          <li><b>Seeds.</b> A recipe with several seeds averages their final scores, including the points retained by collapsed seeds.</li>
+          <li><b>Seeds.</b> A recipe with several seeds averages their final scores after each collapsed seed's penalty. Domain breakdowns show gross points.</li>
         </ul>
       </article>
       <article class="card about-card">
@@ -232,7 +232,7 @@
       </article>
       <article class="card about-card">
         <h2><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg>How long a run takes</h2>
-        <p>One model call per simulated week, about 2.5k prompt tokens (a static half is cacheable). <b>Standard v2</b> makes 52 calls: about 13 minutes for a 27B model at roughly 15 seconds per answer on a single RTX 5090. <b>Hell v1</b> plays three seeds, 156 calls (about 39 minutes); parallel seeds run them side by side if your server can answer several requests at once.</p>
+        <p>One model call per simulated week, about 2.5k prompt tokens (a static half is cacheable). <b>Standard v2.1</b> makes 52 calls: about 13 minutes for a 27B model at roughly 15 seconds per answer on a single RTX 5090. <b>Hell v1</b> plays three seeds, 156 calls (about 39 minutes); parallel seeds run them side by side if your server can answer several requests at once.</p>
         <p class="muted">Runs survive interruptions: the decision log is replayed through the deterministic engine when you resume.</p>
       </article>
       <article class="card about-card domains">

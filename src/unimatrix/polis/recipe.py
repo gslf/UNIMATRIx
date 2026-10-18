@@ -29,10 +29,12 @@ from .catalog import (
     TRAIT_DEFAULTS,
     TRAITS,
 )
+from .protocol import canonical_variant
 
 BUNDLED = Path(__file__).with_name("recipes")
-DEFAULT = "standard-v2"
+DEFAULT = "standard-v2.1"
 IDENT = re.compile(r"[a-z0-9][a-z0-9_-]{0,63}")
+RECIPE_IDENT = re.compile(r"[a-z0-9][a-z0-9_.-]{0,63}")
 
 WORLD = dict(
     name="Lakeside",
@@ -108,8 +110,8 @@ def text(value, path, limit=400, empty=False):
     return value
 
 
-def ident(value, path):
-    need(isinstance(value, str) and IDENT.fullmatch(value), path,
+def ident(value, path, pattern=IDENT):
+    need(isinstance(value, str) and pattern.fullmatch(value), path,
          "identifier of lowercase letters, digits, '-' or '_' required")
     return value
 
@@ -185,7 +187,7 @@ def normalize_world(value):
     need(isinstance(world["conventions"], dict), "world.conventions", "object required")
     for key, item in world["conventions"].items():
         ident(key, "world.conventions")
-        ident(item, "world.conventions." + key)
+        world["conventions"][key] = ident(canonical_variant(item), "world.conventions." + key)
     return world
 
 
@@ -343,10 +345,12 @@ def normalize_effect(value, path):
         need(value.get("at_fault") in (None, value["a"], value["b"]), path + ".at_fault", "a party or null")
     elif kind == "convention_shift":
         ident(value.get("domain"), path + ".domain")
-        ident(value.get("variant"), path + ".variant")
+        value = dict(value, variant=ident(canonical_variant(value.get("variant")), path + ".variant"))
     elif kind == "merchant":
         ident(value.get("id"), path + ".id")
         need(value.get("field") in ("active", "protocol", "price_factor"), path + ".field", "unknown field")
+        if value["field"] == "protocol":
+            value = dict(value, value=ident(canonical_variant(value.get("value")), path + ".value"))
     elif kind == "policy":
         check_policy(value.get("key"), value.get("value"), path + ".value")
     elif kind == "probe":
@@ -476,7 +480,7 @@ def normalize_merchant(value, index, ticks):
     ident(merchant["id"], where + ".id")
     text(merchant["name"], where + ".name", 60)
     need(merchant["style"] in ("fair", "shark", "guild"), where + ".style", "fair, shark or guild")
-    ident(merchant["protocol"], where + ".protocol")
+    merchant["protocol"] = ident(canonical_variant(merchant["protocol"]), where + ".protocol")
     number(merchant["margin"], where + ".margin", 0, 0.6)
     if merchant["visits"] is not None:
         need(isinstance(merchant["visits"], list), where + ".visits", "list of weeks required")
@@ -529,7 +533,7 @@ def normalize(recipe):
     unknown = set(recipe) - allowed
     need(not unknown, "recipe", "unknown fields " + ", ".join(sorted(unknown)))
     need(recipe.get("format", FORMAT) == FORMAT, "format", "expected " + FORMAT)
-    result = dict(format=FORMAT, id=ident(recipe.get("id"), "id"), name=text(recipe.get("name"), "name", 80),
+    result = dict(format=FORMAT, id=ident(recipe.get("id"), "id", RECIPE_IDENT), name=text(recipe.get("name"), "name", 80),
                   description=text(recipe.get("description", ""), "description", 2000, empty=True),
                   author=text(recipe.get("author", ""), "author", 80, empty=True),
                   tags=list(recipe.get("tags", [])))
@@ -655,7 +659,7 @@ class PolisRecipes:
     def raw(self, key):
         for folder in [BUNDLED] + ([self.directory] if self.directory else []):
             path = folder / f"{key}.json"
-            if IDENT.fullmatch(key) and path.is_file():
+            if RECIPE_IDENT.fullmatch(key) and path.is_file():
                 return json.loads(path.read_text(encoding="utf8"))
         raise ValueError("Unknown society recipe: " + str(key))
 
@@ -673,7 +677,7 @@ class PolisRecipes:
     def delete(self, key):
         if key in self.bundled_ids():
             raise ValueError("Bundled recipes are read-only")
-        path = self.directory / f"{key}.json" if self.directory and IDENT.fullmatch(key) else None
+        path = self.directory / f"{key}.json" if self.directory and RECIPE_IDENT.fullmatch(key) else None
         if path is None or not path.is_file():
             raise ValueError("Unknown society recipe: " + str(key))
         path.unlink()

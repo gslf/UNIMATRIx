@@ -37,21 +37,21 @@ def parser():
     commands.add_parser("recipes", help="List recipes")
     run = commands.add_parser("run", help="Run a candidate model as steward")
     run.add_argument("--model", required=True, help="Candidate model JSON file")
-    run.add_argument("--recipe", default="standard-v2", help="Recipe id or JSON file")
+    run.add_argument("--recipe", default="standard-v2.1", help="Recipe id or JSON file")
     run.add_argument("--runs-dir", default="runs")
     run.add_argument("--parallelism", type=int, default=1, help="Seeds played side by side")
     run.add_argument("--explorer-dir", default="explorer", help="Where the run's xCDN file for the Explorer goes")
     sim = commands.add_parser("simulate", help="Play a recipe with a scripted reference steward")
-    sim.add_argument("--recipe", default="standard-v2")
+    sim.add_argument("--recipe", default="standard-v2.1")
     sim.add_argument("--policy", default="expert", choices=["passive", "random", "naive", "expert", "oracle"])
     sim.add_argument("--seed", type=int)
     sim.add_argument("--output", help="Write the full report (with frames) to this JSON file")
     cal = commands.add_parser("calibrate", help="Score every reference steward on several seeds")
-    cal.add_argument("--recipe", default="standard-v2")
+    cal.add_argument("--recipe", default="standard-v2.1")
     cal.add_argument("--seeds", default="1,2,3,4,5")
     cal.add_argument("--target", type=float, default=1000.0, help="Expert points per domain for suggested rates")
     est = commands.add_parser("estimate", help="Wall-clock estimate from a measured latency")
-    est.add_argument("--recipe", default="standard-v2")
+    est.add_argument("--recipe", default="standard-v2.1")
     est.add_argument("--seconds-per-decision", type=float, required=True)
     rep = commands.add_parser("replay", help="Rebuild a recorded seed without calling the model")
     rep.add_argument("--run", required=True, help="Run folder (contains run.json)")
@@ -60,13 +60,10 @@ def parser():
     exp.add_argument("--runs-dir", default="runs")
     exp.add_argument("--explorer-dir", default="explorer")
     exp.add_argument("--run", help="Only this run id")
-    rescore = commands.add_parser("rescore", help="Retain accumulated points in completed runs and refresh exports")
+    rescore = commands.add_parser("rescore", help="Apply the current scoring rule to completed runs and refresh exports")
     rescore.add_argument("--runs-dir", default="runs")
     rescore.add_argument("--explorer-dir", default="explorer")
     rescore.add_argument("--run", help="Only this run id (default: all completed runs)")
-    demo = commands.add_parser("demo", help="Export the scripted reference stewards of a recipe to the Explorer")
-    demo.add_argument("--recipe", default="standard-v2")
-    demo.add_argument("--explorer-dir", default="explorer")
     doctor = commands.add_parser("doctor", help="Check a model endpoint and record runtime provenance")
     doctor.add_argument("--model", required=True)
     doctor.add_argument("--output", required=True)
@@ -155,11 +152,6 @@ def execute(args):
                 raise ValueError(run.get("explorer_error") or "Run export failed")
             written.append(str(path))
         return dict(rescored=rescored, exported=written)
-    if args.command == "demo":
-        from .polis.explorer import export_references
-
-        return dict(exported=[str(p) for p in export_references(load_recipe(recipes, args.recipe),
-                                                                 args.explorer_dir)])
     if args.command == "doctor":
         import platform
         from importlib.metadata import version

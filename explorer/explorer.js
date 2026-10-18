@@ -10,7 +10,6 @@
   const U = window.ExplorerUI;
   const { h, icon, $ } = U;
   const store = D.store;
-  const REFS = D.REFERENCE_KEYS;
 
   // ================================================================== derived model
   let derived = { version: -1 };
@@ -39,29 +38,23 @@
     derived = { version: store.version, recipes: list, byId: recipes };
     return derived;
   }
-  /** The expert reference run of the same recipe and revision (for ×expert ticks), if loaded. */
-  function expertFor(entry) {
-    const r = model().byId.get(entry.recipe);
-    if (!r) return null;
-    return r.entries.find((e) => e.isRef && e.refKey === "expert" && e.revision === entry.revision) || null;
-  }
-  /** Leaderboard rows: models ranked by score; reference stewards interleaved as unranked milestones. */
+  /** Leaderboard rows: model runs ranked by final score. */
   function boardRows(recipe, rev, latestOnly) {
-    const pool = recipe.entries.filter((e) => e.revision === rev);
+    const pool = recipe.entries.filter((e) => e.revision === rev && e.kind === "model");
     const keep = [];
     const seen = new Set();
     for (const e of pool) {
-      const key = e.isRef ? `ref:${e.refKey}` : `model:${e.model}\u0000${e.snapshot}`;
+      const key = `${e.model}\u0000${e.snapshot}`;
       if (latestOnly && seen.has(key)) continue;
       seen.add(key);
       keep.push(e);
     }
-    keep.sort((a, b) => scoreOf(b) - scoreOf(a) || Number(a.isRef) - Number(b.isRef) || (b.relative || 0) - (a.relative || 0) || byCreatedDesc(a, b));
+    keep.sort((a, b) => scoreOf(b) - scoreOf(a) || (b.relative || 0) - (a.relative || 0) || byCreatedDesc(a, b));
     let rank = 0;
     const latest = new Set();
     const seenModel = new Set();
     for (const e of pool) { const key = `${e.model}\u0000${e.snapshot}`; if (!seenModel.has(key)) { seenModel.add(key); latest.add(e.id); } }
-    return keep.map((e) => ({ entry: e, rank: e.isRef ? null : ++rank, older: !latest.has(e.id) }));
+    return keep.map((e) => ({ entry: e, rank: ++rank, older: !latest.has(e.id) }));
   }
   const runHref = (id, extra) => `#/run/${encodeURIComponent(id)}${extra || ""}`;
   const boardHref = (recipe, rev, show) => {
@@ -246,8 +239,6 @@
       h("div", { class: "how-grid" },
         h("section", { class: "card how" },
           h("h2", null, h("span", { class: "how-n" }, "1"), "Export runs to data/"),
-          h("p", null, "The scripted reference stewards of the bundled recipe:"),
-          h("pre", { class: "cmd" }, "uv run unimatrix demo --explorer-dir explorer"),
           h("p", null, "Model runs are exported to explorer/data/ automatically when they finish (unimatrix serve or unimatrix run); older ones with unimatrix export. Then serve the folder:"),
           h("pre", { class: "cmd" }, "python3 -m http.server --directory explorer 8090"),
           /^https?:$/.test(location.protocol) ? U.actionButton("refresh", "Look for data/ again", "", () => D.boot()) : null),
@@ -264,14 +255,13 @@
   function boardView(params) {
     const m = model();
     if (!m.recipes.length) return emptyView();
-    const recipe = m.byId.get(params.get("recipe")) || m.byId.get("standard-v2") || m.recipes[0];
+    const recipe = m.byId.get(params.get("recipe")) || m.byId.get("standard-v2.1") || m.recipes[0];
     const rev = recipe.revisions.some((r) => r.rev === params.get("rev")) ? params.get("rev") : recipe.current;
     const show = params.get("show") === "all" ? "all" : "latest";
     const header = store.header;
     const rows = boardRows(recipe, rev, show === "latest");
-    const ex = recipe.entries.find((e) => e.isRef && e.refKey === "expert" && e.revision === rev);
     const scales = U.domainScales(rows.map((r) => r.entry.domains));
-    const models = new Set(recipe.entries.filter((e) => !e.isRef && e.revision === rev).map((e) => e.model)).size;
+    const models = new Set(recipe.entries.filter((e) => e.revision === rev).map((e) => e.model)).size;
     const refresh = (r, v, s) => { replaceHash(boardHref(r, v, s)); route(true); };
 
     const controls = h("div", { class: "board-controls" });
@@ -294,32 +284,30 @@
         h("th", { scope: "col", class: "c-seeds" }, "Seeds"), h("th", { scope: "col", class: "c-wb", title: "Wellbeing-years above a neutral point of 2" }, "WELLBY"),
         h("th", { scope: "col", class: "c-dom" }, "Domains"), h("th", { scope: "col", class: "c-date" }, "Played"), h("th", { scope: "col", class: "c-go" }, h("span", { class: "sr-only" }, "Open")))));
     const tbody = h("tbody");
-    rows.forEach((row, i) => tbody.append(boardRow(row, ex, scales, header, i)));
+    rows.forEach((row, i) => tbody.append(boardRow(row, scales, header, i)));
     table.append(tbody);
     const el = h("section", { class: "view board-view" },
-      sectionHead("Arena", "Leaderboard", "Every exported run of a recipe, ranked by score: the mean over seeds, including points accumulated up to a collapse. Reference stewards are scripted milestones and are not ranked. Open a run to see everything its steward did, week by week."),
+      sectionHead("Arena", "Leaderboard", "Ranked by mean final points over seeds: a collapsed seed loses 10% of its gross points. Domain bars show gross points before this penalty. Runs may differ in prompt and inference settings; see the recorded decisions."),
       controls,
       h("div", { class: "board-meta" },
         h("span", { class: "bm-title" }, h("b", null, recipe.title), recipe.subtitle ? h("span", null, recipe.subtitle) : null),
         U.badge(`rev ${rev || "—"}`, "", "cycle"),
         U.badge(`${models} model${models === 1 ? "" : "s"}`, "info", "person"),
-        U.badge(`${rows.length} run${rows.length === 1 ? "" : "s"} shown`, "", "runs"),
-        h("span", { class: "legend-ref" }, U.refTag(), "scripted milestone, not ranked")),
+        U.badge(`${rows.length} run${rows.length === 1 ? "" : "s"} shown`, "", "runs")),
       rows.length ? h("div", { class: "card board-card" }, table) : U.emptyNote("board", "No runs on this revision", "Pick another revision or open more files."));
     return { el, title: "Leaderboard" };
   }
-  function boardRow(row, expert, scales, header, i) {
+  function boardRow(row, scales, header, i) {
     const e = row.entry;
     const href = runHref(e.id);
     const collapsedTxt = e.collapsed ? `${e.collapsed}/${e.seeds} collapsed` : null;
-    const tr = h("tr", { class: "brow" + (e.isRef ? " ref" : "") + (e.fullyCollapsed ? " ruined" : "") + (row.older ? " older" : "") + (row.rank === 1 ? " top" : ""), style: { "--i": Math.min(i, 14) } },
-      h("td", { class: "c-rank" }, e.isRef ? h("span", { class: "rank ref", title: "Reference steward: not ranked" }, "–", h("span", { class: "sr-only" }, "not ranked")) : h("span", { class: "rank" }, String(row.rank))),
+    const tr = h("tr", { class: "brow" + (e.fullyCollapsed ? " ruined" : "") + (row.older ? " older" : "") + (row.rank === 1 ? " top" : ""), style: { "--i": Math.min(i, 14) } },
+      h("td", { class: "c-rank" }, h("span", { class: "rank" }, String(row.rank))),
       h("td", { class: "c-who" },
-        h("div", { class: "who" }, U.avatar(e.model, e.isRef, "xs"),
+        h("div", { class: "who" }, U.avatar(e.model, "xs"),
           h("div", { class: "who-text" },
             h("a", { href, class: "who-link" }, e.model),
-            h("small", null, [e.isRef ? null : e.snapshot || null, row.older ? "older run" : null].filter(Boolean).join(" · "), h("span", { class: "only-phone" }, `${!e.isRef && e.snapshot ? " · " : ""}${U.dateShort(e.created)}`)),
-            e.isRef ? U.refTag() : null))),
+            h("small", null, [e.snapshot || null, row.older ? "older run" : null].filter(Boolean).join(" · "), h("span", { class: "only-phone" }, `${e.snapshot ? " · " : ""}${U.dateShort(e.created)}`))))),
       h("td", { class: "c-score" },
         h("span", { class: "score" }, U.pts(e.total)),
         h("small", { class: "only-phone" }, e.fullyCollapsed ? "collapsed" : `${U.times(e.relative)} expert`),
@@ -327,7 +315,7 @@
       h("td", { class: "c-rel" }, U.times(e.relative)),
       h("td", { class: "c-seeds" }, String(e.seeds), collapsedTxt && !e.fullyCollapsed ? h("small", { class: "bad-txt" }, collapsedTxt) : null),
       h("td", { class: "c-wb" }, U.isNum(e.wellby) ? U.fixed(e.wellby, 1) : "—"),
-      h("td", { class: "c-dom" }, U.equalizer(e.domains, expert ? expert.domains : null, scales, header)),
+      h("td", { class: "c-dom" }, U.equalizer(e.domains, null, scales, header)),
       h("td", { class: "c-date", title: U.dateTime(e.created) }, U.dateShort(e.created)),
       h("td", { class: "c-go" }, icon("chevR")));
     tr.addEventListener("click", (event) => {
@@ -339,7 +327,7 @@
   }
 
   // ================================================================== boot
-  const App = { store, D, U, model, boardRows, expertFor, runHref, boardHref, go, replaceHash, openDataPanel, backLink, sectionHead, notFound };
+  const App = { store, D, U, model, boardRows, runHref, boardHref, go, replaceHash, openDataPanel, backLink, sectionHead, notFound };
   window.ExplorerApp = App;
 
   function boot() {

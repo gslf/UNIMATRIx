@@ -67,6 +67,6 @@ class ModelRepository:
                 config["api_key_file"] = str(secret)
         validate_model(config)
         if secret:
-            write_json(secret, dict(api_key=api_key))
+            write_json(secret, dict(api_key=api_key), private=True)
         write_json(path, config)
         return config

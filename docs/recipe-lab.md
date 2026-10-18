@@ -4,7 +4,7 @@ Open `/recipe-lab` to shape a society and the game a steward must solve in it. T
 desktop, tablet and phone (touch: drag, pan and pinch on the network and the choice graph).
 
 A recipe is one JSON document (format `unimatrix.polis-recipe.v2`, see `src/unimatrix/polis/recipe.py`
-for every field, default and validation rule). The bundled recipes `standard-v2` and `hell-v1` are
+for every field, default and validation rule). The bundled recipes `standard-v2.1` and `hell-v1` are
 read-only: duplicate one to edit it. Saved recipes live in `config/societies/` (git-ignored) and
 appear in the dashboard's recipe selector.
 

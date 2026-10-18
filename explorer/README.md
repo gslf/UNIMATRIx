@@ -4,6 +4,11 @@ A static, single-page explorer of society runs: one leaderboard per recipe, and 
 week-by-week replay of everything its steward did. It never talks to the UNIMATRIx application, its
 API or its databases: it only reads [xCDN](https://github.com/gslf/xCDN) files.
 
+**Standard v2.1** (`standard-v2.1`) is the default village. All villages share the same action
+contract. The quest log separates initial errors and inferred consequences within each week.
+The Explorer accepts model runs only: no scripted reference runs, rows or demo exports.
+The numerical × expert value is a calibration comparison saved with each model run.
+
 ## Open it
 
 ```bash
@@ -20,8 +25,6 @@ Nothing leaves the browser tab.
 
 `data/` is git-ignored: the repository ships the software and the bundled recipes, never results.
 
-- `uv run unimatrix demo --explorer-dir explorer` plays the scripted reference stewards (passive,
-  naive, expert, oracle) of `standard-v2` and writes them to `data/` (`--recipe hell-v1` for the other).
 - Model runs are exported to `data/` when they finish: `unimatrix serve` and `unimatrix run` take
   `--explorer-dir` (default `explorer`); `unimatrix export` exports runs that finished earlier.
 
@@ -36,17 +39,19 @@ uv run unimatrix rescore --run <run-id> --explorer-dir explorer
 
 Omit `--run` to update all completed runs. The command recovers each seed's final score from
 its recorded domain points, updates the seed reports, combined report, leaderboard and xCDN
-export, and refreshes the scripted references. It does not call the model or replay its decisions.
-Original JSON files are kept under `runs/<run-id>/score-backup-before-retained-points/`.
+export, and refreshes the numeric calibration comparisons. It does not call the model or replay its decisions.
+Original JSON files are kept under `runs/<run-id>/score-backup-before-accumulated-collapse-10pct-v2/`.
 Repeating the command is safe. `unimatrix export` also applies this migration before exporting.
 Collapse week/cause, domain values, frames, decisions and completion timestamps are preserved;
-`earned` equals `total` and the legacy `forfeited` field is zero.
+`earned` is the sum of gross domain points. Each collapsed seed loses 10%, recorded in
+`penalty`; `total = earned - penalty`.
+The run score is the mean of those final seed scores. The final replay HUD and chart use the
+recorded final score; domain charts preserve gross points. Prompt hashes, engine fingerprints
+and constrained-output settings identify the historical protocol without changing it.
 
 ### Publish via FTP
 
 1. Export the experiment with `uv run unimatrix export --run <run-id> --explorer-dir explorer`.
-   Optionally run `uv run unimatrix demo --recipe standard-v2 --explorer-dir explorer` to include
-   the four scripted reference runs in the leaderboard and replay them too.
 2. Upload the **contents** of `explorer/` to the public folder chosen for the Explorer, keeping
    this structure (the Python application is not needed on the server):
 
@@ -83,9 +88,9 @@ briefings, model answers and available reasoning. Upload the Explorer files only
 
 ## What it shows
 
-- **Leaderboard** (`#/`): one table per recipe and revision. Model runs are ranked by score (the
-  mean over seeds, retaining points accumulated up to a collapse), with × expert, seeds, WELLBY and the eight domains.
-  Reference stewards are shown as marked, unranked milestone rows. "Latest per steward" keeps each
+- **Leaderboard** (`#/`): one table per recipe and revision. Model runs are ranked by final score (the
+  mean over seeds after each collapsed seed's 10% penalty), with × expert, seeds, WELLBY and the eight gross domains.
+  "Latest per steward" keeps each
   steward's newest run; "All runs" lists every run. Click a row to explore the run.
 - **Run explorer** (`#/run/<id>?seed=&week=`): the animated village (the steward walks to where it
   acts and speaks), transport controls and a scrubber marked with turning points, the score so far
@@ -115,7 +120,7 @@ values are labelled with semantic tags. Fields that are empty are omitted.
 $schema: "https://gslf.github.io/xCDN/schemas/v1/meta.xcdn",
 $format: "unimatrix.explorer.index/1",
 #explorer { generated: t"…", runs: N, domains: { D1: { name, unit }, … } }
-#entry { run, file: "runs/<run>.xcdn", kind: "model"|"reference", model, snapshot, recipe, recipe_name,
+#entry { run, file: "runs/<run>.xcdn", kind: "model", model, snapshot, recipe, recipe_name,
          revision, created: t"…", total: d"…", relative_to_expert: d"…", collapsed, seeds,
          collapse: #collapse { week, cause, label } | null, wellby: d"…", domains: { D1: d"…", … },
          vitals: { population, wellbeing, trust, commons, gini, deaths }, references: { passive, naive, expert, oracle } }
@@ -132,7 +137,7 @@ $schema: "…", $format: "unimatrix.explorer.run/1",
        score: { total: d"…", collapsed_seeds, relative_to_expert, wellby, domains: { D1: #domain { name, unit, points, units, rate }, … } },
        references: { … }, factions: [#faction { id, name, color }], residents: [#resident { … }],
        story: { nodes: [#node { id, title, kind, x, y, outcome, label }], edges: [[from, to, label]] },
-       seeds: [#seed { seed, total, earned, forfeited, survived_weeks, collapsed, wellby, events, narrative,
+       seeds: [#seed { seed, total, earned, penalty, survived_weeks, collapsed, wellby, events, narrative,
                        diagnosis: [#finding { level, title, text, basis }], path: [#step { … }], outcomes: [#outcome { … }], actions }] }
 #week { seed, week, season, metrics: { … }, points: { D1: d"…", … }, stores, commons: { stock, harvest }, skills,
         beliefs, conventions, projects, conflicts, story: [nodes activated this week],

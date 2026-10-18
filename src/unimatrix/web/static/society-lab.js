@@ -1307,7 +1307,7 @@
       h("h3", null, "How a society is scored"),
       h("p", { class: "muted", style: { maxWidth: "980px" } },
         "Scores are unbounded points in natural units. Every domain counts something real — informed resident-weeks, coins of net worth created, service-weeks of public works, fish harvested, trust-weeks — and the recipe's exchange rate converts those units into points. Nothing caps the total: a better steward can always create more. If the society collapses, ",
-        h("strong", null, "its accumulated points are retained"), " as the final score."),
+        h("strong", null, "10% of its accumulated points are deducted"), " from the final score. Domain bars show gross points."),
       h("div", { class: "chips", style: { marginTop: "12px" } }, Object.entries(domains).map(([key, d]) => h("span", { class: "chip", title: d.help },
         h("b", { style: { color: "var(--accent-hi)" } }, key), ` ${d.name} · ${d.unit}`))),
       h("p", { class: "small muted", style: { marginTop: "10px" } }, "Exchange rates, collapse rules and scoring constants live under ", h("a", { href: "#collapse" }, "Collapse & scoring"), "."));
@@ -1405,7 +1405,7 @@
     return h("div", null,
       stale ? h("p", { class: "badge watch", style: { marginBottom: "8px" } }, "Recipe changed since this run — re-run to refresh") : null,
       rows, h("div", { class: "checks" }, checks),
-      h("p", { class: "tiny muted", style: { marginTop: "8px" } }, `Seeds: ${calib.data.seeds.join(", ")}. Points are retained at collapse; striped bars mark collapsed runs.`));
+      h("p", { class: "tiny muted", style: { marginTop: "8px" } }, `Seeds: ${calib.data.seeds.join(", ")}. Final scores include a 10% deduction per collapsed seed; striped bars mark collapsed runs.`));
   }
 
   // =====================================================================================
@@ -4218,7 +4218,7 @@
       F.text({ label: "Label", value: o.label || "", max: 120, path: `${base}.outcome.label`, onChange: (v) => { o.label = v; changed(); } }),
       o.type === "flourish"
         ? h("div", null, h("h4", null, "Reward (domain units, then × exchange rate)"), rewards)
-        : h("p", { class: "callout bad", style: { marginTop: "10px" } }, "Reaching this node ends the run immediately; accumulated points remain the final score."));
+        : h("p", { class: "callout bad", style: { marginTop: "10px" } }, "Reaching this node ends the run immediately and deducts 10% of its accumulated points."));
   }
 
   // ----- effects
@@ -4662,7 +4662,7 @@
     });
     drawRates();
     put(host, 
-      sectionHead("Rules", "Collapse & scoring", "When does the society fall apart, and how are its achievements counted? A collapse ends the run with the points accumulated up to that point."),
+      sectionHead("Rules", "Collapse & scoring", "When does the society fall apart, and how are its achievements counted? A collapse ends the run and deducts 10% of its accumulated points."),
       h("h3", { class: "eyebrow", style: { margin: "6px 0 12px" } }, "Collapse rules"),
       h("div", { class: "grid auto" },
         ruleCard("Depopulation", ["population"], COLLAPSE_SOCIOLOGY.population),
@@ -4803,7 +4803,7 @@
       h("div", { class: "table-scroll" }, h("table", { class: "data" },
         h("thead", null, h("tr", null, ["Steward", "Seed", "Score", "", "Survived", "Collapse", "WELLBY", "Story path"].map((t) => h("th", null, t)))),
         h("tbody", null, rows))),
-      h("p", { class: "tiny muted", style: { marginTop: "8px" } }, "Click a row to play it in the village. Striped bars mark collapsed runs; their points are retained."));
+      h("p", { class: "tiny muted", style: { marginTop: "8px" } }, "Click a row to play it in the village. Striped bars mark collapsed runs; final scores include their 10% penalty."));
   }
   function buildStage(stage, sim) {
     const report = sim.report;
@@ -4871,11 +4871,11 @@
       drawFeed(i);
       drawLog(i);
       story.setPlayback({ states: frame.story || {}, path: report.story ? report.story.path : [], week: frame.week ?? i });
-      const points = Object.values(frame.points || {}).reduce((a, v) => a + (Number(v) || 0), 0);
       const last = i === frames.length - 1;
+      const points = last ? report.score.total : Object.values(frame.points || {}).reduce((a, v) => a + (Number(v) || 0), 0);
       fill(runningTotal, 
         h("span", { class: frame.collapsed ? "total collapse" : "total running" }, fmt.int(points)),
-        h("span", { class: "muted small" }, frame.collapsed ? `${frame.collapsed.label} (week ${frame.collapsed.week})` : last ? "final points" : "points so far"),
+        h("span", { class: "muted small" }, frame.collapsed ? `${frame.collapsed.label} (week ${frame.collapsed.week}) · penalty −${fmt.int(report.score.penalty)}` : last ? "final points" : "points so far"),
         h("div", { class: "small muted", style: { width: "100%" } }, `${fmt.int(getIn(frame, ["metrics", "population"], 0))} residents · wellbeing ${fmt.num(getIn(frame, ["metrics", "wellbeing"], 0), 1)} · trust ${fmt.num(getIn(frame, ["metrics", "trust"], 0), 2)}`));
     };
     function drawFeed(i) {
@@ -4959,7 +4959,7 @@
           h("div", { class: "score-hero" },
             h("span", { class: score.collapsed ? "total collapse" : "total" }, fmt.int(score.total)),
             h("span", { class: "muted" }, score.collapsed ? `${score.collapsed.label} · week ${score.collapsed.week}` : `points · survived all ${score.survived_weeks} weeks`)),
-          score.collapsed ? h("p", { class: "small", style: { color: "#ffb3aa" } }, `Final score: ${fmt.int(score.total)} points retained at collapse in week ${score.collapsed.week}.`) : null,
+          score.collapsed ? h("p", { class: "small", style: { color: "#ffb3aa" } }, `${fmt.num(score.earned, 3)} gross − ${fmt.num(score.penalty, 3)} collapse penalty = ${fmt.num(score.total, 3)} final points; collapse in week ${score.collapsed.week}.`) : null,
           h("p", { class: "small muted", style: { margin: "8px 0 14px" } }, `${fmt.num(score.wellby, 1)} WELLBYs · ${fmt.num(score.wellby_equity, 1)} equity-weighted`),
           domains.map(([d, info]) => h("div", { class: "domain-bar", title: `${fmt.num(info.units, 1)} ${info.unit} × ${info.rate}` },
             h("span", null, `${d} ${info.name}`), h("div", { class: "bar" }, h("i", { class: score.collapsed ? "ghost" : "", style: { width: `${(info.points / maxPts) * 100}%` } })), h("span", { class: "v" }, fmt.int(info.points)))),

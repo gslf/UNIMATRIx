@@ -22,7 +22,7 @@ def main():
         command = Path(sys.prefix) / "bin" / "unimatrix"
         result = subprocess.run([str(command), "recipes"], cwd=root, capture_output=True, text=True,
                                 encoding="utf8", check=True)
-        if [row["id"] for row in json.loads(result.stdout)] != ["standard-v2", "hell-v1"]:
+        if [row["id"] for row in json.loads(result.stdout)] != ["standard-v2.1", "hell-v1"]:
             raise AssertionError("installed_recipe_catalog_mismatch")
         result = subprocess.run([str(command), "simulate", "--policy", "naive", "--seed", "1"], cwd=root,
                                 capture_output=True, text=True, encoding="utf8", check=True)
@@ -37,7 +37,7 @@ def main():
                 if response.status_code != 200 or not response.content:
                     raise AssertionError(f"installed_dashboard_route_failed:{path}:{response.status_code}")
             response = client.get("/api/polis/recipes")
-            if response.status_code != 200 or [row["id"] for row in response.json()] != ["standard-v2", "hell-v1"]:
+            if response.status_code != 200 or [row["id"] for row in response.json()] != ["standard-v2.1", "hell-v1"]:
                 raise AssertionError("installed_recipe_api_failed")
             if client.get("/api/personalities").status_code != 200:
                 raise AssertionError("installed_personalities_missing")

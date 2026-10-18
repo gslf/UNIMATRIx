@@ -4,9 +4,9 @@
 
 UNIMATRIx evaluates a candidate model as the **steward of one simulated society**. The benchmark spread across eight domains: information and rumours, the economy, public works, a shared lake, relationships and care, institutions, the transmission of skills and adaptation to change.
 
-Residents are deterministic agents with hidden needs, emotions, beliefs, grievances and ties. Scores are unbounded points in natural units like trust-weeks, coins created, fish harvested, skills kept alive, etc. A collapsed society keeps the points accumulated up to its collapse.
+Residents are deterministic agents with hidden needs, emotions, beliefs, grievances and ties. Scores are unbounded points in natural units like trust-weeks, coins created, fish harvested, skills kept alive, etc. A collapsed seed loses 10% of its accumulated points; run scores average the final scores of all seeds. Reports preserve gross domain points and show the penalty separately.
 
-Two recipes are bundled. `standard-v2` (Lakeside) is passable by a weak but attentive model and rewards strong ones without limit. `hell-v1` (Malaterra) is built to break stewards by introducing a corrupt council, a moneylender, a smuggler, three agitators, a cartel and a famine winter.
+The default is **Standard v2.1** (`standard-v2.1`, Lakeside). Every village uses consistent convention names, precise action errors and separate counts for initial failures and inferred consequences. Standard and `hell-v1` (Malaterra) share the balanced domain rates. The same calibration rule applies to authored villages. There is one action contract, with no legacy mode. See the [methodology](docs/standard-v2.1.md).
 
 
 ## Install and run
@@ -22,10 +22,10 @@ Open `http://127.0.0.1:8001`, add a model in **Model settings** ([model configur
 
 ```bash
 uv run unimatrix recipes
-uv run unimatrix simulate --recipe standard-v2 --policy expert
+uv run unimatrix simulate --recipe standard-v2.1 --policy expert
 uv run unimatrix calibrate --recipe hell-v1 --seeds 1,2,19
-uv run unimatrix estimate --recipe standard-v2 --seconds-per-decision 15
-uv run unimatrix run --model config/models/my-model.json --recipe standard-v2
+uv run unimatrix estimate --recipe standard-v2.1 --seconds-per-decision 15
+uv run unimatrix run --model config/models/my-model.json --recipe standard-v2.1
 ```
 
 ## Operations

@@ -42,7 +42,6 @@
     const entry = store.byId.get(id);
     if (!entry) return { el: app.notFound("Run not found", `No loaded run has the id “${id || ""}”. Open its file to explore it.`), title: "Run not found" };
     const header = store.header;
-    const expert = app.expertFor(entry);
     const recipeTitle = U.splitName(entry.recipeName)[0];
 
     // ============================================================ static layout
@@ -50,11 +49,11 @@
     const seedBox = h("div", { class: "seed-box", hidden: true });
     const jumpCollapse = h("button", { type: "button", class: "small danger-ghost", hidden: true }, icon("skull", "sm"), h("span", null, "Jump to the collapse"));
     const headEl = h("div", { class: "run-head" },
-      h("div", { class: "rh-main" }, U.avatar(entry.model, entry.isRef, "lg"),
+      h("div", { class: "rh-main" }, U.avatar(entry.model, "lg"),
         h("div", { class: "rh-text" },
           h("p", { class: "eyebrow" }, `Run explorer · ${recipeTitle}`),
-          h("h1", null, entry.model, entry.isRef ? U.refTag() : null),
-          h("p", { class: "rh-sub" }, [entry.isRef ? "scripted reference steward" : entry.snapshot || null, U.dateTime(entry.created) || null,
+          h("h1", null, entry.model),
+          h("p", { class: "rh-sub" }, [entry.snapshot || null, U.dateTime(entry.created) || null,
             entry.revision ? `rev ${entry.revision}` : null, `${entry.seeds} seed${entry.seeds === 1 ? "" : "s"}`].filter(Boolean).join(" · ")))),
       h("div", { class: "rh-side" },
         h("div", { class: "rh-score" }, headScore, h("span", null, entry.fullyCollapsed ? "every seed collapsed" : `${U.times(entry.relative)} expert${entry.seeds > 1 ? ` · mean of ${entry.seeds} seeds` : ""}`)),
@@ -230,7 +229,8 @@
     const resident = (rid) => (run && run.residents.find((x) => x.id === rid)) || null;
     const nameOf = (rid) => { const r = resident(rid); return r ? r.name : rid; };
     const factionOf = (fid) => (run && run.factions.find((f) => f.id === fid)) || { name: fid || "no faction", color: "#c8c8c8" };
-    const totalOf = (f) => (f ? Object.values(f.points).reduce((a, b) => a + (U.isNum(b) ? b : 0), 0) : 0);
+    const totalOf = (f) => (f === frames[frames.length - 1] && seedInfo()
+      ? seedInfo().total : f ? Object.values(f.points).reduce((a, b) => a + (U.isNum(b) ? b : 0), 0) : 0);
     const seekTo = (i) => { if (village && i >= 0) { village.pause(); village.seek(i); } };
     const seekWeek = (week) => seekTo(frames.findIndex((f) => f.week === week));
 
@@ -302,7 +302,7 @@
       scoreCard.classList.toggle("collapsed", Boolean(f.collapsed));
       if (f.collapsed) {
         U.countTo(tkTotal, total, 700);
-        tkSub.textContent = "final points · retained at collapse";
+        tkSub.textContent = `final points · collapse penalty −${U.pts(seedInfo().penalty)}`;
         tkDelta.className = "tk-delta bad";
         U.fill(tkDelta, U.ruinsBadge("collapse"));
       } else {
@@ -386,6 +386,9 @@
         h("div", { class: "act-body" },
           h("div", { class: "act-head" }, h("b", null, meta.label), h("span", { class: "status " + (a.ok ? "ok" : "bad") }, a.ok ? "applied" : a.status)),
           who ? h("div", { class: "act-who" }, who) : null,
+          a.failure ? h("div", { class: "act-who" }, a.failure.kind === "consequential"
+            ? `Consequence (inferred) of action(s) ${(a.failure.caused_by || []).map(i => i + 1).join(", ")} · ${a.failure.code}`
+            : `${a.failure.kind === "initial" ? "Initial error" : "Unclassified dependency"} · ${a.failure.code}`) : null,
           a.say ? h("div", { class: "act-say" }, `“${a.say}”`) : null,
           reply.text ? h("div", { class: "act-out" + (a.ok ? "" : " why") }, a.ok ? null : h("b", null, "Why: "), reply.speaker ? h("b", null, `${reply.speaker}: `) : null, reply.text) : null,
           a.label && !compact ? h("code", { class: "act-code", title: "The action as the engine recorded it" }, a.label) : null));
@@ -443,10 +446,10 @@
     }
     function renderMind(f) {
       const panel = tabPanels.get("mind");
-      if (run.isRef || !run.hasDecisions) {
+      if (!run.hasDecisions) {
         U.fill(panel, h("div", { class: "insp-title" }, h("h2", null, "Inside the steward's mind")),
-          U.emptyNote("robot", run.isRef ? "A scripted reference steward" : "No decision log in this file",
-            run.isRef ? "Reference stewards follow fixed rules, so there is no briefing, reasoning or answer to inspect. Everything they did is in the Steward tab and the quest log." : "This run file carries no #decision values (it was exported before decisions were recorded)."));
+          U.emptyNote("robot", "No decision log in this file",
+            "This run file carries no #decision values (it was exported before decisions were recorded)."));
         return;
       }
       const d = f.decision;
@@ -807,6 +810,7 @@
     let questGroups = [];
     function buildQuestLog() {
       const acts = perSeed.actions;
+      const audit = seedInfo().actionAudit;
       const ok = acts.filter((x) => x.a.ok).length;
       const said = acts.filter((x) => x.a.say).length;
       const people = new Set(acts.flatMap((x) => x.a.targets)).size;
@@ -823,6 +827,8 @@
           h("span", { class: "chips" }, U.badge(`${acts.length} actions`, "", "bolt"), U.badge(`${ok} applied`, "good", "check"),
             acts.length - ok ? U.badge(`${acts.length - ok} rejected`, "bad", "x") : null, said ? U.badge(`${said} spoken lines`, "gold", "chat") : null, U.badge(`${people} people addressed`, "info", "users"))),
         h("p", { class: "muted small" }, "Every action the steward took on this seed, week by week: what it asked for, to whom, what it said, and what happened. Click a week to jump there."),
+        audit ? h("p", { class: "muted small" }, `${audit.initial} initial errors · ${audit.consequential} consequences (inferred) · ${audit.unclassified} unclassified. Dependencies describe planned resource flows; they do not change recorded outcomes or add score penalties.`) : null,
+        audit?.replay_warning ? h("p", { class: "muted small" }, `Historical audit uses recorded frames: ${audit.replay_warning}. Missing balances remain unclassified.`) : null,
         h("div", { class: "ql-filters" }, search, verbSel, statusSeg),
         listBox);
       questCard._list = listBox;
@@ -908,7 +914,7 @@
         h("p", { class: "es-kicker" }, collapsed ? `Week ${s.collapsed.week}` : `${run.recipe.weeks || frames[frames.length - 1].week} weeks survived`),
         h("h2", { class: "es-title" }, collapsed ? "Collapse" : "Year complete"),
         collapsed ? h("p", { class: "es-cause" }, s.collapsed.label) : null,
-        h("div", { class: "es-score" }, total, h("span", null, collapsed ? "points retained at collapse" : `points${run.seeds.length > 1 ? ` · seed ${s.seed}` : ""}`)),
+        h("div", { class: "es-score" }, total, h("span", null, collapsed ? `points after collapse penalty −${U.pts(s.penalty)}` : `points${run.seeds.length > 1 ? ` · seed ${s.seed}` : ""}`)),
         h("div", { class: "es-actions" },
           U.actionButton("refresh", "Watch again", "small", () => { endscreen.hidden = true; village.seek(0); village.play(); }),
           U.actionButton("board", "Final scoreboard", "primary small", () => { endscreen.hidden = true; results.scrollIntoView({ behavior: U.reduced() ? "auto" : "smooth", block: "start" }); })));
@@ -921,16 +927,16 @@
       if (!s) { results.replaceChildren(); return; }
       const last = frames[frames.length - 1] || { points: {}, metrics: {} };
       const collapsed = Boolean(s.collapsed);
-      const expertDomains = expert && expert.id !== entry.id ? expert.domains : null;
       const seedDomains = {};
       for (const d of U.DOMAINS) seedDomains[d] = last.points[d] || 0;
-      const scales = U.domainScales([seedDomains, expertDomains]);
+      const scales = U.domainScales([seedDomains]);
       const headline = h("div", { class: "sb-headline" },
         h("div", { class: "sb-main" + (collapsed ? " lost" : "") }, h("span", { class: "label" }, run.seeds.length > 1 ? `Seed ${s.seed}` : "Final score"),
           h("strong", { class: "sb-total" + (collapsed ? " collapse" : "") }, U.pts(s.total)),
           collapsed ? h("p", { class: "sb-cause" }, U.ruinsBadge(`week ${s.collapsed.week}`), h("span", null, `${s.collapsed.label}${s.collapsed.cause ? ` (${s.collapsed.cause})` : ""}`))
             : h("p", { class: "sb-cause good" }, icon("shield", "sm"), h("span", null, `Survived all ${U.isNum(s.survivedWeeks) ? s.survivedWeeks : run.recipe.weeks} weeks`)),
-          collapsed ? h("p", { class: "sb-retained" }, "Points accumulated up to the collapse remain the final score.") : null),
+          h("p", { class: "sb-retained" }, `${U.fixed(s.earned, 3)} gross − ${U.fixed(s.penalty, 3)} collapse penalty = ${U.fixed(s.total, 3)} final points. Domain bars show gross points.`),
+          h("p", { class: "muted small" }, s.scoringRule || "Legacy scoring")),
         h("div", { class: "sb-run" },
           h("span", { class: "label" }, run.seeds.length > 1 ? `Run score · mean of ${run.seeds.length} seeds` : "Run score"),
           h("b", null, U.pts(entry.total)),
@@ -951,8 +957,9 @@
       U.fill(results, 
         h("div", { class: "card-head" }, h("h2", { id: "results-title" }, icon("board"), "Final scoreboard")),
         headline,
+        h("p", { class: "muted small" }, `Recorded protocol: engine ${run.protocol.engine_fingerprint || "unrecorded"}; constrained output ${run.protocol.constrain_output ?? "unrecorded"}; prompt SHA-256 ${(run.protocol.system_prompt_sha256 || []).join(", ") || "unrecorded"}. Rescoring preserves the original model instructions.`),
         h("div", { class: "sb-grid" },
-          h("div", null, h("h3", null, icon("columns"), "Points per domain", expertDomains ? h("span", { class: "h3-note" }, "white tick: expert reference") : null), U.skillBars(seedDomains, expertDomains, scales, header)),
+          h("div", null, h("h3", null, icon("columns"), "Points per domain"), U.skillBars(seedDomains, null, scales, header)),
           h("div", null, h("h3", null, icon("book"), "Narrative"), h("p", { class: "sb-narrative" }, s.narrative || "—"),
             h("h3", { class: "mt" }, icon("sparkle"), "Outcomes reached"), outcomes)),
         h("h3", { class: "mt" }, icon("pulse"), "What happened"), events,

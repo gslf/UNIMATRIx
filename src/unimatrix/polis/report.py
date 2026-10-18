@@ -58,8 +58,10 @@ def finding(level, title, text, basis):
 def collapse_finding(final):
     c = final["collapsed"]
     return finding("bad", "Collapse", f"{c['label']} in week {c['week']}. "
-                   f"The final score retains {final['total']:.3f} points accumulated up to the collapse.",
-                   "Collapse rules of the recipe")
+                   f"Gross points: {final['earned']:.3f}; collapse penalty "
+                   f"({final['penalty_rate']:.0%}): {final['penalty']:.3f}; "
+                   f"final score: {final['total']:.3f}.",
+                   f"Collapse rules of the recipe; scoring rule {final['rule']}")
 
 
 def diagnosis(world, final):
@@ -200,6 +202,7 @@ def narrative(world, final):
 
 
 def build_report(world, meta=None):
+    from .action_audit import action_audit
     final = world.ledger.final or world.ledger.close()
     frame = world.frames[-1]
     residents = []
@@ -225,7 +228,9 @@ def build_report(world, meta=None):
         network=dict(start=network(world, world.frames[0]), end=network(world, frame)),
         residents=residents,
         story=dict(path=world.story.path, outcomes=world.outcomes, nodes=world.story.status()),
-        actions=verbs, factions=world.recipe["factions"], domains=DOMAINS,
+        actions=verbs, action_audit=action_audit(getattr(world, "action_batches", world.frames)),
+
+        factions=world.recipe["factions"], domains=DOMAINS,
         stability=dict(wellbeing_sd=round(pstdev([f["metrics"]["wellbeing"] for f in world.frames]), 3)),
         meta=meta or {},
     )

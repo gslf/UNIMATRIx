@@ -6,7 +6,7 @@ from .briefing import render
 from .catalog import CONCERNS, POLICIES
 
 SYSTEM = """You are the steward of {place}, a small community, for {weeks} weeks. Each turn is one week.
-Your task: help the community flourish and prevent its collapse. It collapses if {collapse}. A collapse ends the run; you retain the points accumulated up to that point as your final score.
+Your task: help the community flourish and prevent its collapse. It collapses if {collapse}. A collapse ends the run; 10% of your accumulated points are deducted from your final score.
 You are scored without any upper limit on eight things at once: residents holding true beliefs and your forecasts; wealth created; public works in service; the productivity of the lake; residents' trust in you; fair and legitimate institutions; skills passed on to successors; and adaptation to change (new conventions, newcomers).
 
 HOW THE WORLD WORKS
@@ -70,13 +70,29 @@ def policy_text():
 
 
 def system_prompt(recipe):
+    from .protocol import variants
     rules = recipe["collapse"]
     collapse = [text for key, text in COLLAPSE_TEXT.items() if rules.get(key) not in (None, False)]
     collapse_text = ", ".join(collapse[:-1]) + (" or " + collapse[-1] if len(collapse) > 1 else collapse[0]) \
         if collapse else "it falls apart"
-    return SYSTEM.format(place=recipe["world"]["name"], weeks=recipe["ticks"], collapse=collapse_text,
+    prompt = SYSTEM.format(place=recipe["world"]["name"], weeks=recipe["ticks"], collapse=collapse_text,
                          actions=recipe["steward"]["actions_per_week"], concerns=", ".join(CONCERNS),
                          policies=policy_text(), note=recipe["steward"]["note_chars"])
+    vocabulary = "; ".join(f"{d}: {', '.join(variants(recipe, d))}" for d in recipe["world"]["conventions"])
+    rates = ", ".join(f"{d}={v:g}" for d, v in recipe["scoring"]["rates"].items())
+    prompt += ("\n\nACTION CONTRACT clear-v1\n"
+               "Actions execute in array order. Build must precede project assignments. Rejected actions consume "
+               "one action slot and produce no resources; later actions still execute. There is no feedback or "
+               "replanning between actions in a batch. Results and current stores in the next briefing are authoritative. "
+               "Your note is written before execution: record intended trades as plans, not completed facts.\n"
+               "The local market trades food only, at its fixed displayed price (your price field is ignored). "
+               "Buying needs more than 0.5 food on offer. Quantity is limited to stock; funds must cover that quantity.\n"
+               "Mediation requires an existing open dispute; a complaint does not create one.\n"
+               f"Convention vocabulary: {vocabulary}. sealed_bids, sealed bids and sealed-bid mean sealed_bid. "
+               "Use the same canonical name for convention.variant and trade.bid. Setting a convention helps "
+               "residents adopt it; it does not fill trade.bid for you. A protocol rejection reports the required value.\n"
+               f"Domain exchange rates (points per natural unit): {rates}. Each domain remains unbounded.")
+    return prompt
 
 
 SCHEMA = {

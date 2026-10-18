@@ -497,7 +497,9 @@
 
   function buildContext(report) {
     const timeline = report.timeline || [];
-    const frames = report.frames || [];
+    const failures = new Map((report.action_audit?.failures || []).map(f => [`${f.week}:${f.index}`, f]));
+    const frames = (report.frames || []).map(frame => ({ ...frame, actions: (frame.actions || []).map((a, i) =>
+      ({ ...a, failure: a.failure || failures.get(`${frame.week}:${a.index ?? i}`) })) }));
     const ctx = {
       report,
       timeline,
@@ -614,7 +616,7 @@
         h("p", { class: "collapse-word", text: "Collapse" }),
         h("p", { class: "collapse-detail" }, h("span", { class: "collapse-week", text: `Week ${collapsed.week}` }), h("span", { text: collapsed.label || humanize(collapsed.cause) })),
         h("div", { class: "hero-number" }, value, spoken, h("span", { class: "hero-unit", text: "points" })),
-        h("p", { class: "retained" }, "Points accumulated up to the collapse remain the final score."),
+        h("p", { class: "retained" }, `${dec(score.earned, 3)} gross − ${dec(score.penalty, 3)} collapse penalty = ${dec(score.total, 3)} final points.`),
       ]);
       countUp(value, score.total);
     } else {
@@ -626,6 +628,7 @@
     const sub = clear($("hero-sub"));
     if (ratio !== null) add(sub, [h("strong", { text: `${dec(ratio, 2)}×` }), " the expert reference on this seed"]);
     add(sub, [ratio !== null ? " · " : "", `${score.survived_weeks ?? "–"} of ${ctx.horizon} weeks survived`]);
+    if (score.rule) add(sub, [" · ", score.rule]);
     const aggregate = $("hero-aggregate");
     const runScore = state.report && state.report.score;
     aggregate.hidden = !(isMultiSeed() && runScore);
@@ -691,8 +694,8 @@
       return { key: d, short: d, label: `${d} · ${meta.name}`, value: meta.points, color: V.palette.categorical[i] };
     });
     V.compositionBar($("composition"), { segments, unit: "points", label: "Points by domain", format: v => pts(v) });
-    $("composition-title").textContent = "Contribution to the total";
-    $("composition-note").textContent = `${pts(total)} points in total`;
+    $("composition-title").textContent = "Contribution to gross points";
+    $("composition-note").textContent = `${pts(total)} gross points before the collapse penalty`;
     const legend = clear($("composition-legend"));
     DOMAINS.forEach((d, i) => {
       const key = h("i", { class: "viz-key box" });
@@ -713,7 +716,7 @@
       h("h3", { text: meta.name })));
     add(card, h("p", { class: "domain-points" },
       h("strong", { text: pts(meta.points) }), h("span", { text: " pts" }),
-      h("span", { class: "domain-share", text: total > 0 ? `${pct(meta.points / total, 1)} of the total` : "" })));
+      h("span", { class: "domain-share", text: total > 0 ? `${pct(meta.points / total, 1)} of gross points` : "" })));
     add(card, h("p", { class: "domain-units" },
       h("span", { text: `${isNum(meta.units) ? fmt.number(meta.units, Math.abs(meta.units) < 100 ? 1 : 0) : "–"} ${meta.unit}` }),
       isNum(meta.rate) ? h("span", { class: "muted", text: ` × ${meta.rate} pts per unit` }) : null));
@@ -812,6 +815,9 @@
 
   function renderToolkit(ctx) {
     const node = clear($("toolkit"));
+    const audit = ctx.report.action_audit;
+    if (audit) node.appendChild(h("p", { class: "caption", text: `${audit.rejected} rejected / ${audit.submitted} submitted · ${audit.initial} initial errors · ${audit.consequential} consequences (inferred) · ${audit.unclassified} unclassified. Dependencies describe planned resource flows, not a counterfactual replay; no extra score penalty.` }));
+    if (audit?.replay_warning) node.appendChild(h("p", { class: "caption", text: `Historical audit uses recorded frames: ${audit.replay_warning}. Missing balances remain unclassified.` }));
     const actions = Object.entries(ctx.report.actions || {}).sort((a, b) => b[1] - a[1]);
     if (!actions.length) {
       node.appendChild(h("p", { class: "muted", text: "The steward took no action." }));
@@ -961,7 +967,7 @@
     renderKnowledge(ctx, grid);
 
     // Points
-    track(V.timeChart(chartCard(grid, { title: "Points accumulated", description: "Cumulative points by domain. Their sum at the last week played is the score, including when the society collapses.", unit: "points", wide: true }), baseSpec(ctx, {
+    track(V.timeChart(chartCard(grid, { title: "Gross points accumulated", description: "Cumulative points by domain before the collapse penalty. A collapsed seed loses 10% of its gross points at the end.", unit: "points", wide: true }), baseSpec(ctx, {
       label: "Cumulative points by domain, stacked",
       height: 300,
       stack: true,
@@ -1510,6 +1516,9 @@
           h("div", { class: "log-body" },
             h("p", { class: "log-title" }, h("strong", { text: actionTitle(a, names) }), rejected ? h("span", { class: "badge is-bad", text: a.status }) : null),
             a.say ? h("q", { class: "log-say", text: a.say }) : null,
+            a.failure ? h("p", { class: "caption", text: a.failure.kind === "consequential"
+              ? `Consequence (inferred) of action(s) ${a.failure.caused_by.map(i => i + 1).join(", ")} · ${a.failure.code}`
+              : `${a.failure.kind === "initial" ? "Initial error" : "Unclassified dependency"} · ${a.failure.code}` }) : null,
             a.text ? h("p", { class: "log-outcome", text: a.text }) : null)));
       });
       if (!actions.length && !steward.error) rows.appendChild(h("li", { class: "muted log-none", text: frame.collapsed ? "No action: the society collapsed." : "No action this week." }));

@@ -127,8 +127,8 @@ def briefing(world):
             buys={item: m["prices"][f"buys:{item}"] for item in m["buys"]},
             counteroffers=dict(m["counters"])))
     base = world.recipe["world"]["prices"]["food"]
-    market = dict(food_offered_last_week=round(world.market_pool, 1), buy_price=round(base * 1.25, 2),
-                  sell_price=round(base * 0.8, 2))
+    market = dict(food_offered_last_week=round(world.market_pool, 6), buy_price=base * 1.25,
+                  sell_price=base * 0.8, items=["food"], minimum_supply_exclusive=0.5, fixed_price=True)
     conflicts = []
     for c in world.conflicts.values():
         if c["resolved"]:
@@ -165,7 +165,8 @@ def briefing(world):
     return dict(
         week=world.week, weeks=world.horizon, season=world.season, title=world.recipe["steward"]["title"],
         place=world.recipe["world"]["name"], actions_per_week=world.recipe["steward"]["actions_per_week"],
-        stores=dict(treasury=round(world.stores["treasury"], 1), granary=round(world.stores["granary"], 1),
+        stores=dict(treasury=round(world.stores["treasury"], 6),
+                    granary=round(world.stores["granary"], 6),
                     granary_weeks=round(world.stores["granary"] / max(1e-9, len(present) * need), 1),
                     medicine=int(round(world.stores["medicine"])), tools=round(world.stores["tools"], 1)),
         population=dict(present=len(present), initial=world.initial_population, gone=gone),
@@ -238,6 +239,11 @@ def render(obs):
         lines.append("RESULTS OF YOUR LAST ACTIONS")
         for item in obs["results"]:
             lines.append(f"- [{item['status']}] {item['action']} → {item['text']}")
+            if item.get("failure"):
+                failure = item["failure"]
+                parents = ", ".join(str(i + 1) for i in failure["caused_by"])
+                lines.append(f"  error={failure['code']}; {failure['kind']}"
+                             + (f"; inferred dependency on action(s) {parents}" if parents else ""))
     if obs["chronicle"]:
         lines.append("CHRONICLE")
         for c in obs["chronicle"]:

@@ -22,7 +22,6 @@
   const DOMAINS = ["D1", "D2", "D3", "D4", "D5", "D6", "D7", "D8"];
   const RESIDENT_COLUMNS = ["id", "status", "activity", "wb", "st", "lo", "gr", "tr", "lg", "hp", "coins", "food",
     "protest", "sick", "hungry", "concern", "intensity", "task"];
-  const REFERENCE_KEYS = ["passive", "naive", "expert", "oracle"];
   const INDEX_URL = "data/index.xcdn";
 
   /** A friendly, user-facing loading error (file name, parser message, line and column when known). */
@@ -178,9 +177,9 @@
     if (!c || typeof c !== "object") return null;
     return { week: num(c.week), cause: str(c.cause), label: str(c.label, "Collapse") };
   }
-  const refKey = (model) => str(model).toLowerCase().replace(/\s*steward$/, "").trim();
 
   function normalizeEntry(e, source) {
+    if (e.kind !== "model") throw new DataError("Explorer accepts model runs only.");
     const domains = {};
     const raw = obj(e.domains);
     for (const d of DOMAINS) domains[d] = num(raw[d]) || 0;
@@ -190,7 +189,7 @@
     const out = {
       id: str(e.run),
       file: str(e.file) || `runs/${str(e.run)}.xcdn`,
-      kind: e.kind === "reference" ? "reference" : "model",
+      kind: "model",
       model: str(e.model, "Unknown model") || "Unknown model",
       snapshot: str(e.snapshot),
       recipe: str(e.recipe, "unknown") || "unknown",
@@ -199,6 +198,7 @@
       created: e.created ? str(e.created) : null,
       total: num(e.total) || 0,
       totalText: decimalText(e, "total") || null,
+      scoringRule: str(e.scoring_rule), earned: num(e.earned), penalty: num(e.penalty),
       relative: num(e.relative_to_expert),
       collapsed: num(e.collapsed) || 0,
       seeds: Math.max(1, num(e.seeds) || 1),
@@ -209,8 +209,6 @@
       references,
       source: source || "index",
     };
-    out.isRef = out.kind === "reference";
-    out.refKey = out.isRef ? refKey(out.model) : null;
     out.fullyCollapsed = out.collapsed > 0 && out.collapsed >= out.seeds;
     if (out.relative === null && references.expert > 0) out.relative = out.total / references.expert;
     return out;
@@ -242,10 +240,10 @@
       verb: str(a.verb, "action"), status, ok: status === "done" || status === "applied" || status === "ok",
       targets: arr(a.targets).map((t) => str(t)),
       place: a.place ? str(a.place) : null, say: a.say ? str(a.say) : null, text: a.text ? str(a.text) : "",
-      label: a.label ? str(a.label) : "", params: obj(a.params),
+      label: a.label ? str(a.label) : "", params: obj(a.params), failure: a.failure ? obj(a.failure) : null,
     };
   }
-  /** What the model read, answered and reasoned in one week (model runs; absent for week 0 and references). */
+  /** What the model read, answered and reasoned in one week (absent for week 0). */
   function decisionOf(d) {
     if (!d || typeof d !== "object") return null;
     const text = (v) => (v === null || v === undefined || v === "" ? null : String(v));
@@ -295,7 +293,8 @@
       seed: num(s.seed) || 1,
       total: num(s.total) || 0,
       earned: num(s.earned) || 0,
-      forfeited: num(s.forfeited) || 0,
+      penalty: num(s.penalty) || 0,
+      penaltyRate: num(s.penalty_rate), scoringRule: str(s.scoring_rule),
       survivedWeeks: num(s.survived_weeks),
       collapsed: collapseOf(s.collapsed),
       wellby: num(s.wellby),
@@ -305,10 +304,12 @@
       path: arr(s.path).map((p) => ({ week: num(obj(p).week), source: str(obj(p).source), target: str(obj(p).target), label: str(obj(p).label) })),
       outcomes: arr(s.outcomes).map((o) => ({ node: str(obj(o).node), week: num(obj(o).week), type: str(obj(o).type), label: str(obj(o).label), reward: numbers(obj(o).reward) })),
       actions: numbers(s.actions),
+      actionAudit: s.action_audit ? obj(s.action_audit) : null,
     };
   }
 
   function normalizeRun(r, weeks) {
+    if (r.kind !== "model") throw new DataError("Explorer accepts model runs only.");
     const recipe = obj(r.recipe);
     const commons = obj(recipe.commons);
     const score = obj(r.score);
@@ -331,7 +332,7 @@
     seeds.sort((a, b) => a.seed - b.seed);
     const run = {
       id: str(r.id),
-      kind: r.kind === "reference" ? "reference" : "model",
+      kind: "model",
       model: str(r.model, "Unknown model") || "Unknown model",
       snapshot: str(r.snapshot),
       modelId: str(r.model_id),
@@ -340,6 +341,7 @@
       finished: r.finished ? str(r.finished) : null,
       duration: r.duration ? str(r.duration) : null,
       usage: numbers(r.usage),
+      protocol: obj(r.protocol),
       recipe: {
         id: str(recipe.id, "unknown"), name: str(recipe.name) || str(recipe.id, "Unknown recipe"), revision: str(recipe.revision),
         description: str(recipe.description), weeks: num(recipe.weeks), seeds: arr(recipe.seeds).map(num).filter(isNum),
@@ -350,6 +352,7 @@
       },
       score: {
         total: num(score.total) || 0, totalText: decimalText(score, "total") || null, collapsedSeeds: num(score.collapsed_seeds) || 0,
+        rule: str(score.rule), earned: num(score.earned), penalty: num(score.penalty),
         relative: num(score.relative_to_expert), wellby: num(score.wellby), domains,
       },
       references,
@@ -372,7 +375,6 @@
       frames,
     };
     if (run.score.relative === null && references.expert > 0) run.score.relative = run.score.total / references.expert;
-    run.isRef = run.kind === "reference";
     run.hasDecisions = weeks.some((w) => w.decision);
     return run;
   }
@@ -386,7 +388,9 @@
     for (const node of parsed.doc.values) {
       if (nodeHasTag(node, "explorer")) header = plainNode(node);
       else if (nodeHasTag(node, "entry")) {
-        const e = normalizeEntry(plainNode(node), "index");
+        const value = plainNode(node);
+        if (value.kind !== "model") { warnings.push(`${parsed.name}: skipped a non-model run.`); continue; }
+        const e = normalizeEntry(value, "index");
         if (e.id) entries.push(e); else warnings.push(`${parsed.name}: an #entry without a run id was skipped.`);
       }
     }
@@ -435,6 +439,9 @@
       references: run.references,
     }, "run");
     entry.totalText = run.score.totalText;
+    entry.scoringRule = run.score.rule;
+    entry.earned = run.score.earned;
+    entry.penalty = run.score.penalty;
     return entry;
   }
 
@@ -647,7 +654,7 @@
   }
 
   window.ExplorerData = Object.freeze({
-    FORMATS, DOMAINS, REFERENCE_KEYS, INDEX_URL, DataError, store, boot, loadFiles, getRun, onChange,
-    parseText, readIndex, readRun, readEntryFile, entryFromRun, plainNode, plainValue, decimalText, refKey,
+    FORMATS, DOMAINS, INDEX_URL, DataError, store, boot, loadFiles, getRun, onChange,
+    parseText, readIndex, readRun, readEntryFile, entryFromRun, plainNode, plainValue, decimalText,
   });
 })();

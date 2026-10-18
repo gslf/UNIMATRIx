@@ -9,8 +9,10 @@ import json
 import re
 
 from . import npc
+from .action_audit import batch_audit
 from .catalog import APPROACHES, CONCERNS, FIT, ITEMS, POLICIES, REPLIES
 from .metrics import clamp
+from .protocol import canonical_variant, variants
 from .recipe import RESOLUTIONS
 from .rng import draw, pick
 
@@ -184,7 +186,7 @@ def scene(action, index, status, text):
             if kind == "care":
                 targets.append(rest.split(":")[0])
     keep = ("approach", "topic", "item", "amount", "with", "side", "qty", "price", "project", "policy", "value",
-            "resolution", "kind", "task", "stance", "domain", "variant", "target", "by")
+            "resolution", "kind", "task", "stance", "domain", "variant", "target", "by", "bid")
     params = {k: action[k] for k in keep if isinstance(action, dict) and k in action
               and isinstance(action[k], (str, int, float, bool, type(None)))}
     say = action.get("say") if isinstance(action, dict) else None
@@ -205,9 +207,14 @@ def apply_decision(world, decision):
     budget = world.recipe["steward"]["actions_per_week"]
     applied = []
     world.results = keep
-    def reject(action, index, text):
-        receipt(world, action, "rejected", text)
-        applied.append(scene(action, index, "rejected", text))
+    def reject(action, index, text, error=None):
+        details = getattr(error, "details", {})
+        text = details.get("hint", text)
+        result = receipt(world, action, "rejected", text)
+        item = scene(action, index, "rejected", text)
+        item.update(error=details or dict(code="invalid_action"))
+        result.update(index=index, error=item["error"])
+        applied.append(item)
 
     for index, action in enumerate(actions):
         if index >= budget:
@@ -219,21 +226,34 @@ def apply_decision(world, decision):
             continue
         action = normalize_action(action)
         verb = action["do"]
+        if verb == "trade" and "bid" in action:
+            action["bid"] = canonical_variant(action["bid"])
+        if verb == "convention" and "variant" in action:
+            action["variant"] = canonical_variant(action["variant"])
         if verb not in VERBS:
             reject(action, index, f"Unknown action '{verb}'. Use one of: {', '.join(VERBS)}.")
             continue
         try:
             text = HANDLERS[verb](world, action)
         except Invalid as error:
-            reject(action, index, str(error))
+            reject(action, index, str(error), error)
             continue
         world.count(verb)
         target = action.get("to") or action.get("who") or action.get("with") or action.get("target") \
             or action.get("project") or action.get("policy")
         if isinstance(target, str):
             world.count(f"{verb}:{target}")
-        receipt(world, action, "done", text)
-        applied.append(scene(action, index, "done", text))
+        result = receipt(world, action, "done", text)
+        item = scene(action, index, "done", text)
+        result["index"] = index
+        applied.append(item)
+    if not hasattr(world, "action_batches"):
+        world.action_batches = []
+    for failure in batch_audit(applied):
+        applied[failure["index"]]["failure"] = failure
+        result = next(r for r in world.results if r.get("index") == failure["index"])
+        result["failure"] = failure
+    world.action_batches.append(dict(week=world.week, actions=applied))
     forecasts = decision.get("forecasts", {})
     if isinstance(forecasts, list):
         forecasts = {f.get("probe") or f.get("probe_id"): f.get("p", f.get("probability"))
@@ -252,12 +272,23 @@ def apply_decision(world, decision):
 
 
 class Invalid(ValueError):
-    pass
+    def __init__(self, message, **details):
+        super().__init__(message)
+        self.details = details
 
 
-def require(condition, message):
+def require(condition, message, **details):
     if not condition:
-        raise Invalid(message)
+        raise Invalid(message, **details)
+
+
+def require_resource(world, store, amount, message):
+    resource = {"treasury": "coins", "granary": "food"}.get(store, store)
+    available = world.stores[store]
+    require(available + 1e-9 >= amount, message, code="insufficient_resource", resource=resource,
+            available=available, required=amount,
+            hint=f"Insufficient {resource}: available {available:.6f}, required {amount:.6f}. "
+                 "Reduce the amount or obtain resources first.")
 
 
 def present(world, key, field="to"):
@@ -470,7 +501,7 @@ def give(world, a):
         public = False
     store = "treasury" if item == "coins" else "granary" if item == "food" else item
     total = amount * len(recipients)
-    require(world.stores[store] + 1e-9 >= total, f"Not enough {item}: {world.stores[store]:.1f} available, {total:.1f} needed.")
+    require_resource(world, store, total, f"Not enough {item}: {world.stores[store]:.1f} available, {total:.1f} needed.")
     world.stores[store] -= total
     fake_share = 0.0
     if item == "medicine" and world.stores["medicine"] + total > 0:
@@ -522,7 +553,10 @@ def trade(world, a):
         bid = a.get("bid")
         require(bid == merchant["protocol"],
                 f"{merchant['name']} refuses: \"We don't deal like that any more.\"" +
-                (" They mention new rules." if draw(world.seed, world.week, merchant_id, "hint") < 0.5 else ""))
+                (" They mention new rules." if draw(world.seed, world.week, merchant_id, "hint") < 0.5 else ""),
+                code="trade_protocol", expected=merchant["protocol"], received=bid,
+                hint=f"{merchant['name']} requires bid=\"{merchant['protocol']}\" on this trade; "
+                     f"received {bid!r}. An official convention does not fill the bid field automatically.")
     list_price = merchant["prices"][f"{'sells' if side == 'buy' else 'buys'}:{item}"]
     flex = 0.5 if world.week == merchant["arrived"] else 1.0
     margin = merchant["margin"] * flex
@@ -535,7 +569,7 @@ def trade(world, a):
             merchant["counters"][f"buy:{item}"] = counter
             return f"{merchant['name']} refuses {price:g}/unit for {item} and counters at {counter:g}."
         cost = price * qty
-        require(world.stores["treasury"] + 1e-9 >= cost, f"Not enough coins: need {cost:.1f}.")
+        require_resource(world, "treasury", cost, f"Not enough coins: need {cost:.1f}.")
         world.stores["treasury"] -= cost
         merchant["stock"][item] -= qty
         good = merchant["batches"].get(item, True)
@@ -556,7 +590,7 @@ def trade(world, a):
     qty = min(qty, room)
     require(qty > 0, f"{merchant['name']} won't buy more {item} this visit.")
     store = "granary" if item == "food" else item
-    require(world.stores[store] + 1e-9 >= qty, f"Not enough {item} to sell.")
+    require_resource(world, store, qty, f"Not enough {item} to sell.")
     if price > reservation + 1e-9:
         counter = round(min(reservation * 0.96, (price + list_price) / 2), 1)
         merchant["counters"][f"sell:{item}"] = counter
@@ -569,16 +603,21 @@ def trade(world, a):
 
 def market_trade(world, a):
     side, item = a.get("side"), a.get("item")
-    require(item == "food", "The local market only deals in food.")
+    require(item == "food", "The local market only deals in food.", code="market_item",
+            expected=["food"], received=item,
+            hint="The local market accepts only item=\"food\" (buy or sell). Use a visiting merchant's listed goods for tools or medicine.")
     qty = a.get("qty")
     require(type(qty) in (int, float) and qty > 0, "Trade needs a positive qty.")
     base = world.recipe["world"]["prices"]["food"]
     if side == "buy":
         available = world.market_pool
-        require(available > 0.5, "Little food was offered at the market last week.")
+        require(available > 0.5, "Little food was offered at the market last week.", code="market_supply",
+                available=available, minimum_exclusive=0.5,
+                hint=f"Market supply is {available:.6f} food; buying requires more than 0.5. "
+                     "Increasing your price cannot create stock; the market uses a fixed price.")
         qty = min(qty, available)
         cost = qty * base * 1.25
-        require(world.stores["treasury"] + 1e-9 >= cost, f"Not enough coins: need {cost:.1f}.")
+        require_resource(world, "treasury", cost, f"Not enough coins: need {cost:.1f}.")
         world.stores["treasury"] -= cost
         world.stores["granary"] += qty
         world.market_pool -= qty
@@ -666,7 +705,10 @@ def assign(world, a):
     elif kind == "project":
         project = world.projects.get(rest)
         require(project is not None, f"Unknown project '{rest}'.")
-        require(project["status"] == "in_progress", f"The {project['name']} is not under construction; build it first.")
+        require(project["status"] == "in_progress", f"The {project['name']} is not under construction; build it first.",
+                code="project_not_started", resource=task,
+                hint=f"Project '{rest}' has status '{project['status']}'. Put build before assign in the action array; "
+                     "assign only after the build succeeds.")
     elif kind == "learn":
         skill, _, master_id = rest.partition(":")
         require(skill in ("farming", "fishing", "healing", "building", "crafting", "trading", "lore"),
@@ -700,7 +742,7 @@ def build(world, a):
     require(project["status"] == "available", f"The {project['name']} is already {project['status'].replace('_', ' ')}.")
     for required in project["requires"]:
         require(world.projects[required]["status"] == "done", f"The {project['name']} requires the {required} first.")
-    require(world.stores["treasury"] + 1e-9 >= project["cost"], f"The {project['name']} costs {project['cost']} coins.")
+    require_resource(world, "treasury", project["cost"], f"The {project['name']} costs {project['cost']} coins.")
     world.stores["treasury"] -= project["cost"]
     project["status"], project["started"] = "in_progress", world.week
     world.say(f"Work began on the {project['name']}.")
@@ -768,7 +810,9 @@ def mediate(world, a):
     x, y = (present(world, k, "between") for k in between)
     conflict = next((c for c in world.conflicts.values() if not c["resolved"] and {c["a"], c["b"]} == {x["id"], y["id"]}),
                     None)
-    require(conflict is not None, f"There is no open dispute between {x['name']} and {y['name']}.")
+    require(conflict is not None, f"There is no open dispute between {x['name']} and {y['name']}.",
+            code="no_open_dispute", hint=f"No open dispute between {x['name']} and {y['name']}. "
+            "A complaint alone does not create a dispute. Use a pair listed in conflicts, or talk to investigate.")
     resolution = a.get("resolution")
     require(resolution in RESOLUTIONS, f"Resolution must be one of: {', '.join(RESOLUTIONS)}.")
     conflict["attempts"] += 1
@@ -917,10 +961,19 @@ def convention(world, a):
             f"Unknown convention domain '{domain}'. Known: {', '.join(world.conventions['official'])}.")
     require(isinstance(variant, str) and re.fullmatch(r"[a-z0-9_-]{1,40}", variant or ""),
             "Variant must be a short lowercase name.")
+    choices = variants(world.recipe, domain)
+    require(variant in choices, f"Unknown {domain} convention '{variant}'. Valid names: {', '.join(choices)}.",
+            code="convention_variant", expected=choices, received=variant)
     world.conventions["official"][domain] = variant
     world.conventions.setdefault("announced", {})[domain] = world.week
     world.say(f"The steward set the community's {domain} convention to '{variant}'.")
-    return f"Official {domain} convention is now '{variant}'; residents will adopt it over the coming weeks."
+    message = f"Official {domain} convention is now '{variant}'; residents will adopt it over the coming weeks."
+    required = world.conventions["required"][domain]
+    if variant != required:
+        message += f" This does not match the current requirement '{required}'."
+    if domain == "trade":
+        message += " Merchants still require an explicit bid on each trade when their protocol demands it."
+    return message
 
 
 HANDLERS = dict(talk=talk, announce=announce, give=give, trade=trade, inspect=inspect, assign=assign, build=build,

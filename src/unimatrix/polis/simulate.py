@@ -53,4 +53,11 @@ def suggested_rates(rows, recipe, target=1000.0):
         values = [max(0.0, r["units"][domain]) for r in expert]
         mean = sum(values) / len(values) if values else 0.0
         rates[domain] = round(target / mean, 4) if mean > 0 else recipe["scoring"]["rates"][domain]
+    # A reference that builds little must not give construction a huge exchange rate.
+    # This is an opportunity-based rate, not a cap on accumulated score.
+    service = recipe["ticks"] * sum(p["value"] for p in recipe["projects"].values())
+    bonuses = sum(max(0, (n.get("outcome") or {}).get("reward", {}).get("D3", 0))
+                  for n in recipe["story"]["nodes"])
+    if service + bonuses > 0:
+        rates["D3"] = min(rates["D3"], round(target / (service + bonuses), 4))
     return rates

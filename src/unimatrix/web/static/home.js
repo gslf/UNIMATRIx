@@ -434,7 +434,7 @@
   function modelById(id) { return (state.models || []).find((m) => m.id === id && m.config) || null; }
   function defaultRecipeId() {
     const list = state.recipes || [];
-    return (list.find((r) => r.id === "standard-v2") || list[0] || {}).id || null;
+    return (list.find((r) => r.id === "standard-v2.1") || list[0] || {}).id || null;
   }
   function firstSeed(recipe) {
     const seeds = (recipe && recipe.seeds) || [];
@@ -584,7 +584,7 @@
     if (before === "running" && run.status === "completed") {
       state.boards.delete(run.recipe_id);
       if (fullyCollapsed(run.score)) {
-        toast(`The village collapsed under ${run.model}. Final score: ${pts(run.score.total)} points retained.`, "bad", { link });
+        toast(`The village collapsed under ${run.model}. Final score: ${pts(run.score.total)} points after the collapse penalty.`, "bad", { link });
       } else {
         const total = run.score ? pts(run.score.total) : "—";
         const rel = run.score && isNum(run.score.relative_to_expert) ? ` (${times(run.score.relative_to_expert)})` : "";

@@ -8,6 +8,7 @@ week; `index.xcdn` holds an `#explorer` header followed by one `#entry` per run.
 The Explorer never talks to the application: it only reads these files.
 """
 
+import hashlib
 import json
 import math
 import re
@@ -143,7 +144,8 @@ def resident_row(r):
 def action_value(a):
     params = {k: v for k, v in (a.get("params") or {}).items() if isinstance(v, (str, int, float, bool))}
     body = dict(verb=a.get("verb"), status=a.get("status"), targets=list(a.get("targets") or []),
-                place=a.get("place"), say=a.get("say"), text=a.get("text"), label=a.get("label"), params=params)
+                place=a.get("place"), say=a.get("say"), text=a.get("text"), label=a.get("label"), params=params,
+                failure=a.get("failure"), error=a.get("error"))
     return Tagged("action", {k: v for k, v in body.items() if v not in (None, [], {})})
 
 
@@ -198,6 +200,8 @@ def week_value(seed, frame, decision=None):
 
 
 def run_value(run, recipe, seeds, references):
+    if run.get("kind", "model") != "model":
+        raise ValueError("Explorer accepts model runs only")
     score = run.get("score") or {}
     first = next(iter(seeds.values()))
     usage = run.get("usage") or {}
@@ -207,15 +211,17 @@ def run_value(run, recipe, seeds, references):
         per_seed = [s["score"]["domains"][d] for s in seeds.values()]
         domains[d] = Tagged("domain", dict(
             name=meta["name"], unit=meta["unit"],
-            points=decimal(sum(x["points"] for x in per_seed) / len(per_seed), 2),
+            points=decimal(sum(x["points"] for x in per_seed) / len(per_seed), 3),
             units=decimal(sum(x["units"] for x in per_seed) / len(per_seed), 2),
             rate=per_seed[0]["rate"]))
     seed_rows = []
     for seed, report in seeds.items():
         s = report["score"]
         seed_rows.append(Tagged("seed", dict(
-            seed=int(seed), total=decimal(s["total"], 2), earned=decimal(s["earned"], 2),
-            forfeited=decimal(s["forfeited"], 2), survived_weeks=s["survived_weeks"],
+            seed=int(seed), total=decimal(s["total"], 3), earned=decimal(s["earned"], 3),
+            scoring_rule=s.get("rule"), penalty=decimal(s["penalty"], 3),
+            penalty_rate=s.get("penalty_rate"),
+            survived_weeks=s["survived_weeks"],
             collapsed=Tagged("collapse", s["collapsed"]) if s["collapsed"] else None,
             wellby=decimal(s["wellby"], 2), events=s["events"],
             narrative=report["narrative"],
@@ -224,7 +230,7 @@ def run_value(run, recipe, seeds, references):
             outcomes=[Tagged("outcome", {k: v for k, v in o.items() if k != "reward"}
                              | {"reward": {k: decimal(v, 1) for k, v in (o.get("reward") or {}).items()}})
                       for o in report["story"]["outcomes"]],
-            actions=report.get("actions", {}))))
+            actions=report.get("actions", {}), action_audit=report.get("action_audit"))))
     nodes = []
     for n in recipe["story"]["nodes"]:
         position = n.get("position") or {}
@@ -233,7 +239,7 @@ def run_value(run, recipe, seeds, references):
             outcome=(n["outcome"] or {}).get("type"), label=(n["outcome"] or {}).get("label"))))
     edges = [[n["id"], e["to"], e.get("label", "")] for n in recipe["story"]["nodes"] for e in n["edges"]]
     body = dict(
-        id=run["id"], kind=run.get("kind", "model"), model=run["model"], snapshot=run.get("snapshot", ""),
+        id=run["id"], kind="model", model=run["model"], snapshot=run.get("snapshot", ""),
         model_id=run.get("model_id"), status=run["status"],
         created=created, finished=updated,
         duration=timedelta(seconds=float(usage.get("seconds") or 0)),
@@ -248,12 +254,16 @@ def run_value(run, recipe, seeds, references):
                                  capacity=recipe["world"]["commons"]["capacity"],
                                  critical=recipe["world"]["commons"]["critical"]),
                     collapse={k: v for k, v in recipe["collapse"].items()}),
-        score=dict(total=decimal(score.get("total", first["score"]["total"]), 2),
+        score=dict(total=decimal(score.get("total", first["score"]["total"]), 3),
+                   rule=score.get("rule", first["score"].get("rule")),
+                   earned=decimal(sum(s["score"]["earned"] for s in seeds.values()) / len(seeds), 3),
+                   penalty=decimal(sum(s["score"]["penalty"]
+                                       for s in seeds.values()) / len(seeds), 3),
                    collapsed_seeds=score.get("collapsed", sum(1 for s in seeds.values() if s["score"]["collapsed"])),
                    relative_to_expert=decimal(score.get("relative_to_expert"), 3),
                    wellby=decimal(score.get("wellby", first["score"]["wellby"]), 2),
                    domains=domains),
-        references={k: decimal(v["total"] if isinstance(v, dict) else v, 2) for k, v in (references or {}).items()},
+        references={k: decimal(v["total"] if isinstance(v, dict) else v, 3) for k, v in (references or {}).items()},
         factions=[Tagged("faction", f) for f in recipe["factions"]],
         residents=[Tagged("resident", dict(
             id=r["id"], name=r["name"], age=r["age"], role=r["role"], faction=r["faction"], newcomer=r["newcomer"],
@@ -271,10 +281,22 @@ def run_document(run, recipe, seeds, references, decisions=None):
     """The full xCDN text of one run: a `#run` header and a stream of `#week` values.
 
     `decisions` maps each seed to its decision log rows by week (model runs only)."""
-    values = [(run_value(run, recipe, seeds, references), "The run: model, recipe, score, people and story graph")]
+    head = run_value(run, recipe, seeds, references)
+    prompts = sorted({hashlib.sha256(row["usage"]["system_prompt"].encode("utf8")).hexdigest()
+                      for rows in (decisions or {}).values() for row in rows.values()
+                      if row.get("usage", {}).get("system_prompt")})
+    candidate = run.get("candidate") or {}
+    head.value["protocol"] = dict(engine_fingerprint=run.get("engine_fingerprint"),
+                                  system_prompt_sha256=prompts,
+                                  constrain_output=candidate.get("constrain_output"),
+                                  budget_track=candidate.get("budget_track"))
+    values = [(head, "The run: model, recipe, score, people and story graph")]
     for seed, report in seeds.items():
         logged = (decisions or {}).get(seed, {})
+        failures = {(f["week"], f["index"]): f for f in report.get("action_audit", {}).get("failures", [])}
         for i, frame in enumerate(report.get("frames", [])):
+            frame = dict(frame, actions=[dict(a, failure=failures.get((frame["week"], a.get("index", n))))
+                                        for n, a in enumerate(frame.get("actions", []))])
             values.append(((week_value(int(seed), frame, logged.get(frame["week"])), True),
                            f"seed {seed}" if i == 0 else None))
     header = (f"UNIMATRIx Explorer · society run {run['id']}\n{run['model']} · {recipe['name']}\n"
@@ -290,19 +312,23 @@ def entry_value(run, recipe, seeds, references, file):
     deaths = sum(s["score"]["events"]["deaths"] for s in seeds.values())
     end = first["timeline"][-1] if first.get("timeline") else {}
     return Tagged("entry", dict(
-        run=run["id"], file=file, kind=run.get("kind", "model"), model=run["model"], snapshot=run.get("snapshot", ""),
+        run=run["id"], file=file, kind="model", model=run["model"], snapshot=run.get("snapshot", ""),
         recipe=recipe["id"], recipe_name=recipe["name"], revision=run.get("recipe_hash", "")[:12],
         created=parse_time(run.get("created_at")),
-        total=decimal(score.get("total", first["score"]["total"]), 2),
+        total=decimal(score.get("total", first["score"]["total"]), 3),
+        scoring_rule=score.get("rule", first["score"].get("rule")),
+        earned=decimal(sum(s["score"]["earned"] for s in seeds.values()) / len(seeds), 3),
+        penalty=decimal(sum(s["score"]["penalty"]
+                            for s in seeds.values()) / len(seeds), 3),
         relative_to_expert=decimal(score.get("relative_to_expert"), 3),
         collapsed=len(collapses), seeds=len(seeds),
         collapse=Tagged("collapse", collapses[0]) if collapses else None,
         wellby=decimal(score.get("wellby", first["score"]["wellby"]), 2),
-        domains={d: decimal(sum(s["score"]["domains"][d]["points"] for s in seeds.values()) / len(seeds), 2)
+        domains={d: decimal(sum(s["score"]["domains"][d]["points"] for s in seeds.values()) / len(seeds), 3)
                  for d in DOMAINS},
         vitals=dict(population=end.get("population"), wellbeing=end.get("wellbeing"), trust=end.get("trust"),
                     commons=end.get("commons"), gini=end.get("gini"), deaths=deaths),
-        references={k: decimal(v["total"] if isinstance(v, dict) else v, 2) for k, v in (references or {}).items()},
+        references={k: decimal(v["total"] if isinstance(v, dict) else v, 3) for k, v in (references or {}).items()},
     ))
 
 
@@ -384,44 +410,10 @@ def recorded(folder, run):
     return seeds, decisions
 
 
-def export_run_folder(folder, explorer, references=None, kind="model"):
+def export_run_folder(folder, explorer, references=None):
     """Export a completed run folder (runs/<id>) into the Explorer, with its decision logs."""
     from ..persistence.json_files import read_json
 
-    run = dict(read_json(Path(folder) / "run.json"), kind=kind)
+    run = read_json(Path(folder) / "run.json")
     seeds, decisions = recorded(folder, run)
     return ExplorerExport(explorer).write_run(run, run["recipe"], seeds, references, decisions)
-
-
-def export_references(recipe, explorer, policies=("expert", "naive", "passive", "oracle"), data="data"):
-    """Play the scripted reference stewards and export them, labelled as references, not models."""
-    from statistics import fmean
-
-    from ..core.ids import digest
-    from .report import build_report
-    from .simulate import run as play
-
-    now = datetime.now(timezone.utc).isoformat()
-    revision = digest(recipe)
-    reports = {}
-    for policy in policies:
-        seeds = {}
-        for seed in recipe["seeds"]:
-            world = play(recipe, seed, policy)
-            report = build_report(world)
-            report["frames"] = world.frames
-            seeds[str(seed)] = report
-        reports[policy] = seeds
-    totals = {p: fmean(s["score"]["total"] for s in seeds.values()) for p, seeds in reports.items()}
-    expert = totals.get("expert") or None
-    written = []
-    for policy, seeds in reports.items():
-        ident = digest(["reference", policy, revision])[:24]
-        run = dict(id=ident, kind="reference", model=f"{policy} steward", snapshot="scripted reference",
-                   model_id=policy, status="completed", created_at=now, updated_at=now, recipe_hash=revision,
-                   usage=dict(calls=0, input_tokens=0, generated_tokens=0, seconds=0.0),
-                   score=dict(total=totals[policy], collapsed=sum(1 for s in seeds.values() if s["score"]["collapsed"]),
-                              relative_to_expert=(totals[policy] / expert) if expert else None,
-                              wellby=fmean(s["score"]["wellby"] for s in seeds.values())))
-        written.append(ExplorerExport(explorer, data).write_run(run, recipe, seeds, totals))
-    return written

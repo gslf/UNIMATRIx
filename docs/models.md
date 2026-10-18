@@ -2,7 +2,12 @@
 
 A candidate model is one JSON object in `config/models/` (git-ignored). The dashboard's **Model
 settings** creates and edits it, stores credentials in a separate `*-credentials.json` file with
-mode `0600`, and tests the endpoint. The steward is called once per simulated week.
+mode `0600` on POSIX or a protected, current-user-only ACL on Windows, and tests the
+endpoint. Permissions are applied when the temporary file is created, before writing
+the key, and retained through atomic replacement. The Windows implementation uses
+[CreateFileW security attributes](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-createfilew);
+[Python's Windows `chmod`](https://docs.python.org/3/library/os.html#os.chmod) cannot
+enforce POSIX access bits. The steward is called once per simulated week.
 
 ```json
 {

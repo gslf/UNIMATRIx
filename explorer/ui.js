@@ -275,9 +275,7 @@
   function badge(text, kind, iconName) {
     return h("span", { class: "badge" + (kind ? " " + kind : "") }, iconName ? icon(iconName) : null, text);
   }
-  function refTag() {
-    return h("span", { class: "ref-tag", title: "Scripted reference steward: a milestone, not a ranked model" }, icon("robot"), "reference");
-  }
+
   function ruinsBadge(text) {
     return h("span", { class: "ruins" }, icon("ruins"), text || "Collapsed");
   }
@@ -305,9 +303,9 @@
     }
     return box;
   }
-  function avatar(name, isRef, size) {
-    return h("span", { class: "avatar" + (isRef ? " ref" : "") + (size ? " " + size : ""), style: { "--av": isRef ? "#8a8a8a" : hueColor(name) }, "aria-hidden": "true" },
-      isRef ? icon("robot") : initials(name));
+  function avatar(name, size) {
+    return h("span", { class: "avatar" + (size ? " " + size : ""), style: { "--av": hueColor(name) }, "aria-hidden": "true" },
+      initials(name));
   }
 
   // ------------------------------------------------------------------ domain bars
@@ -449,7 +447,7 @@
     isNum, pts, times, pct, fixed, compact, relTime, dateTime, dateShort, splitName, excerpt, capitalize, humanize, hashText, hueColor, initials, durationText,
     domainName, domainUnit, color70, wbColor,
     toast, countTo,
-    badge, refTag, ruinsBadge, emptyNote, actionButton, linkButton, segmented, avatar,
+    badge, ruinsBadge, emptyNote, actionButton, linkButton, segmented, avatar,
     domainIcon, equalizer, skillBars, domainScales, lineChart,
   });
 })();

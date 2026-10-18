@@ -1,0 +1,871 @@
+{
+  "recipe_hash": "1eff3ebf59f612f7e15312f7e47e492fdefd7acb6fe7824c80da54571b70a510",
+  "target_points": 1000,
+  "calibration_seeds": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "validation_seeds": [
+    6,
+    7,
+    8,
+    9,
+    10
+  ],
+  "rates": {
+    "D1": 1.2818,
+    "D2": 0.452,
+    "D3": 0.6631,
+    "D4": 0.8794,
+    "D5": 1.1593,
+    "D6": 2.1867,
+    "D7": 1.4501,
+    "D8": 2.1805
+  },
+  "matches_frozen_rates": true,
+  "construction_service_potential": 1508,
+  "method": "1000 / mean expert natural units; D3 additionally bounded by 1000 / full-horizon service potential. Fixed exchange rates, no score cap. No model runs used.",
+  "calibration": [
+    {
+      "policy": "expert",
+      "seed": 1,
+      "total": 7360.364,
+      "earned": 7360.364,
+      "collapsed": null,
+      "survived_weeks": 52,
+      "domains": {
+        "D1": 1029.884,
+        "D2": 1023.779,
+        "D3": 118.032,
+        "D4": 993.683,
+        "D5": 1084.101,
+        "D6": 1009.421,
+        "D7": 1104.976,
+        "D8": 996.488
+      },
+      "units": {
+        "D1": 803.467,
+        "D2": 2264.997,
+        "D3": 178.0,
+        "D4": 1129.955,
+        "D5": 935.134,
+        "D6": 461.618,
+        "D7": 762.0,
+        "D8": 457.0
+      },
+      "wellby": 110.998,
+      "path": [
+        "shore_peace",
+        "gemma_saved",
+        "marta_falls",
+        "knowledge_kept",
+        "drought_weathered",
+        "friction",
+        "guild_hint",
+        "trade_adapted",
+        "segregation",
+        "fever_contained"
+      ]
+    },
+    {
+      "policy": "expert",
+      "seed": 2,
+      "total": 7377.598,
+      "earned": 7377.598,
+      "collapsed": null,
+      "survived_weeks": 52,
+      "domains": {
+        "D1": 1056.602,
+        "D2": 1029.153,
+        "D3": 123.337,
+        "D4": 1007.442,
+        "D5": 1054.392,
+        "D6": 995.036,
+        "D7": 1106.426,
+        "D8": 1005.21
+      },
+      "units": {
+        "D1": 824.312,
+        "D2": 2276.886,
+        "D3": 186.0,
+        "D4": 1145.602,
+        "D5": 909.507,
+        "D6": 455.04,
+        "D7": 763.0,
+        "D8": 461.0
+      },
+      "wellby": 111.597,
+      "path": [
+        "shore_peace",
+        "marta_falls",
+        "knowledge_kept",
+        "drought_weathered",
+        "friction",
+        "guild_hint",
+        "trade_adapted",
+        "segregation",
+        "fever_contained"
+      ]
+    },
+    {
+      "policy": "expert",
+      "seed": 3,
+      "total": 6671.79,
+      "earned": 6671.79,
+      "collapsed": null,
+      "survived_weeks": 52,
+      "domains": {
+        "D1": 993.794,
+        "D2": 854.337,
+        "D3": 100.791,
+        "D4": 997.476,
+        "D5": 891.164,
+        "D6": 949.676,
+        "D7": 938.215,
+        "D8": 946.337
+      },
+      "units": {
+        "D1": 775.312,
+        "D2": 1890.126,
+        "D3": 152.0,
+        "D4": 1134.269,
+        "D5": 768.708,
+        "D6": 434.296,
+        "D7": 647.0,
+        "D8": 434.0
+      },
+      "wellby": 106.663,
+      "path": [
+        "shore_peace",
+        "cleared",
+        "marta_falls",
+        "drought_weathered",
+        "friction",
+        "guild_hint",
+        "marta_recovers",
+        "trade_adapted",
+        "segregation",
+        "fever_contained"
+      ]
+    },
+    {
+      "policy": "expert",
+      "seed": 4,
+      "total": 6909.859,
+      "earned": 6909.859,
+      "collapsed": null,
+      "survived_weeks": 52,
+      "domains": {
+        "D1": 800.242,
+        "D2": 1072.991,
+        "D3": 112.064,
+        "D4": 1003.105,
+        "D5": 966.411,
+        "D6": 990.589,
+        "D7": 957.066,
+        "D8": 1007.391
+      },
+      "units": {
+        "D1": 624.312,
+        "D2": 2373.874,
+        "D3": 169.0,
+        "D4": 1140.67,
+        "D5": 833.616,
+        "D6": 453.007,
+        "D7": 660.0,
+        "D8": 462.0
+      },
+      "wellby": 110.469,
+      "path": [
+        "shore_peace",
+        "marta_falls",
+        "drought_weathered",
+        "friction",
+        "guild_hint",
+        "marta_recovers",
+        "trade_adapted",
+        "segregation",
+        "fever_contained"
+      ]
+    },
+    {
+      "policy": "expert",
+      "seed": 5,
+      "total": 7252.033,
+      "earned": 7252.033,
+      "collapsed": null,
+      "survived_weeks": 52,
+      "domains": {
+        "D1": 1119.61,
+        "D2": 1019.942,
+        "D3": 117.369,
+        "D4": 998.168,
+        "D5": 1003.943,
+        "D6": 1055.28,
+        "D7": 893.262,
+        "D8": 1044.459
+      },
+      "units": {
+        "D1": 873.467,
+        "D2": 2256.508,
+        "D3": 177.0,
+        "D4": 1135.056,
+        "D5": 865.991,
+        "D6": 482.59,
+        "D7": 616.0,
+        "D8": 479.0
+      },
+      "wellby": 106.1,
+      "path": [
+        "shore_peace",
+        "cleared",
+        "marta_falls",
+        "drought_weathered",
+        "friction",
+        "guild_hint",
+        "marta_recovers",
+        "trade_adapted",
+        "late_welcome",
+        "fever_contained"
+      ]
+    },
+    {
+      "policy": "oracle",
+      "seed": 1,
+      "total": 7155.725,
+      "earned": 7155.725,
+      "collapsed": null,
+      "survived_weeks": 52,
+      "domains": {
+        "D1": 725.091,
+        "D2": 1020.873,
+        "D3": 120.021,
+        "D4": 997.487,
+        "D5": 1105.195,
+        "D6": 1017.257,
+        "D7": 1099.176,
+        "D8": 1070.625
+      },
+      "units": {
+        "D1": 565.682,
+        "D2": 2258.569,
+        "D3": 181.0,
+        "D4": 1134.281,
+        "D5": 953.33,
+        "D6": 465.202,
+        "D7": 758.0,
+        "D8": 491.0
+      },
+      "wellby": 112.321,
+      "path": [
+        "shore_peace",
+        "marta_falls",
+        "knowledge_kept",
+        "drought_weathered",
+        "friction",
+        "guild_hint",
+        "trade_adapted",
+        "segregation",
+        "fever_contained"
+      ]
+    },
+    {
+      "policy": "oracle",
+      "seed": 2,
+      "total": 7604.853,
+      "earned": 7604.853,
+      "collapsed": null,
+      "survived_weeks": 52,
+      "domains": {
+        "D1": 750.727,
+        "D2": 1061.78,
+        "D3": 215.507,
+        "D4": 1074.075,
+        "D5": 1119.0,
+        "D6": 1031.606,
+        "D7": 1131.078,
+        "D8": 1221.08
+      },
+      "units": {
+        "D1": 585.682,
+        "D2": 2349.071,
+        "D3": 325.0,
+        "D4": 1221.373,
+        "D5": 965.237,
+        "D6": 471.764,
+        "D7": 780.0,
+        "D8": 560.0
+      },
+      "wellby": 113.351,
+      "path": [
+        "shore_peace",
+        "marta_falls",
+        "knowledge_kept",
+        "drought_weathered",
+        "friction",
+        "guild_hint",
+        "trade_adapted",
+        "late_welcome",
+        "fever_contained"
+      ]
+    },
+    {
+      "policy": "oracle",
+      "seed": 3,
+      "total": 7290.203,
+      "earned": 7290.203,
+      "collapsed": null,
+      "survived_weeks": 52,
+      "domains": {
+        "D1": 864.807,
+        "D2": 1092.934,
+        "D3": 110.075,
+        "D4": 1002.493,
+        "D5": 1091.692,
+        "D6": 1099.801,
+        "D7": 964.317,
+        "D8": 1064.084
+      },
+      "units": {
+        "D1": 674.682,
+        "D2": 2417.996,
+        "D3": 166.0,
+        "D4": 1139.974,
+        "D5": 941.682,
+        "D6": 502.95,
+        "D7": 665.0,
+        "D8": 488.0
+      },
+      "wellby": 111.716,
+      "path": [
+        "shore_peace",
+        "cleared",
+        "marta_falls",
+        "drought_weathered",
+        "friction",
+        "guild_hint",
+        "trade_adapted",
+        "marta_recovers",
+        "segregation",
+        "fever_contained"
+      ]
+    },
+    {
+      "policy": "oracle",
+      "seed": 4,
+      "total": 7148.182,
+      "earned": 7148.182,
+      "collapsed": null,
+      "survived_weeks": 52,
+      "domains": {
+        "D1": 718.682,
+        "D2": 1104.344,
+        "D3": 114.716,
+        "D4": 1000.293,
+        "D5": 1115.047,
+        "D6": 1008.535,
+        "D7": 957.066,
+        "D8": 1129.499
+      },
+      "units": {
+        "D1": 560.682,
+        "D2": 2443.239,
+        "D3": 173.0,
+        "D4": 1137.473,
+        "D5": 961.828,
+        "D6": 461.213,
+        "D7": 660.0,
+        "D8": 518.0
+      },
+      "wellby": 111.555,
+      "path": [
+        "shore_peace",
+        "marta_falls",
+        "drought_weathered",
+        "friction",
+        "guild_hint",
+        "trade_adapted",
+        "marta_recovers",
+        "segregation",
+        "fever_contained"
+      ]
+    },
+    {
+      "policy": "oracle",
+      "seed": 5,
+      "total": 7154.267,
+      "earned": 7154.267,
+      "collapsed": null,
+      "survived_weeks": 52,
+      "domains": {
+        "D1": 743.036,
+        "D2": 1038.236,
+        "D3": 118.032,
+        "D4": 993.64,
+        "D5": 1100.474,
+        "D6": 1074.876,
+        "D7": 901.962,
+        "D8": 1184.011
+      },
+      "units": {
+        "D1": 579.682,
+        "D2": 2296.983,
+        "D3": 178.0,
+        "D4": 1129.906,
+        "D5": 949.257,
+        "D6": 491.552,
+        "D7": 622.0,
+        "D8": 543.0
+      },
+      "wellby": 109.165,
+      "path": [
+        "shore_peace",
+        "cleared",
+        "marta_falls",
+        "drought_weathered",
+        "friction",
+        "guild_hint",
+        "marta_recovers",
+        "trade_adapted",
+        "late_welcome",
+        "fever_contained"
+      ]
+    }
+  ],
+  "validation": [
+    {
+      "policy": "expert",
+      "seed": 6,
+      "total": 7088.666,
+      "earned": 7088.666,
+      "collapsed": null,
+      "survived_weeks": 52,
+      "domains": {
+        "D1": 1176.01,
+        "D2": 1021.984,
+        "D3": 110.738,
+        "D4": 992.133,
+        "D5": 960.758,
+        "D6": 1082.592,
+        "D7": 865.71,
+        "D8": 878.741
+      },
+      "units": {
+        "D1": 917.467,
+        "D2": 2261.027,
+        "D3": 167.0,
+        "D4": 1128.193,
+        "D5": 828.74,
+        "D6": 495.08,
+        "D7": 597.0,
+        "D8": 403.0
+      },
+      "wellby": 103.063,
+      "path": [
+        "shore_peace",
+        "cleared",
+        "marta_falls",
+        "drought_weathered",
+        "friction",
+        "guild_hint",
+        "marta_recovers",
+        "trade_adapted",
+        "segregation",
+        "fever_contained"
+      ]
+    },
+    {
+      "policy": "expert",
+      "seed": 7,
+      "total": 7270.052,
+      "earned": 7270.052,
+      "collapsed": null,
+      "survived_weeks": 52,
+      "domains": {
+        "D1": 1090.129,
+        "D2": 1019.025,
+        "D3": 108.085,
+        "D4": 995.023,
+        "D5": 1052.802,
+        "D6": 1023.882,
+        "D7": 984.618,
+        "D8": 996.488
+      },
+      "units": {
+        "D1": 850.467,
+        "D2": 2254.479,
+        "D3": 163.0,
+        "D4": 1131.48,
+        "D5": 908.136,
+        "D6": 468.232,
+        "D7": 679.0,
+        "D8": 457.0
+      },
+      "wellby": 110.796,
+      "path": [
+        "shore_peace",
+        "marta_falls",
+        "drought_weathered",
+        "friction",
+        "guild_hint",
+        "marta_recovers",
+        "trade_adapted",
+        "fever_contained",
+        "segregation"
+      ]
+    },
+    {
+      "policy": "expert",
+      "seed": 8,
+      "total": 7021.511,
+      "earned": 7021.511,
+      "collapsed": null,
+      "survived_weeks": 52,
+      "domains": {
+        "D1": 793.833,
+        "D2": 1015.408,
+        "D3": 118.695,
+        "D4": 999.879,
+        "D5": 1035.808,
+        "D6": 1086.255,
+        "D7": 994.769,
+        "D8": 976.864
+      },
+      "units": {
+        "D1": 619.312,
+        "D2": 2246.478,
+        "D3": 179.0,
+        "D4": 1137.001,
+        "D5": 893.477,
+        "D6": 496.756,
+        "D7": 686.0,
+        "D8": 448.0
+      },
+      "wellby": 110.994,
+      "path": [
+        "shore_peace",
+        "gemma_saved",
+        "marta_falls",
+        "drought_weathered",
+        "friction",
+        "guild_hint",
+        "marta_recovers",
+        "trade_adapted",
+        "segregation",
+        "cleared",
+        "fever_contained"
+      ]
+    },
+    {
+      "policy": "expert",
+      "seed": 9,
+      "total": 7075.218,
+      "earned": 7075.218,
+      "collapsed": null,
+      "survived_weeks": 52,
+      "domains": {
+        "D1": 896.178,
+        "D2": 1068.517,
+        "D3": 116.706,
+        "D4": 1007.531,
+        "D5": 974.322,
+        "D6": 1039.612,
+        "D7": 997.669,
+        "D8": 974.683
+      },
+      "units": {
+        "D1": 699.156,
+        "D2": 2363.975,
+        "D3": 176.0,
+        "D4": 1145.703,
+        "D5": 840.44,
+        "D6": 475.425,
+        "D7": 688.0,
+        "D8": 447.0
+      },
+      "wellby": 111.186,
+      "path": [
+        "shore_peace",
+        "cleared",
+        "marta_falls",
+        "drought_weathered",
+        "friction",
+        "guild_hint",
+        "marta_recovers",
+        "trade_adapted",
+        "segregation",
+        "fever_contained"
+      ]
+    },
+    {
+      "policy": "expert",
+      "seed": 10,
+      "total": 7402.643,
+      "earned": 7402.643,
+      "collapsed": null,
+      "survived_weeks": 52,
+      "domains": {
+        "D1": 913.241,
+        "D2": 1076.213,
+        "D3": 112.727,
+        "D4": 1001.247,
+        "D5": 1056.492,
+        "D6": 1125.126,
+        "D7": 1046.972,
+        "D8": 1070.625
+      },
+      "units": {
+        "D1": 712.467,
+        "D2": 2381.002,
+        "D3": 170.0,
+        "D4": 1138.557,
+        "D5": 911.319,
+        "D6": 514.532,
+        "D7": 722.0,
+        "D8": 491.0
+      },
+      "wellby": 112.843,
+      "path": [
+        "shore_peace",
+        "cleared",
+        "marta_falls",
+        "knowledge_kept",
+        "drought_weathered",
+        "friction",
+        "guild_hint",
+        "trade_adapted",
+        "segregation",
+        "fever_contained"
+      ]
+    },
+    {
+      "policy": "oracle",
+      "seed": 6,
+      "total": 7354.243,
+      "earned": 7354.243,
+      "collapsed": null,
+      "survived_weeks": 52,
+      "domains": {
+        "D1": 871.216,
+        "D2": 1085.409,
+        "D3": 108.085,
+        "D4": 995.148,
+        "D5": 1117.93,
+        "D6": 1123.371,
+        "D7": 975.917,
+        "D8": 1077.167
+      },
+      "units": {
+        "D1": 679.682,
+        "D2": 2401.347,
+        "D3": 163.0,
+        "D4": 1131.621,
+        "D5": 964.315,
+        "D6": 513.729,
+        "D7": 673.0,
+        "D8": 494.0
+      },
+      "wellby": 112.728,
+      "path": [
+        "shore_peace",
+        "cleared",
+        "marta_falls",
+        "drought_weathered",
+        "friction",
+        "guild_hint",
+        "marta_recovers",
+        "trade_adapted",
+        "segregation",
+        "fever_contained"
+      ]
+    },
+    {
+      "policy": "oracle",
+      "seed": 7,
+      "total": 7253.363,
+      "earned": 7253.363,
+      "collapsed": null,
+      "survived_weeks": 52,
+      "domains": {
+        "D1": 808.408,
+        "D2": 1081.59,
+        "D3": 112.727,
+        "D4": 997.405,
+        "D5": 1107.923,
+        "D6": 1005.747,
+        "D7": 981.718,
+        "D8": 1157.845
+      },
+      "units": {
+        "D1": 630.682,
+        "D2": 2392.898,
+        "D3": 170.0,
+        "D4": 1134.188,
+        "D5": 955.683,
+        "D6": 459.938,
+        "D7": 677.0,
+        "D8": 531.0
+      },
+      "wellby": 111.244,
+      "path": [
+        "shore_peace",
+        "marta_falls",
+        "drought_weathered",
+        "friction",
+        "guild_hint",
+        "trade_adapted",
+        "marta_recovers",
+        "fever_contained",
+        "late_welcome"
+      ]
+    },
+    {
+      "policy": "oracle",
+      "seed": 8,
+      "total": 7649.059,
+      "earned": 7649.059,
+      "collapsed": null,
+      "survived_weeks": 52,
+      "domains": {
+        "D1": 825.071,
+        "D2": 1075.947,
+        "D3": 247.999,
+        "D4": 1105.444,
+        "D5": 1113.012,
+        "D6": 1111.528,
+        "D7": 994.769,
+        "D8": 1175.289
+      },
+      "units": {
+        "D1": 643.682,
+        "D2": 2380.414,
+        "D3": 374.0,
+        "D4": 1257.043,
+        "D5": 960.072,
+        "D6": 508.313,
+        "D7": 686.0,
+        "D8": 539.0
+      },
+      "wellby": 112.758,
+      "path": [
+        "shore_peace",
+        "cleared",
+        "marta_falls",
+        "drought_weathered",
+        "friction",
+        "guild_hint",
+        "trade_adapted",
+        "marta_recovers",
+        "late_welcome",
+        "fever_contained"
+      ]
+    },
+    {
+      "policy": "oracle",
+      "seed": 9,
+      "total": 7665.587,
+      "earned": 7665.587,
+      "collapsed": null,
+      "survived_weeks": 52,
+      "domains": {
+        "D1": 850.707,
+        "D2": 1069.335,
+        "D3": 224.128,
+        "D4": 1104.754,
+        "D5": 1128.391,
+        "D6": 1109.514,
+        "D7": 1003.469,
+        "D8": 1175.289
+      },
+      "units": {
+        "D1": 663.682,
+        "D2": 2365.785,
+        "D3": 338.0,
+        "D4": 1256.258,
+        "D5": 973.338,
+        "D6": 507.392,
+        "D7": 692.0,
+        "D8": 539.0
+      },
+      "wellby": 114.153,
+      "path": [
+        "shore_peace",
+        "cleared",
+        "marta_falls",
+        "drought_weathered",
+        "friction",
+        "guild_hint",
+        "marta_recovers",
+        "trade_adapted",
+        "late_welcome",
+        "fever_contained"
+      ]
+    },
+    {
+      "policy": "oracle",
+      "seed": 10,
+      "total": 7513.304,
+      "earned": 7513.304,
+      "collapsed": null,
+      "survived_weeks": 52,
+      "domains": {
+        "D1": 710.991,
+        "D2": 1061.315,
+        "D3": 213.518,
+        "D4": 1088.219,
+        "D5": 1123.041,
+        "D6": 1110.017,
+        "D7": 1074.524,
+        "D8": 1131.679
+      },
+      "units": {
+        "D1": 554.682,
+        "D2": 2348.041,
+        "D3": 322.0,
+        "D4": 1237.456,
+        "D5": 968.724,
+        "D6": 507.622,
+        "D7": 741.0,
+        "D8": 519.0
+      },
+      "wellby": 113.161,
+      "path": [
+        "shore_peace",
+        "cleared",
+        "marta_falls",
+        "knowledge_kept",
+        "drought_weathered",
+        "friction",
+        "guild_hint",
+        "trade_adapted",
+        "segregation",
+        "fever_contained"
+      ]
+    }
+  ],
+  "validation_means": {
+    "expert": {
+      "D1": 973.878,
+      "D2": 1040.229,
+      "D3": 113.39,
+      "D4": 999.163,
+      "D5": 1016.036,
+      "D6": 1071.493,
+      "D7": 977.948,
+      "D8": 979.48
+    },
+    "oracle": {
+      "D1": 813.279,
+      "D2": 1074.719,
+      "D3": 181.291,
+      "D4": 1058.194,
+      "D5": 1118.059,
+      "D6": 1092.035,
+      "D7": 1006.079,
+      "D8": 1143.454
+    }
+  }
+}

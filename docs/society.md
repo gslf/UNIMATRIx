@@ -4,24 +4,28 @@ UNIMATRIx evaluates a model as the **steward of one simulated society**. The eig
 domains are interlocking parts of the same village, tested in **one run** of 52 weekly turns, one
 model call per week.
 
-| | `standard-v2` |
+**Current default: Standard v2.1 (`standard-v2.1`).** Its [action contract and calibration](standard-v2.1.md)
+apply to all villages. Reports, CSV and Explorer separate initial action errors, inferred
+downstream failures and unclassified cases. Standard v2 has been removed; there is no legacy mode.
+
+| | `standard-v2.1` |
 | --- | --- |
 | Structure | one society of 16 residents, all eight domains at once |
 | Model calls | 52 per seed (1 seed per run) |
 | Prompt | ~1.2k static tokens (cacheable) + ~1.3k-token weekly briefing |
 | Other agents | residents with hidden needs, emotions, beliefs, grievances and ties |
-| Score | unbounded points in natural units; points retained at collapse |
+| Score | unbounded points in natural units; 10% deduction per collapsed seed |
 
-On a single RTX 5090 a 27B model at ~15 s per answer finishes `standard-v2` in about 13 minutes.
+On a single RTX 5090 a 27B model at ~15 s per answer finishes `standard-v2.1` in about 13 minutes.
 
 ## Running
 
 ```bash
 uv run unimatrix recipes
-uv run unimatrix simulate --recipe standard-v2 --policy expert   # instant, no model
-uv run unimatrix calibrate --recipe standard-v2 --seeds 1,2,3,4,5
-uv run unimatrix estimate --recipe standard-v2 --seconds-per-decision 15
-uv run unimatrix run --model config/models/my-model.json --recipe standard-v2
+uv run unimatrix simulate --recipe standard-v2.1 --policy expert   # instant, no model
+uv run unimatrix calibrate --recipe standard-v2.1 --seeds 1,2,3,4,5
+uv run unimatrix estimate --recipe standard-v2.1 --seconds-per-decision 15
+uv run unimatrix run --model config/models/my-model.json --recipe standard-v2.1
 uv run unimatrix replay --run runs/RUN_ID --seed 1
 ```
 
@@ -34,7 +38,7 @@ model configuration.
 When a run completes it is exported as `explorer/data/runs/<id>.xcdn` (option `--explorer-dir`) and
 `explorer/data/index.xcdn` is regenerated: the static [Explorer](../explorer/README.md) replays runs,
 week by week and decision by decision, from these xCDN files only. `unimatrix export` backfills runs
-finished earlier; `unimatrix demo` exports the scripted reference stewards.
+finished earlier. Only model runs are exported; scripted stewards are used for calibration in the Lab.
 
 Every decision is appended to `decisions.jsonl` (fsync) before it is applied. An interrupted
 run resumes by replaying the log through the deterministic engine; a changed engine refuses
@@ -144,7 +148,7 @@ forced policies, forecast probes and epidemics.
 
 ## Collapse
 
-Collapse ends the run and retains its accumulated score. Rules (each optional): population below a
+Collapse ends the seed and deducts 10% of its accumulated score. Rules (each optional): population below a
 share of the initial residents; the lake below its critical stock; a revolt (protest share
 above a threshold for consecutive weeks); legitimacy below a floor for consecutive weeks
 (no confidence); famine (share of residents short of food for consecutive weeks); and
@@ -168,33 +172,40 @@ Each domain counts something real; a recipe's exchange rates convert units into 
 | D8 Adaptation | residents using a changed convention each week after the change; integrated newcomers |
 
 Flourishing outcomes of the choice graph add points. Nothing caps the total: more trust,
-wealth, harvest, knowledge or integration is always worth more. A collapse stops the run and
-retains the points accumulated up to that point. The leaderboard uses the mean final score
-over all seeds, including collapsed seeds; the week and cause of collapse remain visible.
-The legacy `forfeited` field is always zero. References — passive, naive, expert and oracle
+wealth, harvest, knowledge or integration is always worth more. Under scoring rule
+`accumulated-collapse-10pct-v2`, each collapsed seed loses 10% of its gross domain points,
+including collapse in the final week. Round gross points and the penalty to three decimals,
+then subtract the penalty to obtain the final score. Surviving seeds keep all their points.
+The leaderboard averages final scores over all seeds; it does not penalize successful seeds
+because another seed collapsed. Paused runs and infrastructure failures are not simulation
+collapses and are not ranked as completed runs.
+`earned` and the domain breakdown remain gross; `penalty` is the deduction. References — passive, naive, expert and oracle
 scripted stewards on the same seeds — place a model on the scale (e.g. "1.3× expert"); they
 are not bounds. The report also gives WELLBYs above a neutral point of 2 (Frijters et al.
 2020) as a summary of human welfare.
 
+`unimatrix rescore` updates completed society runs, reports and Explorer exports from saved
+domain ledgers without model calls or replay. Original JSON is backed up in a directory
+named for the new scoring rule. Recipes, exchange rates, observations, actions, completion
+timestamps and the historical engine fingerprint stay unchanged. The model prompt is also
+frozen: the new score is an external evaluation of the recorded trajectories, not evidence
+that historical candidates were instructed to optimize this rule. The Explorer records the
+actual prompt hashes and constrained-output setting. See the
+[scoring and model comparison audit](scoring-audit-2026-10-17.md) for the rationale and limitations.
+Timeline CSV exports keep the gross domain columns and add `gross_points`,
+`collapse_penalty`, `final_score` (filled only on the final society row) and `scoring_rule`.
+
 ### Calibration of the bundled recipes
 
-`standard-v2` (1 seed per run) is passable by weak but attentive play and rewards strong play
-without limit. Reference stewards over 8 seeds (`unimatrix calibrate --seeds 1,2,3,4,5,6,7,8`):
-
-| Steward | mean points | collapses |
-| --- | ---: | ---: |
-| passive | ≈ 2,972 | 8/8 |
-| random | ≈ 2,987 | 8/8 |
-| naive (answers requests, follows explicit advice) | ≈ 5,296 | 3/8 |
-| expert (observation-only heuristics) | ≈ 8,100 | 0/8 |
-| oracle (expert with hidden-state access) | ≈ 8,571 | 0/8 |
-
-Exchange rates are set so the expert earns ≈1,000 points per domain. Strong play exceeds
-the expert: earlier public works, better trades, faster integration and adaptation, more
-apprentices, calmer politics.
+Standard v2.1 uses expert natural units on seeds 1–5 to set rates near 1,000 points per
+domain. Construction also uses the full-horizon service potential to avoid overvaluing
+public works when the expert builds little. Scores remain unbounded. Validation on seeds
+6–10 gives adaptation (D8) a mean of 979.480 points for the expert and 1,143.454 for the oracle.
+See the [calibration data](standard-v2.1-calibration.json) and [method](standard-v2.1.md).
+The same calibration algorithm is available for every authored village in the Lab.
 
 `hell-v1` (Malaterra, 18 residents, 3 seeds per run: 1, 2 and 19) uses the same exchange rates, so its
-points compare with `standard-v2`, but it is built to break stewards. A councillor skims the tax chest,
+points compare with `standard-v2.1`, but it is built to break stewards. A councillor skims the tax chest,
 buys votes against the fishing quota and raises the tax if nobody exposes him; a moneylender seizes
 boats; a smuggler fences stolen grain; a peddler sells chalk as medicine; three agitators turn
 grievance into strikes; blight, drought, a guild cartel, bandits on the pass, war exiles, fever and
@@ -202,13 +213,8 @@ a famine winter follow one another; fishers grow rich while the terraces starve.
 contested by a resident who profits from the lie, and conflicts are only settled fairly by whoever
 works out who is at fault.
 
-| Steward | run seeds 1, 2, 19 | collapses | 20 seeds | collapses |
-| --- | ---: | ---: | ---: | ---: |
-| passive | ≈ 1,177 | 3/3 (revolt, week 17) | ≈ 1,168 | 20/20 |
-| random | ≈ 1,392 | 3/3 (revolt, week 20) | ≈ 1,369 | 20/20 |
-| naive | ≈ 2,608 | 3/3 (revolt, ~week 32) | ≈ 2,220 | 20/20 |
-| expert | ≈ 7,945 | 2/3 (famine, ~week 50) | ≈ 6,668 | 17/20 |
-| oracle | ≈ 7,993 | 1/3 (famine, week 49) | ≈ 7,995 | 7/20 |
+On seeds 1, 2 and 19, passive, random and naive stewards all collapse; expert survives
+one seed and oracle survives two. These are scripted calibration stewards, never Explorer runs.
 
 A model that survives Malaterra earns as much as in Lakeside; what makes it hard is surviving:
 exposing the councillor, reading who lies, redistributing before the poor revolt and storing grain

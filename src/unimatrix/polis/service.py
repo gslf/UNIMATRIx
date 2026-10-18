@@ -15,7 +15,7 @@ from ..persistence.lease import episode_lease
 from . import ENGINE
 from .catalog import DOMAINS
 from .runner import engine_fingerprint, live_view, run_seed
-from .scoring import SCORING_RULE, retained_score
+from .scoring import COLLAPSE_PENALTY_RATE, SCORING_RULE, evaluate_score
 from .simulate import calibrate
 
 
@@ -189,7 +189,8 @@ class SocietyService:
                 self._account(run)
                 entry.update(status="completed", week=world.horizon if not world.collapsed else world.collapsed["week"],
                              total=report["score"]["total"], collapsed=report["score"]["collapsed"],
-                             earned=report["score"]["earned"])
+                             earned=report["score"]["earned"], penalty=report["score"]["penalty"],
+                             scoring_rule=SCORING_RULE)
                 self.save(run)
 
         try:
@@ -250,7 +251,13 @@ class SocietyService:
         domains = {d: round(fmean(r["score"]["domains"][d]["points"] for r in reports), 3) for d in DOMAINS}
         return dict(
             rule=SCORING_RULE,
+            action_audit={key: sum(r.get("action_audit", {}).get(key, 0) for r in reports)
+                          for key in ("submitted", "done", "rejected", "initial", "consequential", "unclassified")},
             total=round(fmean(totals), 3),
+            earned=round(fmean(r["score"]["earned"] for r in reports), 3),
+            penalty=round(fmean(r["score"]["penalty"]
+                                for r in reports), 3),
+            penalty_rate=COLLAPSE_PENALTY_RATE,
             totals=totals,
             collapsed=sum(1 for r in reports if r["score"]["collapsed"]),
             seeds=len(reports),
@@ -271,12 +278,13 @@ class SocietyService:
         reports = {}
         for key, seed in run["seeds"].items():
             report = read_json(folder / f"seed-{seed['seed']}" / "report.json")
-            report["score"] = retained_score(report["score"])
+            report["score"] = evaluate_score(report["score"])
             score = report["score"]
             if score["collapsed"]:
                 report["diagnosis"] = [collapse_finding(score) if f["title"] == "Collapse" else f
                                        for f in report["diagnosis"]]
-            seed.update(total=score["total"], earned=score["earned"], collapsed=score["collapsed"])
+            seed.update(total=score["total"], earned=score["earned"], collapsed=score["collapsed"],
+                        penalty=score["penalty"], scoring_rule=SCORING_RULE)
             reports[key] = report
         run["score"] = self.aggregate(run, list(reports.values()))
         combined = dict(run=self.summary(run), score=run["score"],
@@ -289,7 +297,7 @@ class SocietyService:
         if not changed:
             return False
         # Back up every original before the first write; repeated migrations retain that backup.
-        backup = folder / "score-backup-before-retained-points"
+        backup = folder / f"score-backup-before-{SCORING_RULE}"
         for path in files:
             target = backup / path.relative_to(folder)
             if path.is_file() and not target.exists():
@@ -406,6 +414,8 @@ class SocietyService:
         rows = sorted(best.values(), key=lambda r: -r["score"]["total"])
         return [dict(rank=i + 1, id=r["id"], model=r["model"], snapshot=r["snapshot"], model_id=r["model_id"],
                      total=r["score"]["total"], domains=r["score"]["domains"], collapsed=r["score"]["collapsed"],
+                     scoring_rule=r["score"].get("rule"), earned=r["score"].get("earned"),
+                     penalty=r["score"].get("penalty"),
                      seeds=r["score"]["seeds"], relative_to_expert=r["score"].get("relative_to_expert"),
                      wellby=r["score"].get("wellby"), created_at=r["created_at"], recipe_hash=r["recipe_hash"])
                 for i, r in enumerate(rows)]

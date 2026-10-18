@@ -3,7 +3,7 @@
 Points accumulate week by week (resident-weeks of trust, coins of net worth created,
 fish harvested, service-weeks of public works ...). Recipe exchange rates convert each
 domain's units into points. Nothing caps the total: a better steward can always create
-more. A collapse stops the run; the points accumulated up to that point remain its score.
+more. A collapse stops the run and deducts 10% of the accumulated points.
 """
 
 import math
@@ -12,13 +12,17 @@ from statistics import fmean
 from .catalog import DOMAINS
 from .metrics import gini, integrated, networth, successor_depth
 
-SCORING_RULE = "accumulated-v1"
+SCORING_RULE = "accumulated-collapse-10pct-v2"
+COLLAPSE_PENALTY_RATE = 0.10
 
 
-def retained_score(score):
+def evaluate_score(score):
     """Apply the scoring rule to a recorded ledger without replaying the simulation."""
-    total = round(sum(domain["points"] for domain in score["domains"].values()), 3)
-    return dict(score, total=total, earned=total, forfeited=0.0, rule=SCORING_RULE)
+    earned = round(sum(domain["points"] for domain in score["domains"].values()), 3)
+    penalty = round(earned * COLLAPSE_PENALTY_RATE, 3) if score.get("collapsed") else 0.0
+    return dict(score, total=round(earned - penalty, 3), earned=earned,
+                penalty=penalty, penalty_rate=COLLAPSE_PENALTY_RATE,
+                rule=SCORING_RULE)
 
 
 class Ledger:
@@ -138,13 +142,8 @@ class Ledger:
             value = max(0.0, raw[d])
             domains[d] = dict(name=DOMAINS[d]["name"], unit=DOMAINS[d]["unit"], units=round(raw[d], 3),
                               rate=rates[d], points=round(value * rates[d], 3))
-        earned = sum(item["points"] for item in domains.values())
         collapsed = world.collapsed
-        self.final = dict(
-            total=round(earned, 3),
-            earned=round(earned, 3),
-            forfeited=0.0,  # Kept for compatibility with existing report/export consumers.
-            rule=SCORING_RULE,
+        self.final = evaluate_score(dict(
             collapsed=collapsed,
             survived_weeks=(collapsed["week"] - 1) if collapsed else world.horizon,
             domains=domains,
@@ -155,5 +154,5 @@ class Ledger:
                         concerns_relieved=self.concerns_relieved, apprentice_levels=self.apprentice_levels,
                         deaths=len(self.deaths), departures=len(self.departures), harvest=round(self.harvest, 2)),
             forecasts=self.forecasts,
-        )
+        ))
         return self.final

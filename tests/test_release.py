@@ -13,7 +13,7 @@ from unimatrix.polis.recipe import BUNDLED, PolisRecipes, normalize
 ROOT = Path(__file__).resolve().parents[1]
 
 
-BUNDLED_RECIPES = ["standard-v2", "hell-v1"]
+BUNDLED_RECIPES = ["standard-v2.1", "hell-v1"]
 
 
 def test_only_the_default_recipes_are_bundled():

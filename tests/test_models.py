@@ -2,7 +2,7 @@
 
 import asyncio
 import json
-import stat
+import os
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
@@ -18,6 +18,8 @@ from unimatrix.polis.llm import SCHEMA, StewardPolicy, system_prompt
 from unimatrix.polis.recipe import PolisRecipes
 from unimatrix.polis.world import World
 from unimatrix.web.server import build_app
+
+from .file_permissions import assert_private_file
 
 MODEL = dict(
     model="test",
@@ -142,7 +144,7 @@ async def test_reasoning_delimiters_split_thought_from_answer():
 
 
 async def test_steward_policy_sends_static_system_prompt_and_decision_schema():
-    recipe = PolisRecipes(None).get("standard-v2")
+    recipe = PolisRecipes(None).get("standard-v2.1")
     seen = []
 
     def handler(request):
@@ -345,7 +347,7 @@ async def test_input_token_budget_stops_before_generation(monkeypatch):
 
 async def test_personality_reaches_the_native_system_message(monkeypatch):
     _, _, _, model = lmstudio_server(monkeypatch)
-    recipe = PolisRecipes(None).get("standard-v2")
+    recipe = PolisRecipes(None).get("standard-v2.1")
     model.respond = AsyncMock(return_value=SimpleNamespace(
         content="{}", stats=SimpleNamespace(predicted_tokens_count=1, prompt_tokens_count=5,
                                             stop_reason="eosFound", to_dict=lambda: {})))
@@ -363,7 +365,7 @@ def client_for(app, base="http://localhost"):
     return httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url=base)
 
 
-async def test_model_editor_keeps_credentials_apart(tmp_path):
+async def test_model_editor_keeps_credentials_apart(tmp_path, monkeypatch):
     models = tmp_path / "models"
     app = build_app(tmp_path / "runs", models, tmp_path / "societies")
     config = dict(MODEL, budget_track="opaque_compute")
@@ -374,7 +376,7 @@ async def test_model_editor_keeps_credentials_apart(tmp_path):
         assert response.status_code == 200
         saved = response.json()
         secret = Path(saved["api_key_file"])
-        assert stat.S_IMODE(secret.stat().st_mode) == 0o600
+        assert_private_file(secret)
         assert "test-secret" not in response.text
         assert "test-secret" not in (models / "test.json").read_text(encoding="utf8")
         assert len((await client.get("/api/models")).json()) == 1
@@ -390,14 +392,22 @@ async def test_model_editor_keeps_credentials_apart(tmp_path):
             await Probe(saved, client=transport).decide({})
         response = await client.put("/api/models/test", json={"config": saved, "api_key": "replacement"})
         assert response.json()["api_key_file"] != str(secret)
+        assert_private_file(Path(response.json()["api_key_file"]))
         assert json.loads(secret.read_text(encoding="utf8"))["api_key"] == "test-secret"
         invalid = dict(config, context_bytes_verified=0)
         assert (await client.put("/api/models/test", json={"config": invalid, "api_key": "x"})).status_code == 422
         response = await client.put("/api/models/test", json={"config": saved, "api_key": ""})
         assert "api_key_file" not in response.json()
         assert (await client.put("/api/models/.hidden", json={"config": config})).status_code == 422
-        (models / "link.json").symlink_to(tmp_path / "outside.json")
+        link = models / "link.json"
+        if os.name == "nt":
+            # Exercise the rejection without requiring Windows' symlink-creation privilege.
+            is_symlink = Path.is_symlink
+            monkeypatch.setattr(Path, "is_symlink", lambda path: path == link or is_symlink(path))
+        else:
+            link.symlink_to(tmp_path / "outside.json")
         assert (await client.put("/api/models/link", json={"config": config})).status_code == 422
+        assert not (tmp_path / "outside.json").exists()
 
 
 async def test_dashboard_security_and_credential_confinement(tmp_path):
