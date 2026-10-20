@@ -99,7 +99,7 @@ async def test_retryable_provider_error():
     policy = Probe(MODEL, mocked(lambda r: httpx.Response(429)))
     try:
         with pytest.raises(InfrastructureFailure) as error:
-            await policy.decide({})
+            await policy.decide({}, diagnostic_tokens=128)
         assert error.value.retryable
     finally:
         await policy.close()

@@ -1498,6 +1498,8 @@
     if (config.system_prompt) list.push(tag(config.personality ? `Persona · ${config.personality}` : "Persona", "branch", "person"));
     if (config.api_key_file || config.api_key_env) list.push(tag("API key", "gold", "key"));
     if (config.managed_instance) list.push(tag("Managed instance"));
+    if (config.openrouter?.provider?.only?.length) list.push(tag(`Provider: ${config.openrouter.provider.only.join(", ")}`));
+    if (config.openrouter?.reasoning?.enabled) list.push(tag("Reasoning on"));
     return list;
   }
   function endpointHost(endpoint) {
@@ -1627,6 +1629,16 @@
     updateBackend();
     $("model-track").value = config.budget_track || "opaque_compute";
     for (const [field, key] of [...NUMERIC_FIELDS, ...KEY_FIELDS]) $("model-" + field).value = config[key] ?? (key === "temperature" ? 0 : "");
+    if (config.temperature === null) $("model-temperature").value = "";
+    const routing = config.openrouter;
+    $("model-routing-info").hidden = !routing;
+    $("model-routing-info").textContent = routing ? [
+      routing.provider?.only?.length ? `Provider: ${routing.provider.only.join(", ")}.` : "",
+      routing.provider?.allow_fallbacks === false ? "Provider fallbacks disabled." : "",
+      routing.provider?.quantizations?.length ? `Precision: ${routing.provider.quantizations.join(", ")}.` : "",
+      routing.reasoning?.enabled ? "Reasoning enabled." : "",
+      "These settings are preserved when saving."
+    ].filter(Boolean).join(" ") : "";
     $("model-persona").value = config.persona && personalities[config.persona] ? config.persona : "";
     $("model-personality").value = config.personality || "";
     $("model-prompt").value = config.system_prompt || "";
@@ -1702,6 +1714,7 @@
         delete config[key];
         if ($("model-" + field).value !== "") config[key] = Number($("model-" + field).value);
       }
+      if ($("model-backend").value === "compatible" && $("model-temperature").value === "") config.temperature = null;
       config.request_timeout_seconds = Number($("model-timeout").value);
       delete config.reasoning_effort;
       if ($("model-backend").value === "lmstudio" && $("model-effort").value) config.reasoning_effort = $("model-effort").value;

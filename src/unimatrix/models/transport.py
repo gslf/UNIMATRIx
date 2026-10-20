@@ -4,8 +4,14 @@ No repair or reflection policy: what the model answers is what gets recorded."""
 
 import asyncio
 import json
+import logging
+import math
 import os
+import random
+import time
 from copy import deepcopy
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -19,6 +25,24 @@ SAMPLING_FIELDS = ("top_p", "top_k", "presence_penalty", "frequency_penalty", "r
 # Local reasoning models can think for tens of thousands of tokens on one week: the deadline
 # only has to catch a stuck provider, never a slow but healthy one.
 DEFAULT_REQUEST_TIMEOUT_SECONDS = 8 * 60 * 60
+HTTP_RETRY_BACKOFF = (15, 30, 60, 120, 240, 300)
+HTTP_RETRY_BUDGET_SECONDS = 15 * 60
+logger = logging.getLogger(__name__)
+
+
+def retry_after_seconds(value):
+    """Accept Retry-After seconds or an HTTP date; never shorten a valid server delay."""
+    if value is None:
+        return None
+    try:
+        seconds = float(value)
+    except ValueError:
+        try:
+            date = parsedate_to_datetime(value)
+            seconds = (date - datetime.now(timezone.utc)).total_seconds()
+        except (TypeError, ValueError, OverflowError):
+            return None
+    return max(0.0, seconds) if math.isfinite(seconds) else None
 
 
 def requires_http_generation(config):
@@ -30,9 +54,10 @@ def requires_http_generation(config):
 class InfrastructureFailure(RuntimeError):
     """The provider failed (network, HTTP 5xx, timeout); `retryable` says whether to retry."""
 
-    def __init__(self, *args, retryable=True):
+    def __init__(self, *args, retryable=True, http_status=None):
         super().__init__(*args)
         self.retryable = retryable
+        self.http_status = http_status
 
 
 class ContextConfigurationError(ValueError):
@@ -61,8 +86,10 @@ class ModelClient:
 
     def sampling_requested(self):
         """Explicit wire settings only; unspecified controls remain provider defaults."""
-        return dict(temperature=self.config.get("temperature", 0),
-                    **{k: self.config[k] for k in (*SAMPLING_FIELDS, "seed") if k in self.config})
+        settings = {k: self.config[k] for k in (*SAMPLING_FIELDS, "seed") if k in self.config}
+        if self.config.get("temperature", 0) is not None:
+            settings["temperature"] = self.config.get("temperature", 0)
+        return settings
 
     def system_prompt(self):
         persona = self.config.get("system_prompt")
@@ -121,29 +148,9 @@ class ModelClient:
             body["seed"] = self.config["seed"]
         if "reasoning_effort" in self.config:
             body["reasoning_effort"] = self.config["reasoning_effort"]
-        try:
-            response = await self.client.post(
-                self.config["endpoint"].rstrip("/") + "/v1/chat/completions",
-                json=body,
-                headers=headers,
-            )
-            if response.status_code == 429 or response.status_code >= 500:
-                raise InfrastructureFailure(f"provider_http_{response.status_code}")
-            if response.is_error:
-                detail = response.text
-                authorization = headers.get("Authorization")
-                if authorization:
-                    detail = detail.replace(authorization.removeprefix("Bearer "), "[redacted]")
-                raise httpx.HTTPStatusError(
-                    f"provider_http_{response.status_code}: {detail[:2000]}",
-                    request=response.request,
-                    response=response,
-                )
-            response.raise_for_status()
-        except httpx.RequestError as error:
-            raise InfrastructureFailure(
-                type(error).__name__, retryable=not isinstance(error, httpx.TimeoutException)
-            ) from error
+        body.update(deepcopy(self.config.get("openrouter", {})))
+        response, retries, retry_wait = await self._post_http(
+            body, headers, retry_transient=diagnostic_tokens is None)
         data = response.json()
         usage = data.get("usage", {})
         generated = usage.get("completion_tokens")
@@ -179,7 +186,73 @@ class ModelClient:
             response_hash=digest(data),
             provider_model=data.get("model"),
             provider_fingerprint=data.get("system_fingerprint"),
+            provider_name=data.get("provider"),
+            provider_request_id=data.get("id"),
+            provider_routing_requested=body.get("provider"),
+            reasoning_requested=body.get("reasoning"),
+            provider_http_retries=retries,
+            provider_http_retry_wait_seconds=round(retry_wait, 3),
         )
+
+    async def _post_http(self, body, headers, *, retry_transient):
+        started, retry_wait = time.monotonic(), 0.0
+        try:
+            for attempt in range(len(HTTP_RETRY_BACKOFF) + 1):
+                response = await self.client.post(
+                    self.config["endpoint"].rstrip("/") + "/v1/chat/completions",
+                    json=body, headers=headers,
+                )
+                if not response.is_error:
+                    response.raise_for_status()
+                    return response, attempt, retry_wait
+                detail = response.text
+                authorization = headers.get("Authorization")
+                if authorization:
+                    detail = detail.replace(authorization.removeprefix("Bearer "), "[redacted]")
+                message = f"provider_http_{response.status_code}: {detail[:2000]}"
+                if response.status_code not in (429, 503):
+                    if response.status_code >= 500:
+                        raise InfrastructureFailure(message, http_status=response.status_code)
+                    raise httpx.HTTPStatusError(message, request=response.request, response=response)
+                server_delay = retry_after_seconds(response.headers.get("Retry-After"))
+                if server_delay is not None:
+                    message += f"; Retry-After: {server_delay:g}s"
+                error = InfrastructureFailure(message, http_status=response.status_code)
+                try:
+                    payload = response.json()
+                    provider_error = payload.get("error", {}) if isinstance(payload, dict) else {}
+                except ValueError:
+                    provider_error = {}
+                if isinstance(provider_error, dict) and any(
+                    provider_error.get(field) in {
+                        "insufficient_quota", "credit_balance_exhausted",
+                        "organization_spend_limit_exceeded", "project_spend_limit_exceeded",
+                        "organization_usage_limit_exceeded",
+                    } for field in ("type", "code")
+                    if isinstance(provider_error.get(field), str)
+                ):
+                    error.retryable = False
+                    raise error
+                # Health checks must report the provider error within their short deadline.
+                if not retry_transient:
+                    raise error
+                if attempt == len(HTTP_RETRY_BACKOFF):
+                    raise InfrastructureFailure(
+                        f"{message}; HTTP retry attempts exhausted", retryable=False,
+                        http_status=response.status_code) from None
+                delay = max(HTTP_RETRY_BACKOFF[attempt], server_delay or 0)
+                delay += random.uniform(0, min(5, delay * 0.1))
+                if time.monotonic() - started + delay > HTTP_RETRY_BUDGET_SECONDS:
+                    raise InfrastructureFailure(
+                        f"{message}; HTTP retry time budget exhausted", retryable=False,
+                        http_status=response.status_code) from None
+                logger.warning("%s; retry %s in %.1fs", message, attempt + 1, delay)
+                await asyncio.sleep(delay)
+                retry_wait += delay
+        except httpx.RequestError as error:
+            raise InfrastructureFailure(
+                type(error).__name__, retryable=not isinstance(error, httpx.TimeoutException)
+            ) from error
 
     async def _verify_reasoning_effort(self, token):
         response = await self.client.get(

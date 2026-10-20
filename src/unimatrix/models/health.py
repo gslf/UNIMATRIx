@@ -9,11 +9,15 @@ from time import monotonic
 
 import httpx
 
-from .transport import ContextConfigurationError, ModelClient
+from .transport import ContextConfigurationError, InfrastructureFailure, ModelClient
 
 
-async def check_model(config, *, timeout=30):
+async def check_model(config, *, timeout=None):
     started = monotonic()
+    thinking = config.get("openrouter", {}).get("reasoning", {}).get("enabled") is True
+    diagnostic_tokens = min(config.get("max_output_tokens", 8192), 8192) if thinking else 128
+    if timeout is None:
+        timeout = 120 if thinking else 30
     result = {
         "model": config["model"],
         "protocol": "LM Studio SDK" if "context_tokens" in config else "OpenAI-compatible",
@@ -38,8 +42,10 @@ async def check_model(config, *, timeout=30):
                 {
                     "instruction": 'Reply with the JSON object {"ok":true}. This is a connection test.'
                 },
-                diagnostic_tokens=128,
+                diagnostic_tokens=diagnostic_tokens,
             )
+            if metadata.get("finish_reason") == "length":
+                raise ValueError("diagnostic_output_limit")
             if not isinstance(json.loads(raw), dict):
                 raise ValueError("non_object")
         result.update(
@@ -56,6 +62,8 @@ async def check_model(config, *, timeout=30):
         detail = str(error).lower()
         cause = error.__cause__
         status = error.response.status_code if isinstance(error, httpx.HTTPStatusError) else None
+        if isinstance(error, InfrastructureFailure):
+            status = error.http_status
         if isinstance(error, (TimeoutError, httpx.TimeoutException)) or isinstance(
             cause, httpx.TimeoutException
         ):
@@ -111,6 +119,9 @@ async def check_model(config, *, timeout=30):
                 "Server rate limit reached (HTTP 429).",
                 "Wait and retry; check provider quota.",
             )
+            if "upstream_provider_shared_pool" in detail:
+                hint = ("The upstream provider's shared capacity is rate limited. Wait, choose "
+                        "another provider, or configure your own provider key in OpenRouter.")
         elif "provider_http_5" in detail:
             code, message, hint = (
                 "server",
@@ -123,6 +134,12 @@ async def check_model(config, *, timeout=30):
                 "Server responded without generation-token accounting.",
                 "Use a provider with token usage reporting or select opaque compute.",
             )
+        elif "diagnostic_output_limit" in detail:
+            code, message, hint = (
+                "output_limit",
+                "The connection test exhausted its output budget before completing the answer.",
+                f"The test allows {diagnostic_tokens} tokens including reasoning; this does not establish a usable JSON response.",
+            )
         elif isinstance(
             error,
             (json.JSONDecodeError, ValueError, IndexError, KeyError, TypeError, AttributeError),
@@ -130,7 +147,7 @@ async def check_model(config, *, timeout=30):
             code, message, hint = (
                 "response",
                 "Server response was not a usable JSON object.",
-                "Check structured-output support. A model needing more than 128 output tokens may require a full evaluation.",
+                f"Check structured-output support. The connection test allows {diagnostic_tokens} output tokens including reasoning.",
             )
         elif (
             isinstance(cause, httpx.RequestError)
@@ -151,6 +168,8 @@ async def check_model(config, *, timeout=30):
                 "Check server logs, model identifier and structured-output support.",
             )
         result.update(ok=False, code=code, message=message, hint=hint)
+        if isinstance(error, InfrastructureFailure) and error.http_status:
+            result["provider_detail"] = str(error)
         if status:
             result["http_status"] = status
     finally:

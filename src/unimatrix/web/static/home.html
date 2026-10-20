@@ -281,6 +281,7 @@
         <label class="field"><span class="label">API key</span><input id="model-key" type="password" autocomplete="new-password" placeholder="Leave blank to keep the saved key"></label>
       </div>
       <p class="hint block">LM Studio: use http://host and its server port. Context includes prompt, reasoning and answer; generation stops when the context is full. Already loaded models must match this value. OpenAI-compatible: the verified observation capacity is at least 24,000 bytes.</p>
+      <p class="hint block" id="model-routing-info" hidden></p>
 
       <h3 class="form-section">Output</h3>
       <div class="form-grid">
@@ -300,7 +301,7 @@
         <div class="fold-body">
           <div class="form-grid">
             <label class="field"><span class="label">Compute reporting</span><select id="model-track"><option value="opaque_compute">Token usage optional</option><option value="accounted_compute">Token usage required</option></select></label>
-            <label class="field"><span class="label">Temperature</span><input id="model-temperature" type="number" step="any" value="0" inputmode="decimal"></label>
+            <label class="field"><span class="label">Temperature</span><input id="model-temperature" type="number" step="any" value="0" inputmode="decimal" placeholder="Provider default"><span class="hint">OpenAI-compatible: leave blank to use the provider default.</span></label>
             <label class="field"><span class="label">Top-p</span><input id="model-top-p" type="number" min="0" max="1" step="any" placeholder="Provider default" inputmode="decimal"></label>
             <label class="field"><span class="label">Top-k</span><input id="model-top-k" type="number" min="0" step="1" placeholder="Provider default" inputmode="numeric"></label>
             <label class="field"><span class="label">Presence penalty</span><input id="model-presence-penalty" type="number" min="-2" max="2" step="any" placeholder="Provider default" inputmode="decimal"></label>

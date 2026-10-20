@@ -41,6 +41,7 @@ def validate_model(config):
         "constrain_output",
         "reasoning_delimiters",
         "reasoning_effort",
+        "openrouter",
     }
     if not isinstance(config, dict) or not required <= config.keys() or set(config) - allowed:
         raise ValueError("invalid_model_configuration")
@@ -75,6 +76,8 @@ def validate_model(config):
                      "repeat_penalty": (0, float("inf")), "request_timeout_seconds": (0.01, 86400),
                      "input_price_per_million": (0, 1e9), "output_price_per_million": (0, 1e9)}
     for key, (low, high) in number_fields.items():
+        if key == "temperature" and key in config and config[key] is None and "context_tokens" not in config:
+            continue  # Explicit provider default for APIs that do not accept temperature.
         if key in config and (type(config[key]) not in (float, int)
                               or not math.isfinite(config[key]) or not low <= config[key] <= high):
             raise ValueError("invalid_" + key)
@@ -138,3 +141,50 @@ def validate_model(config):
         raise ValueError("verified_context_too_small")
     if config["budget_track"] not in {"accounted_compute", "opaque_compute"}:
         raise ValueError("unknown_compute_track")
+    if "openrouter" in config:
+        if (url.scheme != "https" or url.hostname not in {"openrouter.ai", "eu.openrouter.ai", "us.openrouter.ai"}
+                or url.path.rstrip("/") != "/api" or "context_tokens" in config):
+            raise ValueError("openrouter_requires_https_api_endpoint")
+        validate_openrouter(config["openrouter"])
+
+
+def validate_openrouter(options):
+    """Validate the supported routing and reasoning fields; never allow arbitrary body overrides."""
+    if not isinstance(options, dict) or not options or set(options) - {"provider", "reasoning"}:
+        raise ValueError("invalid_openrouter_configuration")
+    if "provider" in options:
+        provider = options["provider"]
+        if (not isinstance(provider, dict) or not provider
+                or set(provider) - {"only", "allow_fallbacks", "require_parameters", "quantizations"}):
+            raise ValueError("invalid_openrouter_provider")
+        if "only" in provider:
+            only = provider["only"]
+            if (not isinstance(only, list) or not only
+                    or any(not isinstance(p, str) or not re.fullmatch(r"[a-z0-9][a-z0-9_./-]{0,199}", p)
+                           for p in only)):
+                raise ValueError("invalid_openrouter_provider_only")
+        for key in ("allow_fallbacks", "require_parameters"):
+            if key in provider and type(provider[key]) is not bool:
+                raise ValueError("invalid_openrouter_" + key)
+        if "quantizations" in provider:
+            quants = provider["quantizations"]
+            allowed = {"int4", "int8", "fp4", "mxfp4", "nvfp4", "fp6", "fp8", "mxfp8",
+                       "fp16", "bf16", "fp32", "unknown"}
+            if (not isinstance(quants, list) or not quants
+                    or any(not isinstance(q, str) or q not in allowed for q in quants)):
+                raise ValueError("invalid_openrouter_quantizations")
+    if "reasoning" in options:
+        reasoning = options["reasoning"]
+        if (not isinstance(reasoning, dict) or not reasoning
+                or set(reasoning) - {"enabled", "exclude", "effort"}):
+            raise ValueError("invalid_openrouter_reasoning")
+        for key in ("enabled", "exclude"):
+            if key in reasoning and type(reasoning[key]) is not bool:
+                raise ValueError("invalid_openrouter_reasoning_" + key)
+        if "effort" in reasoning:
+            effort = reasoning["effort"]
+            if not isinstance(effort, str) or effort not in {"minimal", "low", "medium", "high", "xhigh", "max", "none"}:
+                raise ValueError("invalid_openrouter_reasoning_effort")
+            if ((effort == "none" and reasoning.get("enabled") is True)
+                    or (effort != "none" and reasoning.get("enabled") is False)):
+                raise ValueError("conflicting_openrouter_reasoning_settings")
