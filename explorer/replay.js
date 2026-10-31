@@ -49,7 +49,7 @@
     const seedBox = h("div", { class: "seed-box", hidden: true });
     const jumpCollapse = h("button", { type: "button", class: "small danger-ghost", hidden: true }, icon("skull", "sm"), h("span", null, "Jump to the collapse"));
     const headEl = h("div", { class: "run-head" },
-      h("div", { class: "rh-main" }, U.avatar(entry.model, "lg"),
+      h("div", { class: "rh-main" },
         h("div", { class: "rh-text" },
           h("p", { class: "eyebrow" }, `Run explorer · ${recipeTitle}`),
           h("h1", null, entry.model),

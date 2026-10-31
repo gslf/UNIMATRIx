@@ -66,15 +66,7 @@
     return `#/${s ? "?" + s : ""}`;
   };
 
-  // ================================================================== shell: source pill, data panel, files
-  function renderChrome() {
-    const pill = $("source-pill");
-    const src = store.source;
-    pill.dataset.kind = store.status === "loading" ? "loading" : src.kind;
-    $("source-text").textContent = store.status === "loading" ? "Loading…" : store.status === "empty" ? "No data" : src.kind === "data" ? `data/ · ${store.entries.length}` : `Files · ${store.entries.length}`;
-    pill.title = store.status === "ready" ? `${src.label}: ${store.entries.length} run${store.entries.length === 1 ? "" : "s"}. Open the data panel.` : "Data panel";
-  }
-
+  // ================================================================== shell: data panel, files
   function openDataPanel() {
     const dialog = $("data-dialog");
     const body = $("data-body");
@@ -143,7 +135,6 @@
   }
   function wireFiles() {
     $("load-btn").addEventListener("click", openDataPanel);
-    $("source-pill").addEventListener("click", openDataPanel);
     $("data-close").addEventListener("click", () => $("data-dialog").close());
     for (const id of ["file-input", "folder-input"]) {
       const input = $(id);
@@ -185,7 +176,6 @@
     if (current && current.destroy) { try { current.destroy(); } catch (e) { console.error(e); } }
     current = null;
     const name = segs[0] || "board";
-    if (name === "run") $("nav-board").removeAttribute("aria-current"); else $("nav-board").setAttribute("aria-current", "page");
     let view;
     if (store.status === "idle" || store.status === "loading") view = loadingView();
     else if (store.status === "empty") view = emptyView();
@@ -252,6 +242,8 @@
     return { el, title: "No data" };
   }
 
+  let boardQuery = "";
+  let boardSort = { key: "score", descending: true };
   function boardView(params) {
     const m = model();
     if (!m.recipes.length) return emptyView();
@@ -275,26 +267,76 @@
     }
     controls.append(h("fieldset", { class: "ctl" }, h("legend", { class: "label" }, "Runs"),
       U.segmented("show", [{ value: "latest", label: "Latest per steward" }, { value: "all", label: "All runs" }], show, (v) => refresh(recipe.id, rev, v), "Runs shown")));
+    const search = h("input", { type: "search", id: "model-filter", value: boardQuery, placeholder: "Filter by model name", autocomplete: "off", "aria-controls": "leaderboard-table" });
+    controls.append(h("label", { class: "board-search" }, h("span", { class: "label" }, "Model name"), search));
 
-    const table = h("table", { class: "board-table" },
+    const sortHeaders = [];
+    const sortableHeader = (key, label, className, title) => {
+      const direction = h("span", { class: "sort-direction", "aria-hidden": "true" });
+      const button = h("button", { type: "button", class: "sort-button", onclick: () => {
+        boardSort = { key, descending: boardSort.key === key ? !boardSort.descending : true };
+        sortRows();
+      } }, label, direction);
+      const th = h("th", { scope: "col", class: `${className} sortable`, title }, button);
+      sortHeaders.push({ key, th, button, direction });
+      return th;
+    };
+    const table = h("table", { class: "board-table", id: "leaderboard-table" },
       h("caption", { class: "sr-only" }, `Leaderboard of ${recipe.name}, revision ${rev || "unknown"}`),
       h("thead", null, h("tr", null,
-        h("th", { scope: "col", class: "c-rank" }, "#"), h("th", { scope: "col", class: "c-who" }, "Steward"), h("th", { scope: "col", class: "c-score" }, "Score"),
-        h("th", { scope: "col", class: "c-rel", title: "Score relative to the expert reference on the same seeds" }, "× expert"),
+        h("th", { scope: "col", class: "c-rank" }, "#"), h("th", { scope: "col", class: "c-who" }, "Steward"), sortableHeader("score", "Score", "c-score"),
+        sortableHeader("expert", "× expert", "c-rel", "Score relative to the expert reference on the same seeds"),
         h("th", { scope: "col", class: "c-seeds" }, "Seeds"), h("th", { scope: "col", class: "c-wb", title: "Wellbeing-years above a neutral point of 2" }, "WELLBY"),
-        h("th", { scope: "col", class: "c-dom" }, "Domains"), h("th", { scope: "col", class: "c-date" }, "Played"), h("th", { scope: "col", class: "c-go" }, h("span", { class: "sr-only" }, "Open")))));
+        h("th", { scope: "col", class: "c-dom" }, "Domains"), sortableHeader("played", "Played", "c-date"), h("th", { scope: "col", class: "c-go" }, h("span", { class: "sr-only" }, "Open")))));
     const tbody = h("tbody");
-    rows.forEach((row, i) => tbody.append(boardRow(row, scales, header, i)));
+    const renderedRows = rows.map((row, i) => boardRow(row, scales, header, i));
+    function sortRows() {
+      const ordered = rows.map((row, i) => ({
+        node: renderedRows[i], rank: row.rank,
+        value: boardSort.key === "score" ? row.entry.total : boardSort.key === "expert" ? row.entry.relative : Date.parse(row.entry.created),
+      }));
+      ordered.sort((a, b) => {
+        const aValid = Number.isFinite(a.value), bValid = Number.isFinite(b.value);
+        if (aValid !== bValid) return aValid ? -1 : 1;
+        if (!aValid) return a.rank - b.rank;
+        return (boardSort.descending ? b.value - a.value : a.value - b.value) || a.rank - b.rank;
+      });
+      ordered.forEach(({ node }, i) => { node.style.setProperty("--i", Math.min(i, 14)); tbody.append(node); });
+      for (const item of sortHeaders) {
+        const active = item.key === boardSort.key;
+        if (active) item.th.setAttribute("aria-sort", boardSort.descending ? "descending" : "ascending");
+        else item.th.removeAttribute("aria-sort");
+        item.direction.textContent = active ? (boardSort.descending ? "↓" : "↑") : "↕";
+        item.button.title = active && boardSort.descending ? "Sort ascending" : "Sort descending";
+      }
+    }
+    sortRows();
     table.append(tbody);
+    const runCount = U.badge("");
+    runCount.setAttribute("role", "status");
+    const noMatches = h("p", { class: "empty-note", hidden: true }, "No models match this name.");
+    const filterRows = () => {
+      const query = search.value.trim().toLowerCase();
+      let visible = 0;
+      renderedRows.forEach((row, i) => {
+        row.hidden = !rows[i].entry.model.toLowerCase().includes(query);
+        if (!row.hidden) visible += 1;
+      });
+      runCount.textContent = `${visible} run${visible === 1 ? "" : "s"} shown`;
+      noMatches.hidden = visible > 0;
+    };
+    search.addEventListener("input", () => { boardQuery = search.value; filterRows(); });
+    filterRows();
     const el = h("section", { class: "view board-view" },
-      sectionHead("Arena", "Leaderboard", "Ranked by mean final points over seeds: a collapsed seed loses 10% of its gross points. Domain bars show gross points before this penalty. Runs may differ in prompt and inference settings; see the recorded decisions."),
+      sectionHead(null, "Leaderboard", ["UNIMATRIx uses a simulated society as a benchmark for language models. Each model manages a village for 52 weeks. Scores measure the effects of its decisions across eight domains. ",
+        h("a", { href: "https://github.com/gslf/UNIMATRIx", target: "_blank", rel: "noopener noreferrer" }, "SaaB concept on GitHub"), "."]),
       controls,
       h("div", { class: "board-meta" },
         h("span", { class: "bm-title" }, h("b", null, recipe.title), recipe.subtitle ? h("span", null, recipe.subtitle) : null),
-        U.badge(`rev ${rev || "—"}`, "", "cycle"),
-        U.badge(`${models} model${models === 1 ? "" : "s"}`, "info", "person"),
-        U.badge(`${rows.length} run${rows.length === 1 ? "" : "s"} shown`, "", "runs")),
-      rows.length ? h("div", { class: "card board-card" }, table) : U.emptyNote("board", "No runs on this revision", "Pick another revision or open more files."));
+        U.badge(`rev ${rev || "—"}`),
+        U.badge(`${models} model${models === 1 ? "" : "s"}`),
+        runCount),
+      rows.length ? h("div", { class: "card board-card" }, table, noMatches) : U.emptyNote("board", "No runs on this revision", "Pick another revision or open more files."));
     return { el, title: "Leaderboard" };
   }
   function boardRow(row, scales, header, i) {
@@ -304,7 +346,7 @@
     const tr = h("tr", { class: "brow" + (e.fullyCollapsed ? " ruined" : "") + (row.older ? " older" : "") + (row.rank === 1 ? " top" : ""), style: { "--i": Math.min(i, 14) } },
       h("td", { class: "c-rank" }, h("span", { class: "rank" }, String(row.rank))),
       h("td", { class: "c-who" },
-        h("div", { class: "who" }, U.avatar(e.model, "xs"),
+        h("div", { class: "who" },
           h("div", { class: "who-text" },
             h("a", { href, class: "who-link" }, e.model),
             h("small", null, [e.snapshot || null, row.older ? "older run" : null].filter(Boolean).join(" · "), h("span", { class: "only-phone" }, `${e.snapshot ? " · " : ""}${U.dateShort(e.created)}`))))),
@@ -335,12 +377,10 @@
     window.addEventListener("hashchange", () => route(false, true));
     let lastStatus = "";
     D.onChange(() => {
-      renderChrome();
       if (store.status === "loading" && lastStatus === "loading") return;
       lastStatus = store.status;
       route(true);
     });
-    renderChrome();
     route(true);
     D.boot();
   }
