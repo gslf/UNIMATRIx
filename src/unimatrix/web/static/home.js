@@ -87,6 +87,8 @@
     heroRecipe: null,
     heroShown: null,
     boardRecipe: null,
+    boardQuery: "",
+    boardSort: { key: "score", descending: true },
     runsFilter: { recipe: "", status: "all" },
     wizard: { step: 1, recipe: null, model: null, parallel: 1, seconds: 15 },
     starting: false,
@@ -218,12 +220,6 @@
     let x = 2166136261;
     for (let i = 0; i < text.length; i++) { x ^= text.charCodeAt(i); x = Math.imul(x, 16777619); }
     return (x >>> 0) / 4294967296;
-  }
-  const hueColor = (text) => `hsl(${Math.round(hashText(String(text)) * 360)} 62% 64%)`;
-  function initials(name) {
-    const parts = String(name || "?").split(/[^A-Za-z0-9]+/).filter(Boolean);
-    const letters = parts.slice(0, 2).map((p) => p[0]).join("");
-    return (letters || "?").toUpperCase();
   }
   const reportHref = (id) => `/society/runs/${encodeURIComponent(id)}`;
 
@@ -529,16 +525,7 @@
     else if (name === "models") renderModels();
     else if (name === "about") renderAbout();
   }
-  function moveInk() {
-    const nav = $("tabbar"), ink = $("tab-ink");
-    const active = nav.querySelector('a[aria-current="page"]');
-    if (!active) { ink.style.setProperty("--ink-o", "0"); return; }
-    const navRect = nav.getBoundingClientRect(), rect = active.getBoundingClientRect();
-    const width = Math.min(rect.width * 0.6, 46);
-    ink.style.setProperty("--ink-x", `${rect.left - navRect.left + (rect.width - width) / 2}px`);
-    ink.style.setProperty("--ink-w", `${width}px`);
-    ink.style.setProperty("--ink-o", "1");
-  }
+  const moveInk = window.UnimatrixNav.moveInk;
 
   // ------------------------------------------------------------------ runs: loading, polling, transitions
   function setRuns(runs, initial) {
@@ -600,7 +587,7 @@
   }
   function refreshRunViews() {
     renderLiveIndicators();
-    if (state.route === "home") { renderContinue(); renderQuickStats(); renderRecipeCards(); }
+    if (state.route === "home") { renderContinue(); renderRecipeCards(); }
     else if (state.route === "runs") renderRuns();
     else if (state.route === "play") updateStartAvailability();
     else if (state.route === "leaderboard" && !state.boards.has(state.boardRecipe)) renderBoard();
@@ -677,7 +664,6 @@
       else heroMessage("No society recipe is available.");
     }
     renderContinue();
-    renderQuickStats();
     renderRecipeCards();
   }
 
@@ -705,7 +691,6 @@
     if (!recipe) return;
     $("hero-start").setAttribute("href", `#/play?recipe=${encodeURIComponent(recipe.id)}`);
     $("hero-board").setAttribute("href", `#/leaderboard?recipe=${encodeURIComponent(recipe.id)}`);
-    $("hero-note").textContent = `Preview: the expert reference steward governs ${splitName(recipe.name)[0]} (seed ${firstSeed(recipe)}). Your model takes its place in a run.`;
     for (const input of $("hero-recipes").querySelectorAll("input")) input.checked = input.value === recipe.id;
   }
   function heroMessage(text, spinner) {
@@ -836,40 +821,6 @@
     return items.map(([name, label, value, meter]) => h("div", { class: "vital" }, icon(name),
       h("div", null, h("b", null, value), h("span", null, label),
         meter ? h("div", { class: "meter", "aria-hidden": "true" }, h("i", { style: { width: `${Math.round(Math.max(0, Math.min(1, meter[0])) * 100)}%`, background: meter[1] } })) : null)));
-  }
-
-  function renderQuickStats() {
-    const box = $("quick-stats");
-    if (!state.runs || !state.models || !state.recipes) {
-      if (!box.children.length) box.replaceChildren(...Array.from({ length: 4 }, () => h("div", { class: "skeleton", style: { minHeight: "68px" }, "aria-hidden": "true" })));
-      return;
-    }
-    const first = !box.dataset.ready;
-    box.dataset.ready = "1";
-    const runs = state.runs;
-    const live = runs.filter(isRunning).length;
-    const completed = runs.filter((r) => r.status === "completed").length;
-    const valid = state.models.filter((m) => m.config).length;
-    const invalid = state.models.length - valid;
-    const tiles = [
-      statTile("runs", "", runs.length, "Runs played", `${completed} completed${live ? ` · ${live} live` : ""}`, "#/runs", "qs-runs"),
-      statTile("chip", "blue", valid, valid === 1 ? "Model ready" : "Models ready", invalid ? `${invalid} need attention` : "Saved configurations", "#/models", "qs-models"),
-    ];
-    for (const recipe of state.recipes.slice(0, 4)) {
-      const best = bestRun(recipe);
-      tiles.push(statTile("board", recipe.tags && recipe.tags.includes("hard") ? "violet" : "green",
-        best ? best.score.total : null, `Best · ${splitName(recipe.name)[0]}`, best ? best.model : "No completed run yet",
-        `#/leaderboard?recipe=${encodeURIComponent(recipe.id)}`, `qs-best-${recipe.id}`));
-    }
-    tiles.forEach((tile, i) => { if (first) { tile.classList.add("enter"); tile.style.setProperty("--i", i); } });
-    box.replaceChildren(...tiles);
-  }
-  function statTile(iconName, tone, value, label, note, href, key) {
-    const strong = h("strong");
-    if (value === null || value === undefined) strong.textContent = "—";
-    else countUp(strong, value, key);
-    return h("a", { class: "qs", href }, h("span", { class: `qs-icon ${tone}` }, icon(iconName)),
-      h("span", { class: "qs-text" }, strong, h("span", null, label), h("small", null, note)));
   }
 
   function renderRecipeCards() {
@@ -1007,7 +958,7 @@
         input,
         h("label", { class: "pick-main", for: `wm-${i}` },
           h("span", { class: "row", style: { flexWrap: "nowrap", gap: "12px" } },
-            h("span", { class: "model-avatar", style: { "--av": hueColor(m.config.model) }, "aria-hidden": "true" }, initials(m.config.model)),
+
             h("span", { class: "pick-title" }, m.config.model, h("small", null, `${m.config.snapshot} · ${m.id}`))),
           h("span", { class: "pick-meta" }, modelTags(m.config))),
         h("span", { class: "pick-check", "aria-hidden": "true" }, icon("check")),
@@ -1093,7 +1044,7 @@
       h("h3", null, icon("report"), "Summary"),
       h("div", { class: "ready-line" }, h("span", { class: "qs-icon green" }, icon("home")),
         h("div", null, h("b", null, title), h("span", null, `${subtitle ? subtitle + " · " : ""}${recipe.residents} residents · ${recipe.ticks} weeks · ${recipe.seeds.length} seed${recipe.seeds.length === 1 ? "" : "s"}`))),
-      h("div", { class: "ready-line" }, h("span", { class: "model-avatar", style: { "--av": hueColor(model.config.model) }, "aria-hidden": "true" }, initials(model.config.model)),
+      h("div", { class: "ready-line" },
         h("div", null, h("b", null, model.config.model), h("span", null, `${model.config.snapshot} · ${backendLabel(model.config)}`))),
       healthBox(model.id, true));
     const max = clampParallel();
@@ -1283,20 +1234,69 @@
     }
     if (entries.length) {
       const head = (text, cls) => h("th", { scope: "col", role: "columnheader", class: cls }, text);
-      const table = h("table", { class: "board-table", role: "table" },
+      const sortHeaders = [];
+      const sortableHead = (key, label, cls) => {
+        const direction = h("span", { class: "sort-direction", "aria-hidden": "true" });
+        const button = h("button", { type: "button", class: "sort-button", onclick: () => {
+          state.boardSort = { key, descending: state.boardSort.key === key ? !state.boardSort.descending : true };
+          sortRows();
+        } }, label, direction);
+        const th = head(button, `${cls} sortable`);
+        sortHeaders.push({ key, th, button, direction });
+        return th;
+      };
+      const tbody = h("tbody", { role: "rowgroup" });
+      const renderedRows = entries.map(boardRow);
+      function sortRows() {
+        const ordered = entries.map((entry, i) => ({ entry, node: renderedRows[i] }));
+        ordered.sort((a, b) => compareBoardEntries(a.entry, b.entry, state.boardSort));
+        ordered.forEach(({ node }, i) => { node.style.setProperty("--i", Math.min(i, 14)); tbody.append(node); });
+        for (const item of sortHeaders) {
+          const active = item.key === state.boardSort.key;
+          if (active) item.th.setAttribute("aria-sort", state.boardSort.descending ? "descending" : "ascending");
+          else item.th.removeAttribute("aria-sort");
+          item.direction.textContent = active ? (state.boardSort.descending ? "↓" : "↑") : "↕";
+          item.button.title = active && state.boardSort.descending ? "Sort ascending" : "Sort descending";
+        }
+      }
+      const table = h("table", { class: "board-table", id: "leaderboard-table", role: "table" },
         h("caption", { class: "sr-only" }, `Leaderboard of ${recipe ? recipe.name : id}: models ranked by score; scripted reference stewards are listed for comparison and not ranked.`),
         h("thead", { role: "rowgroup" }, h("tr", { role: "row" },
-          head("#", "c-rank"), head("Model", "c-model"), head("Score", "c-num c-score"), head("× expert", "c-num c-x"),
+          head("#", "c-rank"), head("Model", "c-model"), sortableHead("score", "Score", "c-num c-score"), sortableHead("expert", "× expert", "c-num c-x"),
           head("Collapsed", "c-num c-col"), head(h("abbr", { title: "Wellbeing-years above a neutral point of 2" }, "WELLBY"), "c-num c-wellby"),
-          head("Date", "c-date"), head(h("span", { class: "sr-only" }, "Report"), "c-link"))),
-        h("tbody", { role: "rowgroup" }, entries.map(boardRow)));
-      parts.push(h("div", { class: "card flush board-card enter" }, table));
+          sortableHead("played", "Played", "c-date"), head(h("span", { class: "sr-only" }, "Report"), "c-link"))), tbody);
+      sortRows();
+      parts.push(h("p", { class: "board-count", id: "board-count", role: "status" }));
+      parts.push(h("div", { class: "card flush board-card enter" }, table,
+        h("p", { class: "board-no-matches", id: "board-no-matches", hidden: true }, "No models match this name.")));
     }
     const revision = board.revision ? ` Recipe revision ${String(board.revision).slice(0, 10)}.` : "";
     parts.push(h("p", { class: "board-note" },
-      "Reference rows are scripted stewards played on the same seeds: milestones for comparison, not caps, and not ranked. "
-      + `"× expert" divides a score by the expert reference. Each model appears with its latest completed run.${revision}`));
+      "Models are ranked by their latest completed run. Reference stewards use the same seeds and appear without a rank. "
+      + `× expert compares each score with the expert reference.${revision}`));
     body.replaceChildren(...parts);
+    filterBoardRows();
+  }
+  function compareBoardEntries(a, b, sort) {
+    const value = (entry) => sort.key === "score" ? entry.row.total
+      : sort.key === "expert" ? entry.row.relative_to_expert : Date.parse(entry.row.created_at);
+    const av = value(a), bv = value(b);
+    const aValid = Number.isFinite(av), bValid = Number.isFinite(bv);
+    if (aValid !== bValid) return aValid ? -1 : 1;
+    if (!aValid) return a.order - b.order;
+    return (sort.descending ? bv - av : av - bv) || a.order - b.order;
+  }
+  function filterBoardRows() {
+    const query = state.boardQuery.trim().toLowerCase();
+    const rows = $("board-body").querySelectorAll("tbody tr");
+    let visible = 0;
+    for (const row of rows) {
+      row.hidden = !row.dataset.model.toLowerCase().includes(query);
+      if (!row.hidden) visible += 1;
+    }
+    const count = $("board-count"), noMatches = $("board-no-matches");
+    if (count) count.textContent = `${visible} row${visible === 1 ? "" : "s"} shown`;
+    if (noMatches) noMatches.hidden = visible > 0;
   }
   const REF_NOTES = {
     passive: "Scripted: takes no action",
@@ -1315,14 +1315,14 @@
         h("small", null, [r.snapshot, r.model_id].filter(Boolean).join(" · ")),
         h("small", { class: "b-date-inline" }, shortDate(r.created_at)));
     const collapsed = r.seeds ? `${r.collapsed}/${r.seeds}` : isNum(r.collapsed) ? String(r.collapsed) : "—";
-    return h("tr", { role: "row", class: ref ? "is-ref" : "" },
+    return h("tr", { role: "row", class: ref ? "is-ref" : "", "data-model": r.model },
       cell("c-rank", null, ref ? h("span", { title: "Reference: not ranked" }, "–") : String(r.rank)),
       model,
       cell("c-num c-score", "Score", pts(r.total)),
       cell("c-num c-x", "× expert", isNum(r.relative_to_expert) ? `${r.relative_to_expert.toFixed(2)}×` : "—"),
       cell("c-num c-col" + (r.collapsed ? " bad" : ""), "Collapsed", collapsed),
       cell("c-num c-wellby", "WELLBY", ref ? "—" : pts(r.wellby)),
-      cell("c-date", "Date", ref ? "—" : h("time", { datetime: r.created_at, title: dateTime(r.created_at) }, shortDate(r.created_at))),
+      cell("c-date", "Played", ref ? "—" : h("time", { datetime: r.created_at, title: dateTime(r.created_at) }, shortDate(r.created_at))),
       cell("c-link", null, ref ? null : h("a", { class: "button small", href: reportHref(r.id), "aria-label": `Open the report of ${r.model}` }, icon("report"), h("span", null, "Report"))));
   }
 
@@ -1513,7 +1513,7 @@
     edit.setAttribute("aria-label", `Edit ${m.id}`);
     return h("article", { class: "card model-card" + (animate ? " enter" : ""), style: { "--i": index } },
       h("div", { class: "mc-head" },
-        h("span", { class: "model-avatar", style: { "--av": hueColor(c.model) }, "aria-hidden": "true" }, initials(c.model)),
+
         h("div", { class: "mc-name" }, h("b", null, c.model), h("span", null, `${m.id}.json`))),
       h("div", { class: "mc-tags" }, modelTags(c)),
       h("div", { class: "mc-facts" },
@@ -1528,7 +1528,7 @@
     const replace = actionButton("edit", "Replace", "", () => openModelDialog(m.id, {}, "replace"));
     return h("article", { class: "card model-card invalid" + (animate ? " enter" : ""), style: { "--i": index } },
       h("div", { class: "mc-head" },
-        h("span", { class: "model-avatar", style: { "--av": "#ef6a5b" }, "aria-hidden": "true" }, "!"),
+
         h("div", { class: "mc-name" }, h("b", null, m.id), h("span", null, `${m.id}.json`))),
       h("p", { class: "health-detail bad" }, m.error),
       h("p", { class: "hint" }, "This file cannot be read as a model configuration. Fix the JSON in the models folder, or replace it here with a new configuration."),
@@ -1813,11 +1813,10 @@
   // ------------------------------------------------------------------ wiring
   function wireStatic() {
     window.addEventListener("hashchange", () => onRoute(false));
-    window.addEventListener("resize", debounce(moveInk, 80));
-    if (typeof ResizeObserver === "function") new ResizeObserver(() => moveInk()).observe($("tabbar"));
     document.addEventListener("visibilitychange", () => { if (!document.hidden && state.runs) pollOnce(); });
     $("skip-link").addEventListener("click", (event) => { event.preventDefault(); $("main").focus(); });
     $("hero-toggle").addEventListener("click", () => { if (village) village.toggle(); syncHeroToggle(); });
+    $("board-search").addEventListener("input", (event) => { state.boardQuery = event.target.value; filterBoardRows(); });
 
     // wizard
     for (const button of $("stepper").querySelectorAll("button")) button.addEventListener("click", () => showStep(Number(button.dataset.step), true));

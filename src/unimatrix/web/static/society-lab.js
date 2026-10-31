@@ -855,7 +855,7 @@
     if (badgeFades) badgeFades();
     $("#btn-delete").disabled = state.meta.bundled || !state.meta.saved;
     $("#btn-save").textContent = state.meta.bundled ? "Save as…" : "Save";
-    document.title = `${state.dirty ? "● " : ""}${state.raw.name || state.raw.id} · Society Lab`;
+    document.title = `${state.dirty ? "● " : ""}${state.raw.name || state.raw.id} · Society Lab · UNIMATRIx`;
   }
   function renderNavCounts() {
     if (!state.raw) return;
@@ -1177,7 +1177,7 @@
   function rerender() { renderSection(state.section, { keepScroll: true }); }
   function sectionHead(eyebrow, title, lead, ...actions) {
     return h("header", { class: "section-head" },
-      h("div", null, h("p", { class: "eyebrow" }, eyebrow), h("h2", null, title), lead ? h("p", { class: "lead" }, lead) : null),
+      h("div", null, h("p", { class: "eyebrow" }, eyebrow), h("h1", null, title), lead ? h("p", { class: "lead" }, lead) : null),
       actions.length ? h("div", { class: "toolbar" }, actions) : null);
   }
   function card(title, ...children) {
@@ -5032,20 +5032,6 @@
     badgeFades = edgeFades($("#recipe-badges"));
     window.addEventListener("resize", () => revealNavItem($("#nav-list a[aria-current]")));
   }
-  /** Phones: the header tucks away while scrolling down and returns on the way up. */
-  function bindHeaderTuck() {
-    const top = $("#lab-top");
-    let last = window.scrollY;
-    let queued = false;
-    const update = () => {
-      queued = false;
-      const y = window.scrollY;
-      if (!phoneQuery.matches || y < 72) { top.classList.remove("is-tucked"); last = y; return; }
-      if (y > last + 10) { top.classList.add("is-tucked"); last = y; } else if (y < last - 10) { top.classList.remove("is-tucked"); last = y; }
-    };
-    window.addEventListener("scroll", () => { if (!queued) { queued = true; requestAnimationFrame(update); } }, { passive: true });
-    top.addEventListener("focusin", () => top.classList.remove("is-tucked"));
-  }
   /** The ⋯ menu proxies the recipe-bar actions that do not fit on small screens. */
   function bindMoreMenu() {
     const dialog = $("#dlg-more");
@@ -5068,7 +5054,7 @@
     });
   }
   function trackHeaderHeight() {
-    const top = $(".lab-top");
+    const top = $("#lab-header");
     const apply = () => document.documentElement.style.setProperty("--top-h", `${Math.ceil(top.getBoundingClientRect().height)}px`);
     if (typeof ResizeObserver === "function") new ResizeObserver(apply).observe(top);
     apply();
@@ -5077,7 +5063,6 @@
     trackHeaderHeight();
     bindBar();
     bindNav();
-    bindHeaderTuck();
     bindMoreMenu();
     try {
       state.catalog = await API.catalog();
