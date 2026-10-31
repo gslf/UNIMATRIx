@@ -101,7 +101,7 @@ References: [provider routing](https://openrouter.ai/docs/guides/routing/provide
 
 ## Parallel seeds
 
-A recipe with several seeds (`hell-v1` plays three) can play them side by side: `--parallelism N`
+A simulation with several seeds can play them side by side: `--parallelism N`
 on the command line, **Parallel seeds** in the dashboard. The run loads the model **once** and every
 seed sends its weekly decision to that same instance, so memory does not grow with `N`:
 

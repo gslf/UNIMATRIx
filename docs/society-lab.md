@@ -3,10 +3,9 @@
 Open `/recipe-lab` to shape a society and the game a steward must solve in it. The Lab works on
 desktop, tablet and phone (touch: drag, pan and pinch on the network and the choice graph).
 
-A recipe is one JSON document (format `unimatrix.polis-recipe.v2`, see `src/unimatrix/polis/recipe.py`
-for every field, default and validation rule). The bundled recipes `standard-v2.1` and `hell-v1` are
-read-only: duplicate one to edit it. Saved recipes live in `config/societies/` (git-ignored) and
-appear in the dashboard's recipe selector.
+A society configuration is one JSON document describing initial conditions, behaviour and events.
+Built-in configurations are read-only: duplicate one to edit it. Saved configurations live in
+`config/societies/` (git-ignored) and appear in the dashboard's society selector.
 
 ## Workflow
 
@@ -33,10 +32,10 @@ appear in the dashboard's recipe selector.
    expert, oracle) and watch the village, the charts, the events and the path through the
    choice graph.
 4. **Calibrate** — score every reference steward on several seeds. A good benchmark makes the
-   passive steward collapse, lets weak-but-attentive play survive (for an entry recipe) and leaves
+   passive steward collapse, lets weak-but-attentive play survive (for an introductory simulation) and leaves
    room above the expert. "Calibrate rates" sets exchange rates so the expert earns a chosen
    number of points per domain.
 5. **Save** and run models from the dashboard.
 
-Changing a saved recipe changes its hash: runs and leaderboard entries are kept per revision.
+Changing a saved configuration changes its hash: runs and leaderboard entries are kept per revision.
 See [society.md](society.md) for the mechanics, scoring and literature behind each rule.

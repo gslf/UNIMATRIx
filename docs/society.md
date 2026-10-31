@@ -1,37 +1,35 @@
 # Society benchmark (Polis)
 
 UNIMATRIx evaluates a model as the **steward of one simulated society**. The eight competence
-domains are interlocking parts of the same village, tested in **one run** of 52 weekly turns, one
-model call per week.
+domains are interlocking parts of the same community, tested together over weekly turns.
+The model makes one decision per week and seed until the configured horizon or collapse.
+Population, duration, seeds, resources and events are configurable; they are not fixed by the
+benchmark concept.
 
-**Current default: Standard v2.1 (`standard-v2.1`).** Its [action contract and calibration](standard-v2.1.md)
-apply to all villages. Reports, CSV and Explorer separate initial action errors, inferred
-downstream failures and unclassified cases. Standard v2 has been removed; there is no legacy mode.
+The central challenge is **stewardship under partial information**. Residents have hidden needs,
+beliefs and incentives, and the model has limited actions and memory. It must investigate,
+prioritize and follow through while the world continues to change. Domains interact: a harvest
+policy affects food, wealth, trust and legitimacy; neglecting a teacher can erase skills needed
+for future care or construction. Success means sustaining the community and improving its
+condition over time.
 
-| | `standard-v2.1` |
-| --- | --- |
-| Structure | one society of 16 residents, all eight domains at once |
-| Model calls | 52 per seed (1 seed per run) |
-| Prompt | ~1.2k static tokens (cacheable) + ~1.3k-token weekly briefing |
-| Other agents | residents with hidden needs, emotions, beliefs, grievances and ties |
-| Score | unbounded points in natural units; 10% deduction per collapsed seed |
-
-On a single RTX 5090 a 27B model at ~15 s per answer finishes `standard-v2.1` in about 13 minutes.
+The engine uses deterministic resident rules and seeded randomness. The same initial state,
+seed, engine and decisions reproduce the same trajectory. Multiple seeds expose variation in
+events and behaviour; scripted stewards provide reference points for interpreting model scores.
 
 ## Running
 
 ```bash
-uv run unimatrix recipes
-uv run unimatrix simulate --recipe standard-v2.1 --policy expert   # instant, no model
-uv run unimatrix calibrate --recipe standard-v2.1 --seeds 1,2,3,4,5
-uv run unimatrix estimate --recipe standard-v2.1 --seconds-per-decision 15
-uv run unimatrix run --model config/models/my-model.json --recipe standard-v2.1
+uv run unimatrix simulate --policy expert   # scripted steward, no model calls
+uv run unimatrix calibrate --seeds 1,2,3,4,5
+uv run unimatrix estimate --seconds-per-decision 15
+uv run unimatrix run --model config/models/my-model.json
 uv run unimatrix replay --run runs/RUN_ID --seed 1
 ```
 
-`--recipe` also accepts the path of a recipe JSON file. The home dashboard (`uv run unimatrix serve`,
-then `/`) configures models, starts runs and shows the leaderboard and past runs; a run's live report
-is at `/society/runs/<id>` and the Society Lab at `/recipe-lab`. Authored recipes live in
+The home dashboard (`uv run unimatrix serve`, then `/`) configures models, selects the society,
+starts runs and shows the leaderboard and past runs. A run's live report
+is at `/society/runs/<id>` and the Society Lab at `/recipe-lab`. Saved society configurations live in
 `config/societies/`, run data in `runs/` (both git-ignored). See [models.md](models.md) for the
 model configuration.
 
@@ -46,13 +44,13 @@ to resume rather than silently diverging. Replays call no provider.
 
 ## The world
 
-A recipe defines a community (default: Lakeside, 16 residents in four factions, a lake, hill
-farms, an old town), its merchants, public-works projects, hidden facts and an authored
+A simulation starts from a community, its social network, resources, policies,
+merchants, public-works projects, hidden facts and an authored
 **choice graph**. Each week:
 
 1. scheduled and conditional events fire (story graph, rumours, merchant visits, forecast
    probes); the steward receives its **briefing**;
-2. the steward's actions apply (at most `actions_per_week`, default 6);
+2. the steward's actions apply, up to the configured `actions_per_week` budget;
 3. every resident lives the week: works or follows its assignment, fishes, sells, eats,
    falls ill or recovers, meets friends and gossips, learns, quarrels, worries, votes,
    protests, leaves or dies;
@@ -112,7 +110,7 @@ Main mechanisms:
   apprentice's openness and stress, and slowly when the master is a gatekeeper who has not
   been honoured; manuals preserve a level after the master is gone.
 - **Adaptation (D8)** – newcomers bring other conventions and skills; contact lowers
-  prejudice. Conventions can change silently (the guild's sealed bids): rejections and hints
+  prejudice. Conventions can change silently: rejections and hints
   reveal the new rule; residents adopt it by trust and conformity (Centola et al. 2018).
 
 ### The steward's briefing
@@ -129,8 +127,10 @@ the steward's private note — its only memory between weeks.
 
 `talk`, `announce`, `give`, `trade`, `inspect`, `assign`, `build`, `propose`, `decree`,
 `mediate`, `introduce`, `promise`, `gather`, `convention`. The exact JSON forms are in the
-system prompt (`polis/llm.py`). Invalid actions are rejected with a reason the steward reads
-the following week.
+system prompt ([llm.py](../src/unimatrix/polis/llm.py)). Invalid actions are rejected with a reason
+the steward reads the following week. All societies share this action contract. Reports, CSV
+and Explorer distinguish initial action errors, inferred downstream failures and unclassified
+cases, so one mistake is not confused with all of its consequences.
 
 ## Choice graph
 
@@ -141,7 +141,7 @@ node's age and whose condition holds moves the story on; an edge without conditi
 "otherwise" branch. **Outcome** nodes end the run in collapse or award flourishing points to
 domains. Conditions combine `all`/`any`/`not` over metrics such as `commons`, `trust`,
 `protest`, `belief:<fact>`, `skill:<skill>`, `holders:<skill>`, `project:<id>`,
-`conflict:<id>`, `alive:<resident>` (see `polis/catalog.py`). Effects cover chronicle and
+`conflict:<id>`, `alive:<resident>` (see [catalog.py](../src/unimatrix/polis/catalog.py)). Effects cover chronicle and
 inbox messages, temporary modifiers and shocks, resources, resident changes, concerns,
 illness, deaths, departures, arrivals of newcomers, disputes, convention shifts, merchants,
 forced policies, forecast probes and epidemics.
@@ -154,15 +154,16 @@ above a threshold for consecutive weeks); legitimacy below a floor for consecuti
 (no confidence); famine (share of residents short of food for consecutive weeks); and
 fragmentation (largest connected group below a share). Thresholds follow the literature
 where it gives one (e.g. fisheries hard limits, IPC famine phases, Granovetter cascades) and
-are tunable per recipe.
+are configurable for each simulation.
 
-## Scoring: 0 to infinity
+## Scoring
 
-Each domain counts something real; a recipe's exchange rates convert units into points.
+Each domain measures outcomes in natural units; configured exchange rates convert those units
+into points. Scores have no upper cap.
 
 | Domain | Unit |
 | --- | --- |
-| D1 Information | resident-weeks confidently right (+1) or wrong (−1) about live issues, plus 10 points per bit of forecast skill |
+| D1 Information | resident-weeks confidently right (+1) or wrong (−1) about live issues, plus forecast skill in bits weighted by `forecast_bit` |
 | D2 Economy | coins of community net worth created (treasury, households, food, medicine, tools) |
 | D3 Public works | service-weeks of completed projects |
 | D4 Commons | units harvested plus the change of the stock (= what the lake produced) |
@@ -186,39 +187,28 @@ are not bounds. The report also gives WELLBYs above a neutral point of 2 (Frijte
 
 `unimatrix rescore` updates completed society runs, reports and Explorer exports from saved
 domain ledgers without model calls or replay. Original JSON is backed up in a directory
-named for the new scoring rule. Recipes, exchange rates, observations, actions, completion
+named for the new scoring rule. Society configurations, exchange rates, observations, actions, completion
 timestamps and the historical engine fingerprint stay unchanged. The model prompt is also
 frozen: the new score is an external evaluation of the recorded trajectories, not evidence
 that historical candidates were instructed to optimize this rule. The Explorer records the
-actual prompt hashes and constrained-output setting. See the
-[scoring and model comparison audit](scoring-audit-2026-10-17.md) for the rationale and limitations.
+actual prompt hashes and constrained-output setting. Compare historical results with these
+protocol differences in mind.
 Timeline CSV exports keep the gross domain columns and add `gross_points`,
 `collapse_penalty`, `final_score` (filled only on the final society row) and `scoring_rule`.
 
-### Calibration of the bundled recipes
+### Calibration
 
-Standard v2.1 uses expert natural units on seeds 1–5 to set rates near 1,000 points per
-domain. Construction also uses the full-horizon service potential to avoid overvaluing
-public works when the expert builds little. Scores remain unbounded. Validation on seeds
-6–10 gives adaptation (D8) a mean of 979.480 points for the expert and 1,143.454 for the oracle.
-See the [calibration data](standard-v2.1-calibration.json) and [method](standard-v2.1.md).
-The same calibration algorithm is available for every authored village in the Lab.
+Calibration runs scripted reference stewards across selected seeds to inspect difficulty and
+suggest exchange rates. For each domain, the suggested rate is a target point value divided by
+the expert's mean nonnegative natural units; if that mean is zero, the existing rate is kept.
+Public works also uses full-horizon service potential and positive story rewards to limit the
+rate, preventing sparse reference construction from making each completed project too valuable.
 
-`hell-v1` (Malaterra, 18 residents, 3 seeds per run: 1, 2 and 19) uses the same exchange rates, so its
-points compare with `standard-v2.1`, but it is built to break stewards. A councillor skims the tax chest,
-buys votes against the fishing quota and raises the tax if nobody exposes him; a moneylender seizes
-boats; a smuggler fences stolen grain; a peddler sells chalk as medicine; three agitators turn
-grievance into strikes; blight, drought, a guild cartel, bandits on the pass, war exiles, fever and
-a famine winter follow one another; fishers grow rich while the terraces starve. Most clues are
-contested by a resident who profits from the lie, and conflicts are only settled fairly by whoever
-works out who is at fault.
-
-On seeds 1, 2 and 19, passive, random and naive stewards all collapse; expert survives
-one seed and oracle survives two. These are scripted calibration stewards, never Explorer runs.
-
-A model that survives Malaterra earns as much as in Lakeside; what makes it hard is surviving:
-exposing the councillor, reading who lies, redistributing before the poor revolt and storing grain
-for the winter the elders announce.
+These are fixed conversion rates, not score ceilings. Evaluate the chosen rates on additional
+seeds and inspect domain contributions, survival and room for improvement above the references.
+Shared rates preserve the meaning of a unit of progress, but different starting conditions and
+event schedules still produce different difficulty. Compare models under the same simulation
+revision, seeds and evaluation protocol.
 
 ## Report
 
@@ -231,7 +221,7 @@ network at start and end, the path through the choice graph and per-resident fat
 
 ## Society Lab
 
-Design → preview → calibrate → save → run. The Lab edits a recipe: people and their
+Design → preview → calibrate → save → run. The [Lab](society-lab.md) edits people and their
 archetypes, the network, the world and the lake, merchants, projects, hidden facts, the
 choice graph, collapse rules and exchange rates. Previews play the society animated with any
 reference steward in milliseconds; "calibrate" scores every reference on several seeds and

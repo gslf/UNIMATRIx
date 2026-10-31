@@ -1,11 +1,11 @@
 # UNIMATRIx Explorer
 
-A static, single-page explorer of society runs: one leaderboard per recipe, and for every run a
-week-by-week replay of everything its steward did. It never talks to the UNIMATRIx application, its
+A static, single-page explorer of society runs: one leaderboard per society configuration, and
+for every run a week-by-week replay of everything its steward did. It never talks to the UNIMATRIx application, its
 API or its databases: it only reads [xCDN](https://github.com/gslf/xCDN) files.
 
-**Standard v2.1** (`standard-v2.1`) is the default village. All villages share the same action
-contract. The quest log separates initial errors and inferred consequences within each week.
+All societies share the same action contract. The quest log separates initial errors and
+inferred consequences within each week.
 The Explorer accepts model runs only: no scripted reference runs, rows or demo exports.
 The numerical × expert value is a calibration comparison saved with each model run.
 
@@ -23,7 +23,8 @@ Nothing leaves the browser tab.
 
 ## Where the files come from
 
-`data/` is git-ignored: the repository ships the software and the bundled recipes, never results.
+`data/` is git-ignored: the repository ships the software and built-in society configurations,
+never results.
 
 - Model runs are exported to `data/` when they finish: `unimatrix serve` and `unimatrix run` take
   `--explorer-dir` (default `explorer`); `unimatrix export` exports runs that finished earlier.
@@ -88,7 +89,7 @@ briefings, model answers and available reasoning. Upload the Explorer files only
 
 ## What it shows
 
-- **Leaderboard** (`#/`): one table per recipe and revision. Model runs are ranked by final score (the
+- **Leaderboard** (`#/`): one table per society configuration and revision. Model runs are ranked by final score (the
   mean over seeds after each collapsed seed's 10% penalty), with × expert, seeds, WELLBY and the eight gross domains.
   "Latest per steward" keeps each
   steward's newest run; "All runs" lists every run. Click a row to explore the run.
