@@ -1,6 +1,6 @@
 # UNIMATRIx v5.0.0
 
-![UNIMATRIx dashboard with a live society preview and run statistics](docs/images/home.png)
+![UNIMATRIx home with Simulation as a Benchmark and a live society preview](docs/images/home.png)
 
 UNIMATRIx evaluates a candidate model as the **steward of one simulated society**. The benchmark spans eight connected domains: information and rumours, the economy, public works, shared resources, relationships and care, institutions, the transmission of skills and adaptation to change.
 
